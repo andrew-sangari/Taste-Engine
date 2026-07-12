@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "background": [
+    "Based in YOUR_CITY and willing to travel across town when the artist, venue, or presentation quality justifies it.",
+    "Demonstrated music interests include YOUR_GENRES, while the selected Spotify playlists remain incomplete evidence rather than a full identity.",
+    "Premium theatrical presentation matters materially; IMAX, 70mm, Dolby Cinema, repertory, restoration, and scarce engagements can change whether a movie is worth seeing.",
+    "Prefer a selective list and an honest recommendation to stay home over generic filler."
+  ],
+  "decisionPreferences": [
+    "Separate personal fit from hassle and ticket urgency.",
+    "Penalize uncertain timing, long travel, and weak experience differentiation.",
+    "Treat promoter-followed and adjacent discoveries as exploratory rather than established taste.",
+    "Do not mistake ticket availability or popularity for personal value."
+  ],
+  "maxEnhancedEvents": 16
+}

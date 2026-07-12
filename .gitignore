@@ -1,0 +1,7 @@
+config/spotify-playlists.json
+config/brief.json
+config/movies.json
+config/personal-context.json
+data/
+.env
+.DS_Store

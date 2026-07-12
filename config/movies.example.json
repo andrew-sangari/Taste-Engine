@@ -1,0 +1,18 @@
+{
+  "maxCandidates": 20,
+  "minimumPopularity": 8,
+  "highPopularityOverride": 30,
+  "preferredGenreIds": [878, 28, 12, 14, 53, 27, 16],
+  "excludedGenreIds": [10770],
+  "preferredDirectors": [],
+  "preferredCinematographers": [],
+  "preferredCast": [],
+  "preferredCompanies": [],
+  "preferredKeywords": ["imax", "70mm", "epic", "space", "practical effects"],
+  "priorityTheaters": [
+    { "name": "TCL Chinese Theatre IMAX", "formats": ["IMAX"] },
+    { "name": "Universal Cinema AMC at CityWalk Hollywood", "formats": ["IMAX", "70mm"] },
+    { "name": "AMC Century City 15", "formats": ["IMAX", "Dolby Cinema"] },
+    { "name": "AMC Burbank 16", "formats": ["IMAX", "Dolby Cinema"] }
+  ]
+}

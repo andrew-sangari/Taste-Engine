@@ -1,0 +1,335 @@
+{
+  "fixtureVersion": 1,
+  "now": "2026-07-12T12:00:00-07:00",
+  "timezone": "America/Los_Angeles",
+  "config": {
+    "timezone": "America/Los_Angeles",
+    "home": { "label": "Los Angeles", "lat": 34.0522, "lon": -118.2437 },
+    "searchRadiusMiles": 60,
+    "upcomingHorizonDays": 180,
+    "maxTicketPriceUsd": 100,
+    "minimumUtility": 28,
+    "overviewPlanAheadMinScore": 55,
+    "pinnedArtists": ["Roster Signal"],
+    "excludedArtists": ["Excluded Signal"],
+    "excludedVenues": []
+  },
+  "personalContext": {
+    "background": ["Synthetic Los Angeles fixture context."],
+    "decisionPreferences": ["Separate fit, hassle, and urgency."],
+    "maxEnhancedEvents": 8,
+    "maxEnhancedSports": 4
+  },
+  "taste": {
+    "playlists": [
+      {
+        "playlist": { "id": "fixture-playlist-alpha", "name": "Fixture Alpha", "weight": 1 },
+        "artists": [
+          { "id": "spotify-alpha", "name": "Alpha Signal", "trackCount": 10, "genres": ["electronic"], "sampleTracks": ["Alpha track"] },
+          { "id": "spotify-beta", "name": "Beta Signal", "trackCount": 4, "genres": ["pop"], "sampleTracks": ["Beta track"] }
+        ]
+      },
+      {
+        "playlist": { "id": "fixture-playlist-beta", "name": "Fixture Beta", "weight": 0.7 },
+        "artists": [
+          { "id": "spotify-alpha", "name": "Alpha Signal", "trackCount": 3, "genres": ["electronic"] },
+          { "id": "spotify-gamma", "name": "Gamma Signal", "trackCount": 7, "genres": ["indie"] }
+        ]
+      }
+    ],
+    "topArtists": {
+      "status": "partial",
+      "generatedAt": "2026-07-12T10:00:00-07:00",
+      "windows": {
+        "shortTerm": { "status": "fresh", "fetchedAt": "2026-07-12T10:00:00-07:00", "expiresAt": "2026-07-19T10:00:00-07:00" },
+        "mediumTerm": { "status": "unavailable", "fetchedAt": null, "expiresAt": null },
+        "longTerm": { "status": "cached", "fetchedAt": "2026-07-10T10:00:00-07:00", "expiresAt": "2026-07-17T10:00:00-07:00" }
+      },
+      "artists": [
+        { "artistId": "spotify-alpha", "artistName": "Alpha Signal", "shortTermRank": 2, "mediumTermRank": null, "longTermRank": 8 },
+        { "artistId": "spotify-top", "artistName": "Top Only", "shortTermRank": 5, "mediumTermRank": null, "longTermRank": null },
+        { "artistId": "spotify-expired", "artistName": "Expired Signal", "shortTermRank": 1, "mediumTermRank": null, "longTermRank": 49 }
+      ],
+      "warnings": ["Medium window failed in fixture"]
+    },
+    "expiredTopItems": {
+      "windows": {
+        "shortTerm": { "status": "cached", "expiresAt": "2026-07-11T10:00:00-07:00" },
+        "mediumTerm": { "status": "cached", "expiresAt": "2026-07-11T10:00:00-07:00" },
+        "longTerm": { "status": "cached", "expiresAt": "2026-07-11T10:00:00-07:00" }
+      }
+    },
+    "discoveryArtists": [
+      {
+        "name": "Adjacent Echo",
+        "seedStrength": 5,
+        "origin": "similar",
+        "discoveryEvidence": [{ "type": "lastfm-similar", "sourceArtist": "Alpha Signal" }]
+      },
+      {
+        "name": "Roster Signal",
+        "seedStrength": 4,
+        "origin": "promoter",
+        "discoveryEvidence": [{ "type": "framework-roster", "promoter": "Framework" }]
+      },
+      {
+        "name": "Expired Signal",
+        "seedStrength": 4,
+        "origin": "top-items",
+        "topEvidence": { "shortTermRank": 1, "mediumTermRank": null, "longTermRank": null }
+      },
+      {
+        "name": "Top Only",
+        "seedStrength": 4,
+        "origin": "top-items",
+        "topEvidence": { "shortTermRank": 5, "mediumTermRank": null, "longTermRank": null }
+      }
+    ]
+  },
+  "providers": {
+    "seatgeek": [
+      {
+        "id": "sg-alpha-1",
+        "title": "Alpha Signal Live with Beta Signal",
+        "type": "concert",
+        "url": "https://seatgeek.example/events/sg-alpha-1",
+        "datetime_local": "2026-07-18T20:00:00",
+        "datetime_utc": "2026-07-19T03:00:00Z",
+        "performers": [
+          { "id": "sg-alpha", "name": "Alpha Signal", "primary": true, "links": [{ "provider": "spotify", "id": "spotify:artist:spotify-alpha" }] },
+          { "id": "sg-beta", "name": "Beta Signal", "primary": false }
+        ],
+        "venue": { "id": "sg-neon", "name": "Neon Hall", "city": "Los Angeles", "state": "CA", "location": { "lat": 34.05, "lon": -118.24 } },
+        "stats": { "listing_count": 20, "lowest_price": 45, "average_price": 70 }
+      },
+      {
+        "id": "sg-alpha-1",
+        "title": "Alpha Signal Live",
+        "type": "concert",
+        "url": "https://seatgeek.example/events/sg-alpha-1",
+        "datetime_local": "2026-07-18T20:00:00",
+        "datetime_utc": "2026-07-19T03:00:00Z",
+        "performers": [{ "id": "sg-alpha", "name": "Alpha Signal", "primary": true }],
+        "venue": { "id": "sg-neon", "name": "Neon Hall", "city": "Los Angeles", "state": "CA", "location": { "lat": 34.05, "lon": -118.24 } },
+        "stats": { "listing_count": 20, "lowest_price": 45 }
+      },
+      {
+        "id": "sg-festival",
+        "title": "Festival Lights - Saturday - with Roster Signal and more",
+        "type": "music_festival",
+        "url": "https://seatgeek.example/events/sg-festival",
+        "datetime_local": "2026-08-22T17:00:00",
+        "datetime_utc": "2026-08-23T00:00:00Z",
+        "performers": [{ "id": "sg-roster", "name": "Roster Signal", "primary": true }],
+        "venue": { "name": "Hollywood Park - Inglewood", "city": "Inglewood", "state": "CA", "location": {} },
+        "stats": {}
+      },
+      {
+        "id": "sg-adjacent",
+        "title": "Adjacent Echo Open to Close",
+        "type": "concert",
+        "url": "https://seatgeek.example/events/sg-adjacent",
+        "datetime_local": "2026-08-15T21:00:00",
+        "datetime_utc": "2026-08-16T04:00:00Z",
+        "performers": [{ "id": "sg-adjacent", "name": "Adjacent Echo", "primary": true }],
+        "venue": { "name": "Warehouse Annex", "city": "Los Angeles", "state": "CA", "location": {} },
+        "stats": { "listing_count": null, "lowest_price": null }
+      },
+      {
+        "id": "sg-similar-name",
+        "title": "Similar Name Live",
+        "type": "concert",
+        "url": "https://seatgeek.example/events/sg-similar-name",
+        "datetime_local": "2026-09-01T20:00:00",
+        "datetime_utc": "2026-09-02T03:00:00Z",
+        "performers": [{ "id": "sg-similar-name", "name": "Similar Name", "primary": true }],
+        "venue": { "name": "Theater Annex", "city": "Los Angeles", "state": "CA", "location": { "lat": 34.1, "lon": -118.3 } },
+        "stats": {}
+      },
+      {
+        "id": "sg-beta-later",
+        "title": "Beta Signal Later Date",
+        "type": "concert",
+        "url": "https://seatgeek.example/events/sg-beta-later",
+        "datetime_local": "2026-08-30T20:00:00",
+        "datetime_utc": "2026-08-31T03:00:00Z",
+        "performers": [{ "id": "sg-beta", "name": "Beta Signal", "primary": true }],
+        "venue": { "name": "Other Hall", "city": "Los Angeles", "state": "CA", "location": {} },
+        "stats": {}
+      },
+      {
+        "id": "sg-top-only",
+        "title": "Top Only Live",
+        "type": "concert",
+        "url": "https://seatgeek.example/events/sg-top-only",
+        "datetime_local": "2026-07-26T08:00:00",
+        "datetime_utc": "2026-07-26T15:00:00Z",
+        "performers": [{ "id": "sg-top", "name": "Top Only", "primary": true }],
+        "venue": { "name": "Small Room", "city": "Los Angeles", "state": "CA", "location": { "lat": 34.06, "lon": -118.25 } },
+        "stats": {}
+      },
+      {
+        "id": "sg-expired",
+        "title": "Expired Signal Live",
+        "type": "concert",
+        "url": "https://seatgeek.example/events/sg-expired",
+        "datetime_local": "2026-09-12T20:00:00",
+        "datetime_utc": "2026-09-13T03:00:00Z",
+        "performers": [{ "id": "sg-expired", "name": "Expired Signal", "primary": true }],
+        "venue": { "name": "Unknown Coordinates Venue", "city": "Los Angeles", "state": "CA", "location": {} },
+        "stats": {}
+      }
+    ],
+    "ticketmaster": [
+      {
+        "id": "tm-alpha-1",
+        "name": "Alpha Signal at The Neon Hall",
+        "url": "https://ticketmaster.example/events/tm-alpha-1",
+        "dates": { "start": { "localDate": "2026-07-18", "localTime": "20:05:00" } },
+        "_embedded": {
+          "attractions": [{ "id": "tm-alpha", "name": "Alpha Signal" }],
+          "venues": [{ "id": "tm-neon", "name": "The Neon Hall", "city": { "name": "Los Angeles" }, "location": {} }]
+        }
+      },
+      {
+        "id": "tm-festival",
+        "name": "FESTIVAL LIGHTS",
+        "url": "https://ticketmaster.example/events/tm-festival",
+        "dates": { "start": { "localDate": "2026-08-22", "localTime": "17:05:00" } },
+        "_embedded": {
+          "attractions": [{ "id": "tm-roster", "name": "Roster Signal" }],
+          "venues": [{ "id": "tm-festival-venue", "name": "Hollywood Park Grounds", "city": { "name": "Inglewood" }, "location": {} }]
+        }
+      },
+      {
+        "id": "tm-alpha-other",
+        "name": "Alpha Signal Second Venue",
+        "url": "https://ticketmaster.example/events/tm-alpha-other",
+        "dates": { "start": { "localDate": "2026-09-10", "localTime": "20:00:00" } },
+        "_embedded": {
+          "attractions": [{ "id": "tm-alpha", "name": "Alpha Signal" }],
+          "venues": [{ "id": "tm-other", "name": "Civic Hall", "city": { "name": "Los Angeles" }, "location": { "latitude": "34.02", "longitude": "-118.2" } }]
+        }
+      }
+    ],
+    "framework": [
+      {
+        "id": "fw-gamma",
+        "title": "Framework Presents Gamma Signal",
+        "url": "https://framework.example/events/fw-gamma",
+        "start_date": "2026-07-19 21:00:00",
+        "venue": { "id": "fw-warehouse", "venue": "Downtown Warehouse", "city": "Los Angeles" }
+      },
+      {
+        "id": "fw-minimum",
+        "title": "Framework Presents Unresolved Noise",
+        "url": "https://framework.example/events/fw-minimum",
+        "start_date": "2026-10-01 20:00:00",
+        "venue": { "venue": "Far Venue", "city": "Los Angeles" }
+      }
+    ],
+    "insomniac": [
+      {
+        "id": "ins-roster",
+        "name": "Roster Signal Night",
+        "url": "https://insomniac.example/events/ins-roster",
+        "startDate": "2026-10-15T20:00:00-07:00",
+        "location": { "name": "Warehouse Annex", "city": "Los Angeles", "state": "CA" },
+        "performer": [{ "name": "Roster Signal" }]
+      }
+    ]
+  },
+  "sports": {
+    "config": {
+      "teamName": "Los Angeles Dodgers",
+      "homeVenueNames": ["Dodger Stadium"],
+      "rivalries": { "135": { "tier": "high", "label": "Padres rivalry" }, "137": { "tier": "high", "label": "Giants rivalry" } }
+    },
+    "games": [
+      {
+        "gamePk": 9001,
+        "gameDate": "2026-07-18T20:10:00Z",
+        "officialDate": "2026-07-18",
+        "season": 2026,
+        "seriesNumber": 1,
+        "seriesStatus": { "gameNumber": 1, "totalGames": 3 },
+        "status": { "detailedState": "Scheduled", "startTimeTBD": false },
+        "venue": { "id": 22, "name": "Dodger Stadium", "location": { "latitude": 34.0739, "longitude": -118.24 } },
+        "teams": {
+          "home": { "team": { "id": 119, "name": "Los Angeles Dodgers", "shortName": "Dodgers", "abbreviation": "LAD" }, "probablePitcher": { "id": 101, "fullName": "Home Pitcher" } },
+          "away": { "team": { "id": 135, "name": "San Diego Padres", "shortName": "Padres", "abbreviation": "SD" }, "probablePitcher": { "id": 102, "fullName": "Away Pitcher" } }
+        }
+      },
+      {
+        "gamePk": 9002,
+        "gameDate": "2026-07-19T20:10:00Z",
+        "officialDate": "2026-07-19",
+        "season": 2026,
+        "seriesNumber": 1,
+        "seriesStatus": { "gameNumber": 2, "totalGames": 3 },
+        "status": { "detailedState": "Scheduled", "startTimeTBD": false },
+        "venue": { "id": 22, "name": "Dodger Stadium", "location": { "latitude": 34.0739, "longitude": -118.24 } },
+        "teams": {
+          "home": { "team": { "id": 119, "name": "Los Angeles Dodgers", "shortName": "Dodgers", "abbreviation": "LAD" } },
+          "away": { "team": { "id": 135, "name": "San Diego Padres", "shortName": "Padres", "abbreviation": "SD" } }
+        }
+      },
+      {
+        "gamePk": 9003,
+        "gameDate": "2026-08-15T23:10:00Z",
+        "officialDate": "2026-08-15",
+        "season": 2026,
+        "seriesNumber": 2,
+        "seriesStatus": { "gameNumber": 1, "totalGames": 3 },
+        "status": { "detailedState": "Scheduled", "startTimeTBD": false },
+        "venue": { "id": 22, "name": "Dodger Stadium", "location": { "latitude": 34.0739, "longitude": -118.24 } },
+        "teams": {
+          "home": { "team": { "id": 119, "name": "Los Angeles Dodgers", "shortName": "Dodgers", "abbreviation": "LAD" } },
+          "away": { "team": { "id": 137, "name": "San Francisco Giants", "shortName": "Giants", "abbreviation": "SF" } }
+        }
+      }
+    ],
+    "standings": [
+      { "teamRecords": [{ "team": { "id": 135, "name": "San Diego Padres", "shortName": "Padres" }, "leagueRank": 2, "divisionRank": 1, "winningPercentage": ".620", "gamesBack": "2.0" }, { "team": { "id": 137, "name": "San Francisco Giants", "shortName": "Giants" }, "leagueRank": 8, "divisionRank": 3, "winningPercentage": ".480", "gamesBack": "8.0" }] }
+    ],
+    "seatgeek": [
+      {
+        "id": "sg-game-9001",
+        "title": "San Diego Padres at Los Angeles Dodgers",
+        "url": "https://seatgeek.example/sports/sg-game-9001",
+        "datetime_local": "2026-07-18T13:10:00",
+        "performers": [{ "name": "San Diego Padres" }, { "name": "Los Angeles Dodgers" }],
+        "venue": { "name": "Dodger Stadium", "city": "Los Angeles", "location": { "lat": 34.0739, "lon": -118.24 } },
+        "stats": { "listing_count": 8, "lowest_price": 55 }
+      }
+    ],
+    "ticketmaster": []
+  },
+  "movies": [
+    {
+      "id": 7001,
+      "title": "Fixture Projection",
+      "release_date": "2026-08-01",
+      "overview": "A synthetic theatrical candidate.",
+      "popularity": 25,
+      "vote_average": 7.2,
+      "runtime": 140,
+      "genres": [{ "name": "Science Fiction" }],
+      "credits": { "crew": [{ "job": "Director", "name": "Fixture Director" }], "cast": [{ "name": "Fixture Actor" }] },
+      "production_companies": [{ "name": "Fixture Pictures" }],
+      "keywords": { "keywords": [{ "name": "practical effects" }] },
+      "poster_path": "/fixture-poster.jpg",
+      "backdrop_path": "/fixture-backdrop.jpg"
+    }
+  ],
+  "coverage": [
+    "cross-provider duplicate with title and venue aliases",
+    "support artist omitted by Ticketmaster",
+    "same artist on different dates and venues",
+    "festival boilerplate and same-city venue alias",
+    "missing coordinates and ticket prices",
+    "direct, top-only, adjacent, promoter, unresolved, partial, and expired taste evidence",
+    "current boundary, Plan Ahead boundary, equal-score, duplicate-series, and quiet-state candidates",
+    "model success, timeout, malformed, unsupported claim, ranking mutation, and absent-model modes"
+  ]
+}

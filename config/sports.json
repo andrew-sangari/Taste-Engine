@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "teamId": 119,
+  "teamName": "Los Angeles Dodgers",
+  "homeOnly": true,
+  "homeVenueIds": [22],
+  "homeVenueNames": ["Dodger Stadium", "UNIQLO Field at Dodger Stadium"],
+  "featuredInterestThreshold": 70,
+  "maxPitcherStats": 48,
+  "maxTicketPages": 3,
+  "rivalries": {
+    "135": { "tier": "high", "label": "Padres rivalry" },
+    "137": { "tier": "high", "label": "Giants rivalry" }
+  }
+}

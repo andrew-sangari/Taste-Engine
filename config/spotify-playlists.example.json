@@ -1,0 +1,12 @@
+{
+  "playlistSyncBaseUrl": "http://127.0.0.1:4317",
+  "maxTracksPerPlaylist": 500,
+  "playlists": [
+    {
+      "id": "SPOTIFY_PLAYLIST_ID",
+      "name": "Current taste",
+      "enabled": true,
+      "weight": 1
+    }
+  ]
+}

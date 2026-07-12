@@ -1,0 +1,7 @@
+{
+  "normalizedProjectionSha256": "fc12b24af3b6aa184f24ec67307cd43145f4bc23de7a27ed066d03234667d371",
+  "counts": { "events": 9, "sports": 3, "movies": 1 },
+  "overview": ["mlb:9001", "seatgeek:sg-alpha-1", "seatgeek:sg-top-only", "framework:fw-gamma"],
+  "planAhead": ["mlb:9003"],
+  "deduplication": { "inputCount": 14, "mergedCount": 3, "canonicalCount": 11 }
+}

@@ -1,0 +1,53 @@
+{
+  "feedback": {
+    "enabled": true,
+    "applyToPublishedRanking": false,
+    "policyVersion": 1,
+    "journalPath": "data/taste/feedback.jsonl",
+    "statePath": "data/taste/feedback-state.json",
+    "reportPath": "data/taste/feedback-report.json",
+    "weights": {
+      "attended-worth-it": 1,
+      "attended-not-worth-it": 1,
+      "skipped-still-interested": 0.5,
+      "skipped-no-longer-interested": 0.5
+    },
+    "adjustments": {
+      "artist": 4,
+      "venue": 2,
+      "promoterOrSeries": 2,
+      "eventShape": 1
+    },
+    "maxTotalAdjustment": 8,
+    "thresholds": {
+      "artist": {
+        "minIndependentEvents": 2,
+        "minAttendedEvents": 2,
+        "minEffectiveWeight": 2,
+        "minDominantFraction": 0.75,
+        "minMargin": 1.5
+      },
+      "venue": {
+        "minIndependentEvents": 3,
+        "minAttendedEvents": 3,
+        "minEffectiveWeight": 3,
+        "minDominantFraction": 0.75,
+        "minMargin": 2
+      },
+      "promoterOrSeries": {
+        "minIndependentEvents": 3,
+        "minAttendedEvents": 3,
+        "minEffectiveWeight": 3,
+        "minDominantFraction": 0.75,
+        "minMargin": 2
+      },
+      "eventShape": {
+        "minIndependentEvents": 4,
+        "minAttendedEvents": 4,
+        "minEffectiveWeight": 4,
+        "minDominantFraction": 0.75,
+        "minMargin": 3
+      }
+    }
+  }
+}

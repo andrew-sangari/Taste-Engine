@@ -1,0 +1,25 @@
+{
+  "timezone": "America/Los_Angeles",
+  "home": {
+    "label": "Los Angeles",
+    "lat": 34.0522,
+    "lon": -118.2437
+  },
+  "searchRadiusMiles": 60,
+  "upcomingHorizonDays": 180,
+  "maxSeatGeekPages": 5,
+  "seatGeekWindowDays": 14,
+  "seatGeekPerformerArtistLimit": 250,
+  "frameworkArtistLimit": 200,
+  "ticketmasterArtistQueryLimit": 200,
+  "lastFmSeedArtistLimit": 40,
+  "lastFmSimilarPerArtist": 6,
+  "lastFmTopTagCount": 5,
+  "lastFmArtistsPerTag": 25,
+  "maxTicketPriceUsd": 120,
+  "minimumUtility": 28,
+  "overviewPlanAheadMinScore": 55,
+  "pinnedArtists": [],
+  "excludedArtists": [],
+  "excludedVenues": []
+}

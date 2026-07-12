@@ -1,0 +1,34 @@
+{
+  "name": "taste-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "taste:seed": "node src/cli/spotify-seed.js",
+    "taste:expand": "node scripts/expand-taste.js",
+    "brief:weekend": "node src/cli/weekend-brief.js",
+    "site:export": "node scripts/export-site-data.js",
+    "site:refresh": "npm run taste:expand && npm run site:export",
+    "build:site": "node scripts/build-site.js",
+    "taste:refresh": "node src/cli/taste-refresh.js",
+    "taste:validate": "node src/cli/taste-validate.js",
+    "taste:preview": "node src/cli/taste-preview.js",
+    "taste:promote": "node src/cli/taste-promote.js",
+    "taste:rollback": "node src/cli/taste-promote.js --rollback",
+    "taste:feedback:add": "node src/cli/taste-feedback.js add",
+    "taste:feedback:list": "node src/cli/taste-feedback.js list",
+    "taste:feedback:replace": "node src/cli/taste-feedback.js replace",
+    "taste:feedback:revoke": "node src/cli/taste-feedback.js revoke",
+    "taste:feedback:validate": "node src/cli/taste-feedback.js validate",
+    "taste:feedback:rebuild": "node src/cli/taste-feedback.js rebuild",
+    "taste:feedback:simulate": "node src/cli/taste-feedback.js simulate",
+    "evaluation:fixtures": "node scripts/evaluate-fixtures.js",
+    "projection:diff": "node scripts/projection-diff.js",
+    "taste:explain": "node scripts/taste-explain.js",
+    "debug:artist": "node scripts/debug-artist.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

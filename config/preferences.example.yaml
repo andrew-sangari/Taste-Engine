@@ -1,0 +1,63 @@
+# Copy to preferences.yaml. This file is intentionally human-editable.
+profile:
+  home_location: ""
+  timezone: "America/Los_Angeles"
+
+spotify_seed:
+  # Select playlists deliberately. Editorial/background playlists can badly distort taste.
+  playlist_ids: []
+  max_tracks_per_playlist: 500
+  include_collaborative_playlists: true
+  scoring:
+    playlist_diversity_weight: 3.0
+    track_count_weight: 1.0
+    recent_add_weight: 1.0
+
+constraints:
+  default_max_door_to_door_minutes: 45
+  default_max_ticket_price_usd: 100
+  latest_weeknight_end_time: "23:00"
+  earliest_weekend_start_time: null
+
+travel_exceptions:
+  # Things worth crossing town for.
+  artists: []
+  venues: []
+  formats:
+    - IMAX 70mm
+
+taste_seeds:
+  favorite_artists: []
+  adjacent_artists_to_explore: []
+  favorite_venues: []
+  favorite_genres: []
+  valued_traits:
+    # Examples: live instrumentation, great sound, unusual venue, rare booking.
+    - ""
+
+negative_filters:
+  artists: []
+  venues: []
+  promoters: []
+  genres: []
+  event_types: []
+  traits:
+    # Examples: oversold, seated DJ show, outdoor winter event.
+    - ""
+
+context_rules:
+  solo: []
+  date: []
+  group: []
+  work_night: []
+  weekend: []
+
+past_events:
+  # Add at least five positive and five negative examples.
+  # - title: ""
+  #   date: "YYYY-MM-DD"
+  #   venue: ""
+  #   worth_it: yes | mixed | no
+  #   reasons: [artist, performance, crowd, sound, venue, price, travel, timing, companion, novelty]
+  #   note: ""
+  []
