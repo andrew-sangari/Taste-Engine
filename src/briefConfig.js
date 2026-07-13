@@ -31,6 +31,7 @@ export function normalizeBriefConfig(input = {}) {
   const maxTicketPriceUsd = positiveNumber(input.maxTicketPriceUsd ?? 120, 'maxTicketPriceUsd');
   const minimumUtility = finiteNumber(input.minimumUtility ?? 28, 'minimumUtility');
   const overviewPlanAheadMinScore = finiteNumber(input.overviewPlanAheadMinScore ?? 55, 'overviewPlanAheadMinScore');
+  const edmtrain = input.edmtrain ?? {};
 
   return {
     timezone: String(input.timezone ?? 'America/Los_Angeles'),
@@ -49,6 +50,12 @@ export function normalizeBriefConfig(input = {}) {
     maxTicketPriceUsd,
     minimumUtility,
     overviewPlanAheadMinScore,
+    edmtrain: {
+      enabled: edmtrain.enabled !== false,
+      city: String(edmtrain.city ?? 'Los Angeles'),
+      state: String(edmtrain.state ?? 'California'),
+      cacheTtlHours: positiveNumber(edmtrain.cacheTtlHours ?? 24, 'edmtrain.cacheTtlHours')
+    },
     pinnedArtists: normalizeNames(input.pinnedArtists),
     excludedArtists: normalizeNames(input.excludedArtists),
     excludedVenues: normalizeNames(input.excludedVenues)

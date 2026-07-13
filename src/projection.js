@@ -22,9 +22,24 @@ export function toDisplayEvent(candidate, localEnhancement = null) {
     performers: candidate.performers.map(({ name, primary }) => ({ name, primary })),
     ticketObservation: candidate.ticketObservation,
     matchedArtists: (candidate.matchedArtists ?? []).map(({ spotifyArtistId, name, seedStrength, origin, matchMethod, primary }) => ({ spotifyArtistId, name, seedStrength, origin, matchMethod, primary })),
+    lineupDisplay: sanitizeLineupDisplay(candidate.lineupDisplay),
     visual: candidate.visual ?? resolveMusicVisual(candidate),
     ranking: safeRanking,
     localEnhancement
+  };
+}
+
+function sanitizeLineupDisplay(value) {
+  if (!value) return null;
+  return {
+    displayTitle: value.displayTitle || null,
+    displayShape: value.displayShape || 'general-show',
+    orderedArtists: (value.orderedArtists ?? []).map(({ lineupEntryId, displayName, relation, billingGroupIndex, b2bWithNext }) => ({ lineupEntryId, displayName, relation, billingGroupIndex, b2bWithNext })),
+    totalArtists: Number(value.totalArtists ?? 0),
+    directCount: Number(value.directCount ?? 0),
+    adjacentCount: Number(value.adjacentCount ?? 0),
+    ages: value.ages || null,
+    sourceUrl: value.sourceUrl || null
   };
 }
 

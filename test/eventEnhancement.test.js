@@ -183,37 +183,87 @@ test('rejects unsupported scarcity claims from per-event model output', async ()
   assert.match(result.passes.personalFit.status, /unsupported scarcity claim/);
 });
 
-test('sends derived taste evidence to fit passes and drops no-information advisories', async () => {
-  const requests = [];
-  const result = await enhanceEventsWithOllama([
-    event('grounded', ['framework'], { matchedArtists: [{ origin: 'similar', primary: true }], ranking: { utility: 50, artistFit: 72, confidence: 'high', pinnedBonus: 0, urgency: 'watch', hassleScore: 4 } }),
-    event('refusal', ['framework'])
-  ], { background: ['LA context'], decisionPreferences: ['Be selective'], maxEnhancedEvents: 2 }, {
+test('does not let missing source-safe detail turn a selected music event into skip', async () => {
+  const result = await enhanceEventsWithOllama([event('two', ['framework'])], { background: [], decisionPreferences: [], maxEnhancedEvents: 1 }, {
     fetchImpl: async (_url, options) => {
       const body = JSON.parse(options.body);
-      requests.push(body);
-      const input = JSON.parse(body.messages[1].content).candidates;
+      const candidates = JSON.parse(body.messages[1].content).candidates;
       const system = body.messages[0].content;
-      const items = input.map(({ ref }) => {
-        if (system.includes('Assess personal fit')) {
-          return ref === 'candidate-2'
-            ? { ref, score: 40, label: 'weak fit', explanation: 'Cannot assess value without specific artist data.' }
-            : { ref, score: 70, label: 'possible fit', explanation: 'Similar-artist evidence with solid deterministic fit.' };
-        }
-        if (system.includes('selective recommendation')) return { ref, verdict: 'consider', explanation: 'Similarity evidence supports a look.' };
-        if (system.includes('advisory urgency')) return { ref, label: 'watch', explanation: 'Monitor timing.' };
-        return { ref, score: 4, explanation: 'Manageable friction.' };
-      });
+      const items = candidates.map(({ ref }) => system.includes('selective recommendation')
+        ? { ref, verdict: 'skip', explanation: 'Missing lineup and genre detail means there is not enough fit information.' }
+        : system.includes('contextual fit')
+          ? { ref, score: 10, label: 'weak fit', explanation: 'Insufficient artist detail to assess fit.' }
+          : system.includes('advisory urgency')
+            ? { ref, label: 'watch', explanation: 'Timing only.' }
+            : { ref, score: 4, explanation: 'Known friction only.' });
       return new Response(JSON.stringify({ message: { content: JSON.stringify({ items }) } }));
     }
   });
+  assert.notEqual(result.byId.get('two').recommendation.verdict, 'skip');
+  assert.equal(result.byId.get('two').personalFit.label, 'possible fit');
+});
 
-  const fitRequest = requests.find((request) => request.messages[0].content.includes('Assess personal fit'));
-  const fitCandidates = JSON.parse(fitRequest.messages[1].content).candidates;
-  assert.equal(fitCandidates[0].evidenceOrigin, 'similar');
-  assert.equal(fitCandidates[0].evidenceStrength, 72);
-  assert.equal(fitCandidates[1].evidenceOrigin, 'source');
-  assert.equal(result.byId.get('grounded').personalFit.score, 70);
-  assert.equal(result.byId.get('refusal').personalFit, undefined);
-  assert.equal(result.passes.personalFit.status, 'partial local enhancement');
+test('passes only explicitly provider-backed music identity context to Ollama', async () => {
+  const requests = [];
+  await enhanceEventsWithOllama([event('safe', ['ticketmaster'], {
+    sourceOccurrences: [{ source: 'ticketmaster', title: 'Allowed title', venue: { name: 'Allowed venue', city: 'Los Angeles' }, performerNames: ['Allowed artist'] }]
+  })], { background: [], decisionPreferences: [], maxEnhancedEvents: 1 }, {
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body); requests.push(body);
+      const input = JSON.parse(body.messages[1].content).candidates;
+      const system = body.messages[0].content;
+      const items = input.map(({ ref }) => system.includes('contextual fit')
+        ? { ref, score: 60, label: 'possible fit', explanation: 'Provider context supports a closer look.' }
+        : system.includes('selective recommendation')
+          ? { ref, verdict: 'consider', explanation: 'The supplied event context clears the bar.' }
+          : system.includes('advisory urgency')
+            ? { ref, label: 'watch', explanation: 'Timing only.' }
+            : { ref, score: 4, explanation: 'Known friction only.' });
+      return new Response(JSON.stringify({ message: { content: JSON.stringify({ items }) } }));
+    }
+  });
+  const payload = requests.map((request) => request.messages[1].content).join('\n');
+  assert.match(payload, /Allowed title/);
+  assert.match(payload, /Allowed venue/);
+  assert.doesNotMatch(payload, /DO NOT SEND/);
+  assert.doesNotMatch(payload, /artistFit|seedStrength|playlistAffinity|topItemsAffinity/);
+});
+
+test('ignores harmless cross-pass advisory fields without accepting canonical mutations', async () => {
+  const result = await enhanceEventsWithOllama([event('two', ['framework'])], { background: [], decisionPreferences: [], maxEnhancedEvents: 1 }, {
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      const input = JSON.parse(body.messages[1].content).candidates;
+      const system = body.messages[0].content;
+      const items = input.map(({ ref }) => system.includes('selective recommendation')
+        ? { ref, verdict: 'consider', score: 70, label: 'possible fit', explanation: 'Worth consideration.' }
+        : system.includes('personal fit')
+          ? { ref, score: 70, label: 'possible fit', explanation: 'Context supports it.' }
+          : system.includes('advisory urgency')
+            ? { ref, label: 'watch', explanation: 'Timing only.' }
+            : { ref, score: 4, explanation: 'Known friction only.' });
+      return new Response(JSON.stringify({ message: { content: JSON.stringify({ items }) } }));
+    }
+  });
+  assert.equal(result.byId.get('two').recommendation.verdict, 'consider');
+  assert.deepEqual(Object.keys(result.byId.get('two').recommendation).sort(), ['explanation', 'verdict']);
+});
+
+test('rejects inferred genre mismatch and low-friction skip claims', async () => {
+  const result = await enhanceEventsWithOllama([event('two', ['framework'])], { background: ['Electronic and K-pop interests'], decisionPreferences: [], maxEnhancedEvents: 1 }, {
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      const input = JSON.parse(body.messages[1].content).candidates;
+      const system = body.messages[0].content;
+      const items = input.map(({ ref }) => system.includes('selective recommendation')
+        ? { ref, verdict: 'skip', explanation: 'The genre does not align with your taste profile.' }
+        : system.includes('personal fit')
+          ? { ref, score: 60, label: 'possible fit', explanation: 'Context supports a closer look.' }
+          : system.includes('advisory urgency')
+            ? { ref, label: 'watch', explanation: 'Timing only.' }
+            : { ref, score: 4, explanation: 'Known friction only.' });
+      return new Response(JSON.stringify({ message: { content: JSON.stringify({ items }) } }));
+    }
+  });
+  assert.notEqual(result.byId.get('two').recommendation.verdict, 'skip');
 });

@@ -103,7 +103,7 @@ Framework and Insomniac are followed promoter calendars. Framework also supplies
 
 The native search is a discovery adapter, not the ranker. It creates candidates; the deterministic pipeline deduplicates and scores them later.
 
-Do not supply SeatGeek API payloads to the native search or another model. SeatGeek remains a separate deterministic connector under its API terms. Do not scrape Vivid Seats, TickPick, or Edmtrain.
+Do not supply SeatGeek API payloads to the native search or another model. SeatGeek remains a separate deterministic connector under its API terms. Do not scrape Vivid Seats, TickPick, or EDMTrain. When `EDMTRAIN_CLIENT_KEY` is configured, the documented EDMTrain API may enrich an existing Music occurrence only under the adapter's explicit confident-match rules. Unmatched results are audit-only, source failure is non-blocking, and raw EDMTrain fields never enter Ollama.
 
 ## Guarded local refresh lifecycle
 

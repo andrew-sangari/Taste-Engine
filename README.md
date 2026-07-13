@@ -102,6 +102,8 @@ The next upcoming candidates may also receive four separate local advisory passe
 
 The event explorer supports date-window and event-type filters, personal-fit/date/urgency/hassle sorting, urgent-only and low-hassle views, a source-health jump link, and UI-only collation of repeat appearances by the same primary artist. The mixed Overview explicitly queues its selected music and sports candidates ahead of the general Ollama advisory cap. Source health is grouped by Music, Sports, Movies, and Editorial. Festivals remain separate occurrences except when cross-source listings represent the same dated festival event.
 
+For music advisory passes, intentionally absent lineup, genre, or identity detail is uncertainty rather than a reason to skip; missing-evidence skips fall back to the deterministic call. Optional `EDMTRAIN_CLIENT_KEY` enables documented-API lineup enrichment only for confidently matched existing events. Unmatched results stay in a private audit and EDMTrain payloads never enter Ollama.
+
 ### Automation requirements
 
 ### Guarded refresh and local promotion

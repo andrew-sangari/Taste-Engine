@@ -100,9 +100,9 @@ Do not scrape it. Its current user agreement prohibits systematic retrieval, aut
 
 Do not scrape it. Its current terms prohibit crawling, scraping, or harvesting marketplace data. Vivid Seats advertises an affiliate program with deep links, and company materials describe event feeds for distribution partners, but no public self-serve event API was found. Keep it as a manually opened price-comparison link unless Vivid Seats approves the project for a partner feed with explicit data rights.
 
-### Edmtrain
+### EDMTrain
 
-Do not scrape it. Edmtrain has a documented API, but its terms prohibit scraping the application and prohibit using its API in an event-discovery service that combines its events with other sources. Ask for explicit written permission if private personal use might qualify for an exception.
+Use only the documented API with the locally configured client key; never scrape it. The authorized scope is enrichment-only: same-date canonical events may receive ordered lineup, B2B grouping, age, and source-link metadata only after a confident venue/title/artist match. EDMTrain never creates a candidate, receives a ranking bonus merely for being present, or supplies model input. Ambiguous and unmatched records remain in a private audit artifact, and API failure leaves the rest of the projection intact.
 
 ### Eventbrite
 

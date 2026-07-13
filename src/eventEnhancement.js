@@ -7,21 +7,21 @@ import {
 
 const PASS_DEFINITIONS = {
   personalFit: {
-    instruction: 'Assess personal fit from taste evidence only. Do not infer artist identity. evidenceOrigin says how the candidate was discovered: treat source (direct playlist evidence) as strongest, similar as medium, and tag or promoter discovery as exploratory. evidenceStrength is the deterministic 0-100 fit already computed from that evidence. Ground the explanation in these supplied signals; never answer that information is missing. Never claim scarcity, sellout, limited availability, or access loss.',
+    instruction: 'Assess personal fit as contextual fit only from the supplied source-safe evidence. Private preference evidence may be intentionally withheld, so missing artist, genre, or lineup detail is uncertainty rather than negative evidence. Do not lower the score or label an item weak solely because detail is absent. Never claim scarcity, sellout, limited availability, or access loss.',
     fields: {
       score: { type: 'integer', minimum: 0, maximum: 100 },
       label: { type: 'string', enum: ['strong fit', 'possible fit', 'exploratory', 'weak fit'] },
       explanation: { type: 'string', maxLength: 180 }
     },
-    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'pinned', 'evidenceOrigin', 'evidenceStrength'])
+    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'dayOfWeek', 'startPeriod', 'providerContext', 'eventTitle', 'venueName', 'city', 'namedPerformerCount', 'adjacentEvidence', 'pinned'])
   },
   recommendation: {
-    instruction: 'Give a selective recommendation from the supplied evidence: evidenceOrigin (source is direct playlist evidence, similar is medium, tag or promoter is exploratory), evidenceStrength (deterministic 0-100 fit), timing, and event type. It is valid to recommend skipping, but justify the verdict from these signals; never answer that information is missing. Do not invent event facts or use scarcity, sellout, limited-availability, or access-loss claims.',
+    instruction: 'Give a selective recommendation from the supplied source-safe event context, timing, and friction. Private preference evidence may be intentionally withheld. Missing artist, genre, or lineup detail is uncertainty, never a reason to skip. Use skip only when supplied facts contain a concrete negative signal such as excessive friction or poor timing; otherwise use watch or consider. Do not invent event facts or use scarcity, sellout, limited-availability, or access-loss claims.',
     fields: {
       verdict: { type: 'string', enum: ['prioritize', 'consider', 'watch', 'skip'] },
       explanation: { type: 'string', maxLength: 180 }
     },
-    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'pinned', 'evidenceOrigin', 'evidenceStrength'])
+    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'dayOfWeek', 'startPeriod', 'providerContext', 'eventTitle', 'venueName', 'city', 'namedPerformerCount', 'adjacentEvidence', 'pinned', 'deterministicUrgency', 'deterministicHassle'])
   },
   urgency: {
     instruction: 'Review the deterministic urgency label and timing. Return an advisory urgency, never invent inventory or prices. Never claim scarcity, sellout, limited availability, or access loss; if evidence is absent, say it is safe to wait or unknown. Only the supplied non-restricted candidates are eligible.',
@@ -29,7 +29,7 @@ const PASS_DEFINITIONS = {
       label: { type: 'string', enum: ['buy now', 'watch', 'safe to wait', 'unknown'] },
       explanation: { type: 'string', maxLength: 180 }
     },
-    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'deterministicUrgency'])
+    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'dayOfWeek', 'startPeriod', 'deterministicUrgency'])
   },
   hassle: {
     instruction: 'Review the deterministic hassle score using only the supplied non-restricted features. Do not invent travel, venue, price, or schedule facts, and never use scarcity, sellout, limited-availability, or access-loss language.',
@@ -37,7 +37,7 @@ const PASS_DEFINITIONS = {
       score: { type: 'integer', minimum: 0, maximum: 10 },
       explanation: { type: 'string', maxLength: 180 }
     },
-    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'deterministicHassle'])
+    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'dayOfWeek', 'startPeriod', 'city', 'deterministicHassle'])
   }
 };
 
@@ -94,20 +94,30 @@ export async function enhanceEventsWithOllama(events, personalContext, {
     .slice(0, Math.max(0, (personalContext.maxEnhancedEvents ?? 16) - requiredEvents.length));
   const selected = [...requiredEvents, ...remaining];
   const refToId = new Map();
+  const eventById = new Map(selected.map((event) => [event.id, event]));
   const vectors = selected.map((event, index) => {
     const ref = `candidate-${index + 1}`;
     refToId.set(ref, event.id);
     const sources = new Set((event.sourceOccurrences ?? []).map((occurrence) => occurrence.source));
-    const primaryArtist = (event.matchedArtists ?? []).find((artist) => artist.primary) ?? (event.matchedArtists ?? [])[0];
+    const allowedOccurrence = (event.sourceOccurrences ?? []).find((occurrence) => ['ticketmaster', 'framework', 'insomniac'].includes(occurrence.source));
+    const start = event.startLocal ? new Date(event.startLocal) : null;
+    const safePerformers = Array.isArray(allowedOccurrence?.performerNames) ? allowedOccurrence.performerNames.filter(Boolean) : [];
+    const adjacentEvidence = [...new Set((event.matchedArtists ?? [])
+      .map((artist) => artist.origin)
+      .filter((origin) => ['similar', 'tag', 'promoter'].includes(origin)))];
     return {
       ref,
       eventType: classifyEventType(event),
       daysUntil: daysUntil(event.startLocal, now),
+      dayOfWeek: start && !Number.isNaN(start.getTime()) ? start.toLocaleDateString('en-US', { weekday: 'long' }) : 'unknown',
+      startPeriod: startPeriodFor(start, event.timeTbd),
+      providerContext: allowedOccurrence?.source ?? null,
+      eventTitle: allowedOccurrence?.title ?? null,
+      venueName: allowedOccurrence?.venue?.name ?? null,
+      city: allowedOccurrence?.venue?.city ?? null,
+      namedPerformerCount: safePerformers.length,
+      adjacentEvidence,
       pinned: event.ranking.pinnedBonus > 0,
-      // Derived taste evidence only: discovery origin plus the deterministic
-      // fit score. No artist identity and no raw Spotify payload fields.
-      evidenceOrigin: primaryArtist?.origin ?? 'source',
-      evidenceStrength: event.ranking.artistFit ?? 0,
       deterministicUrgency: event.ranking.urgency,
       deterministicHassle: event.ranking.hassleScore,
       // SeatGeek-only payloads stay out of the model. A candidate with a
@@ -152,7 +162,10 @@ export async function enhanceEventsWithOllama(events, personalContext, {
       const result = { items: results.flatMap((batch) => batch.items) };
       for (const item of result.items) {
         const id = refToId.get(item.ref);
-        if (id && byId.has(id)) byId.get(id)[name] = omitRef(item);
+        if (id && byId.has(id)) {
+          const normalized = normalizeMusicAdvisory(name, omitRef(item), eventById.get(id));
+          if (normalized) byId.get(id)[name] = normalized;
+        }
       }
       const uniqueRefs = new Set(result.items.map((item) => item.ref).filter((ref) => refToId.has(ref)));
       const missingCount = Math.max(0, eligible.length - uniqueRefs.size);
@@ -335,25 +348,16 @@ async function callOllamaPass({ baseUrl, model, timeoutMs, fetchImpl, personalCo
     if (!item || typeof item.ref !== 'string' || !expectedRefs.has(item.ref)) continue;
     if (seenRefs.has(item.ref)) throw new Error('Ollama output repeated a candidate ref');
     seenRefs.add(item.ref);
-    const validated = validatePassItem(item, definition);
-    if (isNoInformationAdvisory(validated)) continue;
-    normalized.push(validated);
+    normalized.push(validatePassItem(item, definition));
   }
   return { items: normalized };
 }
 
-// Advisories that only complain about missing input add nothing over the
-// deterministic scores and contradict them on the page; treat them as absent.
-const NO_INFORMATION_PATTERN = /\b(cannot|can't|impossible to|unable to|insufficient|no specific|not enough|lack(?:s|ing)? (?:of )?(?:artist|venue|genre|presentation|specific)|not provided|no .{0,24}(?:data|detail|information)s? provided)\b/i;
-
-export function isNoInformationAdvisory(item) {
-  return typeof item?.explanation === 'string' && NO_INFORMATION_PATTERN.test(item.explanation);
-}
-
 function validatePassItem(item, definition) {
   const allowed = new Set(Object.keys(definition.fields));
+  const ignorableAdvisoryLeakage = new Set(['score', 'label', 'verdict', 'explanation']);
   for (const key of Object.keys(item)) {
-    if (key !== 'ref' && !allowed.has(key)) throw new Error('Ollama output attempted to add an unsupported field');
+    if (key !== 'ref' && !allowed.has(key) && !ignorableAdvisoryLeakage.has(key)) throw new Error('Ollama output attempted to add an unsupported field');
   }
   const output = { ref: item.ref };
   for (const [key, schema] of Object.entries(definition.fields)) {
@@ -389,6 +393,44 @@ function omitRef(item) {
 function daysUntil(startLocal, now) {
   const start = new Date(startLocal);
   return Number.isNaN(start.getTime()) ? null : Math.max(0, Math.ceil((start.getTime() - now.getTime()) / 86_400_000));
+}
+
+const MISSING_EVIDENCE = /\b(?:insufficient|missing|no specific|not enough|lack(?:ing|s)?|cannot assess|unable to assess|unknown (?:artist|genre|lineup|fit))\b/i;
+
+function normalizeMusicAdvisory(pass, value, event) {
+  if (!value || !event) return value;
+  if (pass === 'recommendation' && value.verdict === 'skip' && (
+    MISSING_EVIDENCE.test(value.explanation)
+    || /\bgenre\b|\bmusical interests?\b|\btaste profile\b/i.test(value.explanation)
+    || Number(event.ranking?.hassleScore ?? 0) < 8
+  )) {
+    return deterministicRecommendationFallback(event);
+  }
+  if (pass === 'personalFit' && MISSING_EVIDENCE.test(value.explanation)) {
+    const score = Math.max(45, Math.min(80, Number(event.ranking?.artistFit ?? 50)));
+    return {
+      score,
+      label: score >= 65 ? 'strong fit' : score >= 45 ? 'possible fit' : 'exploratory',
+      explanation: 'The deterministic taste signal remains the primary fit evidence; no source-safe contradiction was supplied.'
+    };
+  }
+  return value;
+}
+
+function deterministicRecommendationFallback(event) {
+  const hassle = Number(event.ranking?.hassleScore ?? 5);
+  const days = daysUntil(event.startLocal, new Date());
+  const verdict = hassle >= 8 ? 'watch' : Number(event.ranking?.utility ?? 0) >= 45 ? 'consider' : 'watch';
+  const timing = days == null ? 'Timing is still unclear.' : days <= 7 ? 'It is close enough to make a near-term call.' : 'There is enough lead time to keep it on the shortlist.';
+  return { verdict, explanation: `${timing} Missing source detail is not treated as negative evidence.` };
+}
+
+function startPeriodFor(start, timeTbd) {
+  if (timeTbd || !start || Number.isNaN(start.getTime())) return 'unknown';
+  const hour = start.getHours();
+  if (hour < 17) return 'afternoon';
+  if (hour < 22) return 'evening';
+  return 'late';
 }
 
 function chunk(items, size) {

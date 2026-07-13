@@ -4,6 +4,7 @@ import { deduplicateCandidates } from '../src/candidates.js';
 import { loadBriefConfig } from '../src/briefConfig.js';
 import { loadEnv } from '../src/env.js';
 import { buildEditorialCandidates, generateEditorialBrief } from '../src/editorial.js';
+import { enrichEventsWithEdmtrain, fetchEdmtrainEvents } from '../src/edmtrain.js';
 import { enhanceEventsWithOllama, enhanceSportsWithOllama } from '../src/eventEnhancement.js';
 import { fetchFrameworkArtists, fetchFrameworkEvents, normalizeFrameworkEvent } from '../src/framework.js';
 import { fetchInsomniacEvents, normalizeInsomniacEvent } from '../src/insomniac.js';
@@ -133,6 +134,16 @@ const insomniac = await optionalSource('insomniac', true, async () => {
   const raw = await fetchInsomniacEvents({ startDate, endDate });
   return { items: raw.map((event) => normalizeInsomniacEvent(event, generatedAt)), warnings: [] };
 });
+const edmtrain = await optionalSource('edmtrain', config.edmtrain.enabled && Boolean(process.env.EDMTRAIN_CLIENT_KEY), async () => {
+  const items = await fetchEdmtrainEvents({
+    clientKey: process.env.EDMTRAIN_CLIENT_KEY,
+    startDate,
+    endDate,
+    city: config.edmtrain.city,
+    state: config.edmtrain.state
+  });
+  return { items, warnings: [] };
+});
 printTiming('Ticket sources', Date.now() - ticketSourcesStartedAt);
 const sportsSourceConfig = {
   ...sportsConfig,
@@ -222,8 +233,28 @@ printTiming('MLB/TMDB', Date.now() - mlbTmdbStartedAt);
 
 const normalizationStartedAt = Date.now();
 const deduplication = {};
-const allConcerts = deduplicateCandidates([...seatGeek.items, ...ticketmaster.items, ...framework.items, ...insomniac.items], deduplication);
+const canonicalConcerts = deduplicateCandidates([...seatGeek.items, ...ticketmaster.items, ...framework.items, ...insomniac.items], deduplication);
 const rankedSnapshot = addPromoterEvidence(artistSnapshot, [...framework.items, ...insomniac.items], frameworkArtists.items);
+const edmtrainEnrichment = enrichEventsWithEdmtrain(canonicalConcerts, edmtrain.items, rankedSnapshot);
+const allConcerts = edmtrainEnrichment.events;
+await writePrivateJson(resolve('data/taste/edmtrain-audit.json'), {
+  generatedAt: generatedAt.toISOString(),
+  matchedCount: edmtrainEnrichment.matchedCount,
+  ambiguousCount: edmtrainEnrichment.ambiguousCount,
+  unmatchedCount: edmtrainEnrichment.unmatchedCount,
+  audit: edmtrainEnrichment.audit
+});
+const edmtrainHealth = sourceHealth.find((source) => source.source === 'edmtrain');
+if (edmtrainHealth) {
+  edmtrainHealth.itemCount = edmtrainEnrichment.matchedCount;
+  edmtrainHealth.details = {
+    fetchedEvents: edmtrain.items.length,
+    matchedEvents: edmtrainEnrichment.matchedCount,
+    lineupArtists: edmtrainEnrichment.lineupArtistCount,
+    ambiguousMatches: edmtrainEnrichment.ambiguousCount,
+    unmatchedAuditOnly: edmtrainEnrichment.unmatchedCount
+  };
+}
 const rankedAll = rankCandidates(allConcerts, rankedSnapshot, config, generatedAt);
 const ranked = rankedAll
   .filter((candidate) => !candidate.ranking.excluded && candidate.matchedArtists.length > 0)
