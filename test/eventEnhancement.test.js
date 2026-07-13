@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyEventType, enhanceEventsWithOllama, enhanceSportsWithOllama } from '../src/eventEnhancement.js';
+import { classifyEventType, enhanceEventsWithOllama, enhanceSportsWithOllama, reusePreviousEnhancements } from '../src/eventEnhancement.js';
 
 function event(id, sources, overrides = {}) {
   return {
@@ -266,4 +266,20 @@ test('rejects inferred genre mismatch and low-friction skip claims', async () =>
     }
   });
   assert.notEqual(result.byId.get('two').recommendation.verdict, 'skip');
+});
+test('reuses only matching prior advisory passes when a local pass is absent', () => {
+  const enhancement = { byId: new Map([['one', { personalFit: { score: 70, label: 'possible fit', explanation: 'Fresh fit.' } }]]) };
+  const current = [event('one', ['ticketmaster'], { title: 'Same Event', startLocal: '2026-08-01T20:00:00', venue: { name: 'Same Venue' } })];
+  const previous = [{ id: 'one', title: 'Same Event', startLocal: '2026-08-01T19:00:00', venue: { name: 'Same Venue' }, localEnhancement: {
+    personalFit: { score: 40, label: 'exploratory', explanation: 'Old fit.' },
+    recommendation: { verdict: 'consider', explanation: 'Previously valid recommendation.' }
+  }}];
+  const result = reusePreviousEnhancements(enhancement, current, previous);
+  assert.deepEqual(result, { reusedPassCount: 1, reusedItemCount: 1 });
+  assert.equal(enhancement.byId.get('one').personalFit.explanation, 'Fresh fit.');
+  assert.equal(enhancement.byId.get('one').recommendation.verdict, 'consider');
+
+  const changed = { byId: new Map([['one', {}]]) };
+  reusePreviousEnhancements(changed, [{ ...current[0], venue: { name: 'Changed Venue' } }], previous);
+  assert.deepEqual(changed.byId.get('one'), {});
 });

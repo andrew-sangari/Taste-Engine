@@ -5,7 +5,7 @@ import { loadBriefConfig } from '../src/briefConfig.js';
 import { loadEnv } from '../src/env.js';
 import { buildEditorialCandidates, generateEditorialBrief } from '../src/editorial.js';
 import { enrichEventsWithEdmtrain, fetchEdmtrainEvents } from '../src/edmtrain.js';
-import { enhanceEventsWithOllama, enhanceSportsWithOllama } from '../src/eventEnhancement.js';
+import { enhanceEventsWithOllama, enhanceSportsWithOllama, reusePreviousEnhancements } from '../src/eventEnhancement.js';
 import { fetchFrameworkArtists, fetchFrameworkEvents, normalizeFrameworkEvent } from '../src/framework.js';
 import { fetchInsomniacEvents, normalizeInsomniacEvent } from '../src/insomniac.js';
 import { applyPitcherStats, fetchDodgersHomeGames, fetchMlbPitcherStats, fetchMlbStandings } from '../src/mlb.js';
@@ -52,6 +52,7 @@ const movieConfig = JSON.parse(await readFile(resolve('config/movies.json'), 'ut
 const sportsConfig = JSON.parse(await readFile(resolve('config/sports.json'), 'utf8'));
 const personalContext = JSON.parse(await readFile(resolve('config/personal-context.json'), 'utf8'));
 const sourceSnapshot = JSON.parse(await readFile(resolve('data/taste/artists.json'), 'utf8'));
+const previousProjection = await readJsonIfPresent(resolve('site/app/data/upcoming.json'));
 const expandedSnapshot = await readJsonIfPresent(resolve('data/taste/expanded-artists.json'));
 const artistSnapshot = expandedSnapshot?.sourceGeneratedAt === sourceSnapshot.generatedAt
   ? expandedSnapshot
@@ -310,11 +311,13 @@ const sportsEnhancement = await enhanceSportsWithOllama(sports, personalContext,
   now: generatedAt,
   requiredIds: overviewSportsIds
 });
+reusePreviousEnhancements(sportsEnhancement, sports, previousProjection?.sports ?? []);
 sourceHealth.push({
   source: 'ollama-sports',
   status: sportsEnhancement.mode === 'ollama' ? 'active' : sportsEnhancement.mode === 'partial' ? 'partial' : 'unavailable',
   itemCount: sportsEnhancement.enhancedGameCount,
-  warningCount: Object.values(sportsEnhancement.passes).filter((pass) => pass.status !== 'locally enhanced').length
+  warningCount: Object.values(sportsEnhancement.passes).filter((pass) => pass.status !== 'locally enhanced').length,
+  details: { reusedPasses: sportsEnhancement.reusedPassCount ?? 0, reusedItems: sportsEnhancement.reusedItemCount ?? 0 }
 });
 recordBuildSource(buildReport, 'ollama-sports', {
   fetched: sportsEnhancement.callsAttempted > 0,
@@ -330,11 +333,13 @@ const eventEnhancement = await enhanceEventsWithOllama(ranked, personalContext, 
   now: generatedAt,
   requiredIds: overviewMusicIds
 });
+reusePreviousEnhancements(eventEnhancement, ranked, previousProjection?.events ?? []);
 sourceHealth.push({
   source: 'ollama-events',
   status: eventEnhancement.mode === 'ollama' ? 'active' : eventEnhancement.mode === 'partial' ? 'partial' : 'unavailable',
   itemCount: eventEnhancement.enhancedEventCount,
-  warningCount: Object.values(eventEnhancement.passes).filter((pass) => pass.status !== 'locally enhanced').length
+  warningCount: Object.values(eventEnhancement.passes).filter((pass) => pass.status !== 'locally enhanced').length,
+  details: { reusedPasses: eventEnhancement.reusedPassCount ?? 0, reusedItems: eventEnhancement.reusedItemCount ?? 0 }
 });
 recordBuildSource(buildReport, 'ollama-events', {
   fetched: eventEnhancement.callsAttempted > 0,

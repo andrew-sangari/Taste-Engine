@@ -137,7 +137,7 @@ export async function enhanceEventsWithOllama(events, personalContext, {
       ? vectors.filter((item) => !item.restrictedSource)
       : vectors;
     if (!eligible.length) {
-      passes[name] = { status: 'deterministic fallback', itemCount: 0 };
+      passes[name] = { status: 'deterministic fallback', itemCount: 0, missingCount: 0 };
       continue;
     }
     try {
@@ -175,7 +175,7 @@ export async function enhanceEventsWithOllama(events, personalContext, {
         missingCount
       };
     } catch (error) {
-      passes[name] = { status: `fallback: ${sanitizeErrorMessage(error)}`, itemCount: 0 };
+      passes[name] = { status: `fallback: ${sanitizeErrorMessage(error)}`, itemCount: 0, missingCount: eligible.length };
     }
   }
 
@@ -261,7 +261,7 @@ export async function enhanceSportsWithOllama(games, personalContext, {
       const missingCount = Math.max(0, vectors.length - uniqueRefs.size);
       passes[name] = { status: missingCount ? 'partial local enhancement' : 'locally enhanced', itemCount: uniqueRefs.size, missingCount };
     } catch (error) {
-      passes[name] = { status: `fallback: ${sanitizeErrorMessage(error)}`, itemCount: 0 };
+      passes[name] = { status: `fallback: ${sanitizeErrorMessage(error)}`, itemCount: 0, missingCount: vectors.length };
     }
   }
   const activePasses = Object.values(passes).filter((pass) => pass.status === 'locally enhanced').length;
@@ -279,6 +279,30 @@ export async function enhanceSportsWithOllama(games, personalContext, {
     }),
     byId
   };
+}
+
+export function reusePreviousEnhancements(enhancement, currentItems, previousItems) {
+  if (!enhancement?.byId || !Array.isArray(previousItems)) return { reusedPassCount: 0, reusedItemCount: 0 };
+  const currentById = new Map((currentItems ?? []).map((item) => [item.id, item]));
+  const previousById = new Map(previousItems.map((item) => [item.id, item]));
+  let reusedPassCount = 0;
+  let reusedItemCount = 0;
+  for (const [id, value] of enhancement.byId) {
+    const current = currentById.get(id);
+    const previous = previousById.get(id);
+    if (!sameAdvisorySubject(current, previous) || !previous?.localEnhancement) continue;
+    let reusedForItem = false;
+    for (const pass of ['personalFit', 'recommendation', 'urgency', 'hassle']) {
+      if (value[pass] || !previous.localEnhancement[pass]) continue;
+      value[pass] = structuredClone(previous.localEnhancement[pass]);
+      reusedPassCount += 1;
+      reusedForItem = true;
+    }
+    if (reusedForItem) reusedItemCount += 1;
+  }
+  enhancement.reusedPassCount = reusedPassCount;
+  enhancement.reusedItemCount = reusedItemCount;
+  return { reusedPassCount, reusedItemCount };
 }
 
 export function classifyEventType(event) {
@@ -437,4 +461,15 @@ function chunk(items, size) {
   const output = [];
   for (let index = 0; index < items.length; index += size) output.push(items.slice(index, index + size));
   return output;
+}
+
+function sameAdvisorySubject(current, previous) {
+  if (!current || !previous) return false;
+  const currentTitle = String(current.title ?? '').trim().toLowerCase();
+  const previousTitle = String(previous.title ?? '').trim().toLowerCase();
+  const currentDate = String(current.startLocal ?? '').slice(0, 10);
+  const previousDate = String(previous.startLocal ?? '').slice(0, 10);
+  const currentVenue = String(current.venue?.name ?? '').trim().toLowerCase();
+  const previousVenue = String(previous.venue?.name ?? '').trim().toLowerCase();
+  return currentTitle === previousTitle && currentDate === previousDate && currentVenue === previousVenue;
 }

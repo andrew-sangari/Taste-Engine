@@ -16,13 +16,13 @@ try {
   await mkdir(previewDir, { recursive: true });
   await copyWorkspace(previewDir);
 
-  const playlistSyncAvailable = await preflightPlaylistSync();
-  const mode = playlistSyncAvailable && !args.has('--cached-only') ? 'live-isolated' : 'cached-projection';
+  const playlistSync = await preflightPlaylistSync();
+  const mode = playlistSync.available && !args.has('--cached-only') ? 'live-isolated' : 'cached-projection';
   const warnings = [];
   if (mode === 'live-isolated') {
     await run(process.execPath, ['scripts/build-site.js'], previewDir);
   } else {
-    warnings.push('Playlist Sync unavailable or cached-only requested; reused the last accepted projection.');
+    warnings.push(args.has('--cached-only') ? 'Cached-only refresh requested; reused the last accepted projection.' : playlistSync.warning);
     await run(npm(), ['run', 'build'], join(previewDir, 'site'));
   }
 
@@ -54,7 +54,7 @@ try {
   });
   console.log(`Validated preview ready: ${previewDir}`);
   console.log(`Projection: ${manifest.contentSha256.slice(0, 16)} (${mode})`);
-  if (warnings.length) console.log('Warning: Playlist Sync was unavailable; accepted cached projection was used.');
+  if (warnings.length) console.log(`Warning: ${warnings.join(' ')}`);
 } catch (error) {
   console.error(`Taste refresh failed: ${safeMessage(error)}`);
   process.exitCode = 1;
@@ -95,10 +95,33 @@ async function copyPrivateData(destination) {
 }
 
 async function preflightPlaylistSync() {
+  const baseUrl = await playlistSyncBaseUrl();
+  const statusUrl = new URL('/api/status', `${baseUrl}/`);
   try {
-    const response = await fetch('http://127.0.0.1:4317/api/status', { signal: AbortSignal.timeout(1500) });
-    return response.ok;
-  } catch { return false; }
+    const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) return { available: false, warning: `Playlist Sync status returned HTTP ${response.status}; reused the last accepted projection.` };
+    const status = await response.json().catch(() => ({}));
+    if (status.connected?.spotify === false) return { available: false, warning: 'Playlist Sync is running but Spotify is disconnected; reused the last accepted projection.' };
+    const missingScopes = Array.isArray(status.spotifyAuth?.missingScopes) ? status.spotifyAuth.missingScopes : [];
+    if (missingScopes.includes('user-top-read')) {
+      console.log('Playlist Sync preflight: running; user-top-read is missing, so Top Artists will fall back without blocking playlist evidence.');
+    } else {
+      console.log('Playlist Sync preflight: running and Spotify-connected.');
+    }
+    return { available: true, warning: null };
+  } catch (error) {
+    const code = error?.cause?.code || error?.code || error?.name || 'network error';
+    return { available: false, warning: `Playlist Sync status could not be reached (${code}); reused the last accepted projection. If port 4317 is listening, run the refresh with localhost network permission.` };
+  }
+}
+
+async function playlistSyncBaseUrl() {
+  try {
+    const config = JSON.parse(await readFile(join(root, 'config/spotify-playlists.json'), 'utf8'));
+    return String(config.playlistSyncBaseUrl ?? 'http://127.0.0.1:4317').replace(/\/$/, '');
+  } catch {
+    return 'http://127.0.0.1:4317';
+  }
 }
 
 function run(command, childArgs, cwd) {

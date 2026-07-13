@@ -4,6 +4,13 @@ Work in `/Users/and14626/Documents/Taste Engine`. Follow `AGENTS.md` and never p
 
 ## Deterministic refresh
 
+Current execution standards take precedence over older wording below:
+
+- Make the first configured Playlist Sync `/api/status` request with explicit local-network permission; do not perform an initial restricted-sandbox request. Run the live guarded refresh with the same permission because it calls Playlist Sync. A restricted-sandbox `EPERM`, `ENOTFOUND`, or curl status `000` is an execution-environment failure, not evidence that Playlist Sync is stopped. If one still occurs, confirm port 4317 and retry with local-network permission before selecting cached mode.
+- Use `npm run taste:refresh` for the isolated guarded preview. EDMTrain participates only through its configured documented API as enrichment for confidently matched existing Music events; it is never scraped or used as a discovery source.
+- Run root tests, site tests, then the full and empty browser suites sequentially. A browser failure blocks publication; do not silently refresh screenshots or publish around it.
+- Inspect and preserve the Sites access policy. Never toggle visibility. Save and deploy only the exact validated source under the already-authorized policy.
+
 1. Preflight Playlist Sync at `/api/status`. If `spotifyAuth.missingScopes` includes `user-top-read`, emit one actionable warning (“Reconnect Spotify in Playlist Sync to enable Top Artists”) and continue immediately; do not wait for interactive reauthorization. If Playlist Sync is already reachable at its configured local URL and the scope is present, run `npm run taste:seed` so the three Top Artists windows can refresh. If it is unavailable, reuse the existing `data/taste/artists.json`; do not fail the run solely because Playlist Sync is stopped. A missing Top Artists lane must fall back to playlist-only evidence without changing candidate retrieval or publication.
 2. Run `npm run site:refresh`. Last.fm, SeatGeek, Ticketmaster, TMDB, Framework, Insomniac, MLB, sports ticket joins, and the optional local Ollama editorial/advisory passes are independent. Missing keys, stopped local services, access challenges, or source failures should be reflected in source health and must not block valid data from the other sources. The editorial stage may add only validated brief copy and mention references from its source-allowlisted input; it cannot mutate candidates or rankings.
    - Allow substantial time for local inference. `gemma4:26b-mlx` may remain quiet while completing separate personal-fit, recommendation, urgency, hassle, and editorial passes.
@@ -32,7 +39,7 @@ Prefer evidence in this order:
 3. primary ticketing page
 4. reputable event listing or announcement with a direct source link
 
-Do not ingest or summarize SeatGeek API payloads; the deterministic SeatGeek connector handles that source separately. Do not scrape Vivid Seats, TickPick, Edmtrain, Resident Advisor, or DICE. A normal public page discovered through web search may be cited as an outbound source only when access and use are permitted.
+Do not ingest or summarize SeatGeek API payloads; the deterministic SeatGeek connector handles that source separately. Do not scrape Vivid Seats, TickPick, EDMTrain, Resident Advisor, or DICE. EDMTrain data may enter only through the configured enrichment adapter described above. A normal public page discovered through web search may be cited as an outbound source only when access and use are permitted.
 
 For each candidate, record:
 
