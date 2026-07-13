@@ -7,21 +7,21 @@ import {
 
 const PASS_DEFINITIONS = {
   personalFit: {
-    instruction: 'Assess personal fit from taste evidence only. Do not infer artist identity. Treat direct playlist evidence as strongest, similarity as medium, and tag or promoter discovery as exploratory. Never claim scarcity, sellout, limited availability, or access loss.',
+    instruction: 'Assess personal fit from taste evidence only. Do not infer artist identity. evidenceOrigin says how the candidate was discovered: treat source (direct playlist evidence) as strongest, similar as medium, and tag or promoter discovery as exploratory. evidenceStrength is the deterministic 0-100 fit already computed from that evidence. Ground the explanation in these supplied signals; never answer that information is missing. Never claim scarcity, sellout, limited availability, or access loss.',
     fields: {
       score: { type: 'integer', minimum: 0, maximum: 100 },
       label: { type: 'string', enum: ['strong fit', 'possible fit', 'exploratory', 'weak fit'] },
       explanation: { type: 'string', maxLength: 180 }
     },
-    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'pinned'])
+    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'pinned', 'evidenceOrigin', 'evidenceStrength'])
   },
   recommendation: {
-    instruction: 'Give a selective recommendation from personal fit, timing, and confidence. It is valid to recommend skipping. Do not invent event facts or use scarcity, sellout, limited-availability, or access-loss claims.',
+    instruction: 'Give a selective recommendation from the supplied evidence: evidenceOrigin (source is direct playlist evidence, similar is medium, tag or promoter is exploratory), evidenceStrength (deterministic 0-100 fit), timing, and event type. It is valid to recommend skipping, but justify the verdict from these signals; never answer that information is missing. Do not invent event facts or use scarcity, sellout, limited-availability, or access-loss claims.',
     fields: {
       verdict: { type: 'string', enum: ['prioritize', 'consider', 'watch', 'skip'] },
       explanation: { type: 'string', maxLength: 180 }
     },
-    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'pinned'])
+    input: (item) => serializeModelFields(item, ['ref', 'eventType', 'daysUntil', 'pinned', 'evidenceOrigin', 'evidenceStrength'])
   },
   urgency: {
     instruction: 'Review the deterministic urgency label and timing. Return an advisory urgency, never invent inventory or prices. Never claim scarcity, sellout, limited availability, or access loss; if evidence is absent, say it is safe to wait or unknown. Only the supplied non-restricted candidates are eligible.',
@@ -98,11 +98,16 @@ export async function enhanceEventsWithOllama(events, personalContext, {
     const ref = `candidate-${index + 1}`;
     refToId.set(ref, event.id);
     const sources = new Set((event.sourceOccurrences ?? []).map((occurrence) => occurrence.source));
+    const primaryArtist = (event.matchedArtists ?? []).find((artist) => artist.primary) ?? (event.matchedArtists ?? [])[0];
     return {
       ref,
       eventType: classifyEventType(event),
       daysUntil: daysUntil(event.startLocal, now),
       pinned: event.ranking.pinnedBonus > 0,
+      // Derived taste evidence only: discovery origin plus the deterministic
+      // fit score. No artist identity and no raw Spotify payload fields.
+      evidenceOrigin: primaryArtist?.origin ?? 'source',
+      evidenceStrength: event.ranking.artistFit ?? 0,
       deterministicUrgency: event.ranking.urgency,
       deterministicHassle: event.ranking.hassleScore,
       // SeatGeek-only payloads stay out of the model. A candidate with a
@@ -330,9 +335,19 @@ async function callOllamaPass({ baseUrl, model, timeoutMs, fetchImpl, personalCo
     if (!item || typeof item.ref !== 'string' || !expectedRefs.has(item.ref)) continue;
     if (seenRefs.has(item.ref)) throw new Error('Ollama output repeated a candidate ref');
     seenRefs.add(item.ref);
-    normalized.push(validatePassItem(item, definition));
+    const validated = validatePassItem(item, definition);
+    if (isNoInformationAdvisory(validated)) continue;
+    normalized.push(validated);
   }
   return { items: normalized };
+}
+
+// Advisories that only complain about missing input add nothing over the
+// deterministic scores and contradict them on the page; treat them as absent.
+const NO_INFORMATION_PATTERN = /\b(cannot|can't|impossible to|unable to|insufficient|no specific|not enough|lack(?:s|ing)? (?:of )?(?:artist|venue|genre|presentation|specific)|not provided|no .{0,24}(?:data|detail|information)s? provided)\b/i;
+
+export function isNoInformationAdvisory(item) {
+  return typeof item?.explanation === 'string' && NO_INFORMATION_PATTERN.test(item.explanation);
 }
 
 function validatePassItem(item, definition) {

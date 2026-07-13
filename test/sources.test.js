@@ -180,3 +180,18 @@ test('deduplicates same-city festival listings with venue aliases and billing su
   assert.equal(merged.length, 1);
   assert.deepEqual(merged[0].sourceOccurrences.map((item) => item.source).sort(), ['seatgeek', 'ticketmaster']);
 });
+
+test('grades movie taste tiers and keeps stretch candidates behind evidence-backed picks', () => {
+  const config = {
+    preferredGenreIds: [878, 12, 16], excludedGenreIds: [], minimumPopularity: 8,
+    highPopularityOverride: 30, maxCandidates: 5,
+    preferredDirectors: ['Auteur Prime'], preferredKeywords: ['imax']
+  };
+  const selected = selectMovieCandidates([
+    { id: 1, title: 'Franchise Pups', popularity: 120, vote_average: 6, genre_ids: [12, 16] },
+    { id: 2, title: 'Auteur Cut', popularity: 15, vote_average: 8, genre_ids: [878], credits: { crew: [{ name: 'Auteur Prime' }] } },
+    { id: 3, title: 'Double Genre', popularity: 20, vote_average: 7, genre_ids: [878, 12] }
+  ], config);
+  assert.deepEqual(selected.map((item) => item.movie.id), [2, 3, 1]);
+  assert.deepEqual(selected.map((item) => item.tasteTier), ['strong', 'potential', 'stretch']);
+});

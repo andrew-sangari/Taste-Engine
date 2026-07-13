@@ -117,7 +117,12 @@ function whyYouReason(artist, candidate = {}, topItems = {}, now = new Date()) {
   if (artist.topEvidence && artist.origin === 'top-items' && hasUsableTopWindow(topItems, now)) return `${artist.name} is a direct Spotify top-artist signal.`;
   if (!artist.origin || artist.origin === 'source') {
     const count = artist.evidence?.length ?? 0;
-    return `${artist.name} is a strong signal in ${count} selected playlist${count === 1 ? '' : 's'}.`;
+    const trackCount = artist.evidence?.[0]?.trackCount ?? 0;
+    if (count >= 3) return `${artist.name} runs through ${count} of your selected playlists.`;
+    if (count === 2) return `${artist.name} anchors two of your selected playlists.`;
+    if (count === 1 && trackCount >= 3) return `${artist.name} shows up ${trackCount} times in one of your core playlists.`;
+    if (count === 1) return `${artist.name} is a strong signal in one of your selected playlists.`;
+    return `${artist.name} is a direct signal from your selected playlists.`;
   }
   const similar = (artist.discoveryEvidence ?? []).find((evidence) => evidence.type === 'lastfm-similar');
   if (similar) return `${artist.name} is a Last.fm neighbor of ${similar.sourceArtist}, one of your stronger playlist signals.`;

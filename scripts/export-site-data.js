@@ -205,12 +205,13 @@ const tmdb = await optionalSource('tmdb', Boolean(process.env.TMDB_ACCESS_TOKEN 
     accessToken: process.env.TMDB_ACCESS_TOKEN,
     apiKey: process.env.TMDB_API_KEY
   });
-  const selected = selectMovieCandidates(enriched, movieConfig).map(({ movie, score, reasons }) => {
+  const selected = selectMovieCandidates(enriched, movieConfig).map(({ movie, score, tasteTier, reasons }) => {
     const normalized = normalizeTmdbMovie(movie, generatedAt);
     return {
     ...normalized,
     candidateScore: Math.round(score * 10) / 10,
     tasteScore: Math.min(100, Math.round(score)),
+    tasteTier,
     reasons,
     visual: resolveMovieVisual(normalized)
     };

@@ -182,3 +182,38 @@ test('rejects unsupported scarcity claims from per-event model output', async ()
   assert.equal(result.mode, 'deterministic');
   assert.match(result.passes.personalFit.status, /unsupported scarcity claim/);
 });
+
+test('sends derived taste evidence to fit passes and drops no-information advisories', async () => {
+  const requests = [];
+  const result = await enhanceEventsWithOllama([
+    event('grounded', ['framework'], { matchedArtists: [{ origin: 'similar', primary: true }], ranking: { utility: 50, artistFit: 72, confidence: 'high', pinnedBonus: 0, urgency: 'watch', hassleScore: 4 } }),
+    event('refusal', ['framework'])
+  ], { background: ['LA context'], decisionPreferences: ['Be selective'], maxEnhancedEvents: 2 }, {
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      requests.push(body);
+      const input = JSON.parse(body.messages[1].content).candidates;
+      const system = body.messages[0].content;
+      const items = input.map(({ ref }) => {
+        if (system.includes('Assess personal fit')) {
+          return ref === 'candidate-2'
+            ? { ref, score: 40, label: 'weak fit', explanation: 'Cannot assess value without specific artist data.' }
+            : { ref, score: 70, label: 'possible fit', explanation: 'Similar-artist evidence with solid deterministic fit.' };
+        }
+        if (system.includes('selective recommendation')) return { ref, verdict: 'consider', explanation: 'Similarity evidence supports a look.' };
+        if (system.includes('advisory urgency')) return { ref, label: 'watch', explanation: 'Monitor timing.' };
+        return { ref, score: 4, explanation: 'Manageable friction.' };
+      });
+      return new Response(JSON.stringify({ message: { content: JSON.stringify({ items }) } }));
+    }
+  });
+
+  const fitRequest = requests.find((request) => request.messages[0].content.includes('Assess personal fit'));
+  const fitCandidates = JSON.parse(fitRequest.messages[1].content).candidates;
+  assert.equal(fitCandidates[0].evidenceOrigin, 'similar');
+  assert.equal(fitCandidates[0].evidenceStrength, 72);
+  assert.equal(fitCandidates[1].evidenceOrigin, 'source');
+  assert.equal(result.byId.get('grounded').personalFit.score, 70);
+  assert.equal(result.byId.get('refusal').personalFit, undefined);
+  assert.equal(result.passes.personalFit.status, 'partial local enhancement');
+});
