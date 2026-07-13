@@ -31,6 +31,8 @@ export function normalizeBriefConfig(input = {}) {
   const maxTicketPriceUsd = positiveNumber(input.maxTicketPriceUsd ?? 120, 'maxTicketPriceUsd');
   const minimumUtility = finiteNumber(input.minimumUtility ?? 28, 'minimumUtility');
   const overviewPlanAheadMinScore = finiteNumber(input.overviewPlanAheadMinScore ?? 55, 'overviewPlanAheadMinScore');
+  const changesSinceRefreshTopN = positiveInteger(input.changesSinceRefreshTopN ?? 5, 'changesSinceRefreshTopN');
+  const feedbackSnapshotRetentionDays = positiveInteger(input.feedbackSnapshotRetentionDays ?? 365, 'feedbackSnapshotRetentionDays');
   const edmtrain = input.edmtrain ?? {};
 
   return {
@@ -50,6 +52,8 @@ export function normalizeBriefConfig(input = {}) {
     maxTicketPriceUsd,
     minimumUtility,
     overviewPlanAheadMinScore,
+    changesSinceRefreshTopN,
+    feedbackSnapshotRetentionDays,
     edmtrain: {
       enabled: edmtrain.enabled !== false,
       city: String(edmtrain.city ?? 'Los Angeles'),

@@ -5,7 +5,7 @@ import { diffProjections } from './projectionDiff.js';
 
 const REQUIRED_PROJECTION_FIELDS = ['schemaVersion', 'generatedAt', 'horizon', 'events', 'sports', 'movies', 'sourceHealth', 'overview', 'overviewPlanAhead'];
 const COLLECTIONS = ['events', 'sports', 'movies'];
-const PRIVATE_NAME = /(?:build-report|feedback-report|feedback-state|feedback\.jsonl|personal-context|spotify-playlists|\.env)/i;
+const PRIVATE_NAME = /(?:build-report|feedback-report|feedback-state|feedback-snapshots|feedback\.jsonl|personal-context|spotify-playlists|\.env)/i;
 
 export const DEFAULT_WORKFLOW_PATHS = Object.freeze({
   workflowRoot: 'data/taste/workflow',

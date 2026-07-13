@@ -146,6 +146,7 @@ export function validateFeedbackRecord(record) {
     errors.push('signalTags must contain unique supported tags');
   }
   if (record.notes != null && (typeof record.notes !== 'string' || record.notes.length > 4000)) errors.push('notes must be a private string of at most 4000 characters');
+  if (record.feedbackSnapshotId != null && !safeText(record.feedbackSnapshotId, 200)) errors.push('feedbackSnapshotId must be null or a safe string');
   validateEvidenceSnapshot(record.evidenceSnapshot, errors);
   if (typeof record.recordedAt !== 'string' || !Number.isFinite(Date.parse(record.recordedAt))) errors.push('recordedAt must be a valid timestamp');
   return { valid: errors.length === 0, errors };
@@ -167,6 +168,7 @@ export function normalizeFeedbackRecord(input) {
     evidenceSnapshot: rawEvidenceSnapshot && typeof rawEvidenceSnapshot === 'object' && !Array.isArray(rawEvidenceSnapshot)
       ? normalizeEvidenceSnapshot(rawEvidenceSnapshot)
       : rawEvidenceSnapshot,
+    feedbackSnapshotId: input?.feedbackSnapshotId == null ? undefined : input.feedbackSnapshotId,
     recordedAt: input?.recordedAt
   };
   if (typeof record.feedbackId === 'string') record.feedbackId = record.feedbackId.trim();
@@ -180,6 +182,8 @@ export function normalizeFeedbackRecord(input) {
     record.evidenceSnapshot.canonicalArtistIds = sortStrings(record.evidenceSnapshot.canonicalArtistIds);
     record.evidenceSnapshot.promoterOrSeriesIds = sortStrings(record.evidenceSnapshot.promoterOrSeriesIds);
   }
+  if (typeof record.feedbackSnapshotId === 'string') record.feedbackSnapshotId = record.feedbackSnapshotId.trim();
+  if (record.feedbackSnapshotId == null) delete record.feedbackSnapshotId;
   if (record.supersedesFeedbackId == null) delete record.supersedesFeedbackId;
   return record;
 }

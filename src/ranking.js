@@ -1,3 +1,9 @@
+// Every urgency value the engine can emit, in escalation order. 'unknown'
+// and 'likely unavailable' are deliberately unmapped: they carry no ordering,
+// so consumers must not report an "upgrade" into or out of them.
+export const URGENCY_PRIORITY = Object.freeze({ 'safe to wait': 0, watch: 1, 'buy now': 2 });
+export const UNORDERED_URGENCIES = Object.freeze(['unknown', 'likely unavailable']);
+
 export function rankCandidates(candidates, artistSnapshot, config, now = new Date()) {
   const bySpotifyId = new Map((artistSnapshot.artists ?? []).filter((artist) => artist.spotifyArtistId).map((artist) => [artist.spotifyArtistId, artist]));
   const bySeatGeekId = new Map((artistSnapshot.artists ?? []).filter((artist) => artist.seatGeekPerformerId).map((artist) => [String(artist.seatGeekPerformerId), artist]));

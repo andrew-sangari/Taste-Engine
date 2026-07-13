@@ -39,6 +39,9 @@ import {
   sanitizeErrorMessage
 } from '../src/diagnostics.js';
 import { enhancementFor, toDisplayEvent, toDisplaySportsGame } from '../src/projection.js';
+import { buildFeedbackSnapshot, mergeSnapshotIndex } from '../src/feedbackSnapshots.js';
+import { buildTasteProfile } from '../src/tasteProfile.js';
+import { DEFAULT_CHANGES_TOP_N, buildChangesSinceRefresh } from '../src/projectionChanges.js';
 
 loadEnv();
 
@@ -402,6 +405,37 @@ const overviewBuckets = buildOverviewBuckets(exportData.events, exportData.sport
 exportData.overview = overviewBuckets.current;
 exportData.overviewPlanAhead = overviewBuckets.planAhead;
 exportData.overviewAdvisory = overviewAdvisory;
+
+// Public feedback snapshots carry event identity plus an opaque id; the
+// provider-native evidence entities stay in the private snapshot index and
+// are rehydrated by taste:feedback:import.
+const feedbackSnapshotEntries = [];
+for (const [displayItems, vertical, sourceItems] of [[exportData.events, 'music', ranked], [exportData.sports, 'sports', sports]]) {
+  const sourceById = new Map(sourceItems.map((item) => [item.id, item]));
+  for (const display of displayItems) {
+    const snapshot = buildFeedbackSnapshot(sourceById.get(display.id) ?? display, vertical);
+    if (!snapshot) continue;
+    display.feedbackSnapshot = snapshot.public;
+    feedbackSnapshotEntries.push(snapshot);
+  }
+}
+
+exportData.tasteProfile = buildTasteProfile(artistSnapshot, {
+  feedbackState: await readJsonIfPresent(resolve('data/taste/feedback-state.json'))
+});
+
+const acceptedProjectionPath = valueAfterFlag('--accepted-projection') ?? process.env.ACCEPTED_PROJECTION_PATH ?? null;
+if (acceptedProjectionPath) {
+  try {
+    const accepted = JSON.parse(await readFile(resolve(acceptedProjectionPath), 'utf8'));
+    const changes = buildChangesSinceRefresh(stripVolatileProjectionFields(accepted), stripVolatileProjectionFields(exportData), {
+      topN: config.changesSinceRefreshTopN ?? DEFAULT_CHANGES_TOP_N
+    });
+    if (changes) exportData.changesSinceRefresh = changes;
+  } catch (error) {
+    diagnostics.changesSinceRefreshWarning = sanitizeErrorMessage(error);
+  }
+}
 exportData.eventEnhancement = {
   mode: eventEnhancement.mode,
   model: eventEnhancement.model,
@@ -474,6 +508,14 @@ const projectionStartedAt = Date.now();
 diagnostics.sources = Object.fromEntries(sourceHealth.map((source) => [source.source, source]));
 diagnostics.editorialMode = exportData.editorial.mode;
 await writePrivateJson(resolve('data/taste/source-diagnostics.json'), diagnostics);
+try {
+  await mergeSnapshotIndex(feedbackSnapshotEntries, {
+    now: generatedAt,
+    retentionDays: config.feedbackSnapshotRetentionDays ?? undefined
+  });
+} catch (error) {
+  diagnostics.feedbackSnapshotIndexWarning = sanitizeErrorMessage(error);
+}
 const output = resolve('site/app/data/upcoming.json');
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(exportData, null, 2)}\n`);
@@ -652,6 +694,18 @@ function addPromoterArtist(artists, names, maximumSeed, name, promoter, sourceUr
 
 function localIsoDate(date, timezone) {
   return date.toLocaleDateString('en-CA', { timeZone: timezone });
+}
+
+function valueAfterFlag(flag) {
+  const index = process.argv.indexOf(flag);
+  return index >= 0 ? process.argv[index + 1] ?? null : null;
+}
+
+// Volatile blocks would otherwise make the diff recursively report changes
+// caused by the previous diff itself.
+function stripVolatileProjectionFields(projection) {
+  const { changesSinceRefresh: _changes, tasteProfile: _profile, ...rest } = projection ?? {};
+  return rest;
 }
 
 async function readJsonIfPresent(path) {
