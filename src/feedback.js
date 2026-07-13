@@ -243,6 +243,30 @@ export async function appendFeedbackRecord(path, input) {
   return record;
 }
 
+// Batch variant of appendFeedbackRecord: every record is validated and the
+// combined replay is checked BEFORE anything is written, then all records
+// land in one atomic write. Either the whole batch appends or nothing does.
+export async function appendFeedbackRecords(path, inputs) {
+  const records = inputs.map((input) => {
+    const record = normalizeFeedbackRecord(input);
+    const validation = validateFeedbackRecord(record);
+    if (!validation.valid) throw new Error(`Feedback record rejected: ${validation.errors.join('; ')}`);
+    return record;
+  });
+  const journal = await readFeedbackJournal(path);
+  if (journal.issues.length) throw new Error('Feedback journal is invalid; run taste:feedback:validate before adding records.');
+  const seen = new Set(journal.records.map((existing) => existing.feedbackId));
+  for (const record of records) {
+    if (seen.has(record.feedbackId)) throw new Error(`feedbackId already exists: ${record.feedbackId}`);
+    seen.add(record.feedbackId);
+  }
+  const replay = replayFeedbackRecords([...journal.records, ...records]);
+  if (replay.issues.length) throw new Error('Feedback batch would create an invalid replacement or duplicate-event state; nothing was written.');
+  const prefix = journal.raw && !journal.raw.endsWith('\n') ? `${journal.raw}\n` : journal.raw;
+  await writeAtomicText(path, `${prefix}${records.map((record) => JSON.stringify(record)).join('\n')}\n`);
+  return records;
+}
+
 export async function writeJsonAtomic(path, value) {
   await writeAtomicText(path, `${JSON.stringify(value, null, 2)}\n`);
 }

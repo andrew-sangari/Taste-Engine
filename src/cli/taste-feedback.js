@@ -48,11 +48,14 @@ async function runCommand(name, options) {
     case 'simulate':
       await simulateFeedbackReport(options);
       return;
+    case 'import':
+      await importFromSite(options);
+      return;
     case 'help':
       printHelp();
       return;
     default:
-      throw new Error(`Unknown feedback command: ${name}. Use taste:feedback:add, list, revoke, validate, rebuild, or simulate.`);
+      throw new Error(`Unknown feedback command: ${name}. Use taste:feedback:add, list, revoke, validate, rebuild, simulate, or import.`);
   }
 }
 
@@ -211,6 +214,29 @@ async function simulateFeedbackReport(options) {
   console.log(`Simulated ${report.shadowCandidateCount} candidate(s): ${report.shadowRankingDiffs.length} ranking diff(s), ${report.potentialOverviewChanges.length} Overview change(s), ${report.eligibleSignals.length} eligible signal(s).`);
 }
 
+async function importFromSite(options) {
+  if (!options.file) throw new Error('Import requires --file pointing at a site feedback JSONL export.');
+  const config = await loadConfig(options);
+  const journalPath = resolve(options.journal ?? config.journalPath);
+  const { importSiteFeedback } = await import('../siteFeedbackImport.js');
+  const report = await importSiteFeedback({
+    filePath: resolve(options.file),
+    journalPath,
+    ...(options.snapshotIndex ? { snapshotIndexPath: resolve(options.snapshotIndex) } : {})
+  });
+  console.log(`${report.inputCount} input / ${report.newCount} new / ${report.duplicateCount} identical duplicate(s) skipped.`);
+  for (const warning of report.warnings) console.log(`- warning: ${warning}`);
+  for (const error of report.errors) console.log(`- error: ${error}`);
+  if (!report.appended && report.errors.length) {
+    console.log('Import aborted; journal unchanged.');
+    process.exitCode = 1;
+  } else if (report.appended) {
+    console.log(`Appended ${report.newCount} record(s) to ${journalPath}. Run taste:feedback:rebuild to refresh derived state.`);
+  } else {
+    console.log('Nothing to append; journal unchanged.');
+  }
+}
+
 function parseArgs(args) {
   const options = {};
   const booleanFlags = new Set(['yes', 'include-revoked', 'replace']);
@@ -229,7 +255,8 @@ function parseArgs(args) {
     ['signal-tags', 'signalTags'],
     ['recorded-at', 'recordedAt'],
     ['plan-ahead-min-score', 'planAheadMinScore'],
-    ['brief-config', 'briefConfig']
+    ['brief-config', 'briefConfig'],
+    ['snapshot-index', 'snapshotIndex']
   ]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -372,6 +399,7 @@ function printHelp() {
   console.log('  validate');
   console.log('  rebuild');
   console.log('  simulate [--projection PATH]');
+  console.log('  import --file PATH [--snapshot-index PATH]');
   console.log(`  statuses: ${FEEDBACK_STATUSES.join(', ')}`);
   console.log(`  tags: ${FEEDBACK_SIGNAL_TAGS.join(', ')}`);
 }

@@ -22,6 +22,7 @@
     "taste:feedback:validate": "node src/cli/taste-feedback.js validate",
     "taste:feedback:rebuild": "node src/cli/taste-feedback.js rebuild",
     "taste:feedback:simulate": "node src/cli/taste-feedback.js simulate",
+    "taste:feedback:import": "node src/cli/taste-feedback.js import",
     "evaluation:fixtures": "node scripts/evaluate-fixtures.js",
     "projection:diff": "node scripts/projection-diff.js",
     "taste:explain": "node scripts/taste-explain.js",
