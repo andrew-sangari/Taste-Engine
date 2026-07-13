@@ -53,6 +53,7 @@ function buildCandidates(events = [], sports = []) {
     sources: event.sources,
     eventType: event.eventType,
     visual: event.visual ?? resolveMusicVisual(event),
+    feedbackSnapshot: event.feedbackSnapshot ?? null,
     overviewGroupKey: overviewMusicGroupKey(event)
   })), ...sports.map((game) => ({
     vertical: 'sports',
@@ -72,6 +73,7 @@ function buildCandidates(events = [], sports = []) {
     sources: [...new Set((game.ticketObservations ?? []).map((observation) => observation.source))],
     eventType: 'baseball',
     visual: game.visual ?? resolveSportsVisual(game),
+    feedbackSnapshot: game.feedbackSnapshot ?? null,
     overviewGroupKey: `sports:${game.series?.id ?? normalizeArtistName(game.awayTeam?.name ?? game.id)}`
   }))].sort(overviewComparator);
 }

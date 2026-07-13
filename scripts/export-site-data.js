@@ -396,19 +396,10 @@ const exportData = {
   movies: tmdb.items,
   editorialCandidates: buildEditorialCandidates({ events: ranked, sports, movies: tmdb.items })
 };
-const overviewBuckets = buildOverviewBuckets(exportData.events, exportData.sports, {
-  now: generatedAt,
-  currentDays: 14,
-  planAheadMinScore: config.overviewPlanAheadMinScore,
-  horizonDays: config.upcomingHorizonDays
-});
-exportData.overview = overviewBuckets.current;
-exportData.overviewPlanAhead = overviewBuckets.planAhead;
-exportData.overviewAdvisory = overviewAdvisory;
-
 // Public feedback snapshots carry event identity plus an opaque id; the
 // provider-native evidence entities stay in the private snapshot index and
-// are rehydrated by taste:feedback:import.
+// are rehydrated by taste:feedback:import. Attached before the overview is
+// built so overview cards inherit them.
 const feedbackSnapshotEntries = [];
 for (const [displayItems, vertical, sourceItems] of [[exportData.events, 'music', ranked], [exportData.sports, 'sports', sports]]) {
   const sourceById = new Map(sourceItems.map((item) => [item.id, item]));
@@ -419,6 +410,16 @@ for (const [displayItems, vertical, sourceItems] of [[exportData.events, 'music'
     feedbackSnapshotEntries.push(snapshot);
   }
 }
+
+const overviewBuckets = buildOverviewBuckets(exportData.events, exportData.sports, {
+  now: generatedAt,
+  currentDays: 14,
+  planAheadMinScore: config.overviewPlanAheadMinScore,
+  horizonDays: config.upcomingHorizonDays
+});
+exportData.overview = overviewBuckets.current;
+exportData.overviewPlanAhead = overviewBuckets.planAhead;
+exportData.overviewAdvisory = overviewAdvisory;
 
 exportData.tasteProfile = buildTasteProfile(artistSnapshot, {
   feedbackState: await readJsonIfPresent(resolve('data/taste/feedback-state.json'))
