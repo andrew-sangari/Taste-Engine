@@ -10,6 +10,12 @@ const REQUIRED_FIELDS = [
   'sourceHealth', 'overview', 'overviewPlanAhead'
 ];
 
+// The site treats recommendation history as optional local-feedback context and
+// falls back to an empty list when an exporter does not include it. Keep its
+// removal visible in the shape audit without blocking an otherwise valid
+// projection promotion.
+const OPTIONAL_REMOVABLE_FIELD_ROOTS = ['recentHistory'];
+
 export function diffProjections(before, after, {
   maxAdded = null,
   maxRemoved = null,
@@ -51,7 +57,7 @@ export function diffProjections(before, after, {
   const structuralIncompatibility = schema.changed
     || schema.missingRequiredBefore.length > 0
     || schema.missingRequiredAfter.length > 0
-    || unexpectedFields.removed.length > 0;
+    || unexpectedFields.removed.some(isBreakingFieldRemoval);
   const counts = compareCounts(beforeNormalized, afterNormalized);
   const thresholds = evaluateThresholds(counts, added.length, removed.length, { maxAdded, maxRemoved, maxCountChange });
 
@@ -73,6 +79,10 @@ export function diffProjections(before, after, {
     structurallyCompatible: !structuralIncompatibility,
     exitCode: structuralIncompatibility || thresholds.exceeded ? 2 : 0
   };
+}
+
+function isBreakingFieldRemoval(path) {
+  return !OPTIONAL_REMOVABLE_FIELD_ROOTS.some((root) => path === root || path.startsWith(`${root}.`));
 }
 
 export function formatProjectionDiff(diff) {

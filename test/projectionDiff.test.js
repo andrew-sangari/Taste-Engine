@@ -103,3 +103,28 @@ test('returns a nonzero result for structural incompatibility or configured mate
   assert.equal(threshold.exitCode, 2);
   assert.equal(threshold.thresholds.exceeded, true);
 });
+
+test('allows the optional recent-history subtree to disappear while retaining the field-shape audit', () => {
+  const before = projection({
+    recentHistory: [{ id: 'past-one', vertical: 'music', recommendedOn: '2026-07-01' }]
+  });
+  const after = projection();
+  const diff = diffProjections(before, after);
+
+  assert.ok(diff.unexpectedFields.removed.includes('recentHistory'));
+  assert.ok(diff.unexpectedFields.removed.includes('recentHistory.[].recommendedOn'));
+  assert.equal(diff.structurallyCompatible, true);
+  assert.equal(diff.exitCode, 0);
+});
+
+test('continues to reject removed fields inside recommendation records', () => {
+  const before = projection();
+  const after = projection({
+    events: before.events.map(({ ranking: _ranking, ...item }) => item)
+  });
+  const diff = diffProjections(before, after);
+
+  assert.ok(diff.unexpectedFields.removed.includes('events.[].ranking'));
+  assert.equal(diff.structurallyCompatible, false);
+  assert.equal(diff.exitCode, 2);
+});
