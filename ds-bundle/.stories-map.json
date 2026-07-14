@@ -1,0 +1,103 @@
+{
+  "global": "TasteEngineSite",
+  "pkg": "taste-engine-site",
+  "pkgDir": "/Users/and14626/Documents/Taste Engine/site/node_modules/taste-engine-site",
+  "extraEntries": [],
+  "exported": [
+    "CardActions",
+    "ChangesStrip",
+    "EventExplorer",
+    "FilterDisclosure",
+    "MovieExplorer",
+    "OverviewExplorer",
+    "RecommendationVisual",
+    "SportsExplorer",
+    "TasteExplorer",
+    "VerticalShell"
+  ],
+  "storybookStatic": null,
+  "keyRecipe": 7,
+  "cfgSliceGlobal": "6649e9d1f2a035a1f960c88e9e0c01ead69ecf45ddd465686541b0970cf6d4df",
+  "components": [
+    {
+      "name": "CardActions",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "603c85ce9f981f6d",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "ChangesStrip",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "cff884fddcfb1ab6",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "EventExplorer",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "32329aabfc6f828a",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "FilterDisclosure",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "4496d36c9057a07f",
+      "cfgSlice": "81b710d2541319f3bed133045b38bc726f237c5cc5d86b71aafddc52df8840ad",
+      "stories": []
+    },
+    {
+      "name": "MovieExplorer",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "5220740dc1f15992",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "OverviewExplorer",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "ff3d78933b115783",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "RecommendationVisual",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "6511b62c7ceebd8b",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "SportsExplorer",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "a44984945b85791c",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "TasteExplorer",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "133fa552632bbffb",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    },
+    {
+      "name": "VerticalShell",
+      "group": "general",
+      "srcSha": null,
+      "sourceKey": "91fb58f6633ac6de",
+      "cfgSlice": "5ff899b099eb6923833804cda955efdd69101524bec86f67dac5537cd81802e8",
+      "stories": []
+    }
+  ]
+}

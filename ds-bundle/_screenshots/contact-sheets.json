@@ -1,0 +1,17 @@
+[
+  {
+    "sheet": 1,
+    "components": [
+      "CardActions",
+      "ChangesStrip",
+      "EventExplorer",
+      "FilterDisclosure",
+      "MovieExplorer",
+      "OverviewExplorer",
+      "RecommendationVisual",
+      "SportsExplorer",
+      "TasteExplorer",
+      "VerticalShell"
+    ]
+  }
+]

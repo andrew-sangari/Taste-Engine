@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taste Engine — V2 mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --background: #030504;
+  --surface: #080a09;
+  --surface-raised: #0b0e0c;
+  --border: rgba(202, 218, 211, .16);
+  --border-strong: rgba(202, 218, 211, .28);
+  --text-primary: #eceeeb;
+  --text-secondary: #bec5c1;
+  --text-muted: #7f8984;
+  --accent: #62dfc3;
+  --accent-bright: #84ecd5;
+  --accent-dark: #173f36;
+  --accent-wash: rgba(98, 223, 195, .10);
+  --amber: #d5a36f;
+  --font-sans: "Geist", Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --pad-x: clamp(20px, 4.3vw, 72px);
+}
+* { box-sizing: border-box; }
+html { color-scheme: dark; scroll-behavior: smooth; scroll-padding-top: 90px; }
+body {
+  margin: 0;
+  background-color: var(--background);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.025'/%3E%3C/svg%3E");
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+main { overflow-x: clip; }
+
+/* ---------- reveal choreography ---------- */
+.rv { opacity: 0; transform: translateY(10px); transition: opacity .55s ease, transform .55s cubic-bezier(.2,.7,.2,1); transition-delay: var(--rv-delay, 0ms); }
+.rv.on { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .rv { opacity: 1; transform: none; transition: none; }
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ---------- masthead ---------- */
+.masthead {
+  min-height: 64px; padding: 16px var(--pad-x);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  position: relative; z-index: 30;
+}
+.wordmark { display: flex; flex-direction: column; font-family: var(--font-mono); font-size: 15px; font-weight: 700; letter-spacing: .2em; line-height: .92; text-decoration: none; }
+.wordmark em { color: var(--accent); font-style: normal; }
+.mastheadMeta { display: flex; gap: 28px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-secondary); }
+.mastheadMeta a { text-decoration: none; }
+.mastheadMeta a:hover { color: var(--accent-bright); }
+.liveDot::before { background: var(--accent); border-radius: 50%; content: ""; display: inline-block; height: 7px; width: 7px; margin-right: 8px; box-shadow: 0 0 0 0 rgba(98,223,195,.5); animation: pulse 2.8s ease-out infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(98,223,195,.45); } 70% { box-shadow: 0 0 0 7px rgba(98,223,195,0); } 100% { box-shadow: 0 0 0 0 rgba(98,223,195,0); } }
+
+/* ---------- hero / projection ---------- */
+.projection { position: relative; border-bottom: 1px solid var(--border); overflow: clip; }
+.projectionLight {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(58% 90% at 84% -12%, rgba(98,223,195,.16), rgba(98,223,195,.045) 42%, transparent 70%),
+    radial-gradient(40% 60% at 12% 110%, rgba(23,63,54,.35), transparent 70%);
+}
+.projectionInner { position: relative; display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; max-width: 1600px; margin: 0 auto; padding: clamp(56px, 7vw, 104px) var(--pad-x) 44px; }
+.kicker { font-family: var(--font-serif); font-style: italic; font-size: clamp(19px, 1.6vw, 24px); color: var(--accent-bright); margin: 0 0 18px; letter-spacing: .01em; }
+.projection h1 { font-size: clamp(56px, 6.4vw, 104px); font-weight: 430; letter-spacing: -.06em; line-height: .96; margin: 0; }
+.projection h1 .lit { color: var(--accent); text-shadow: 0 0 42px rgba(98,223,195,.35); }
+.projectionAside { align-self: end; max-width: 560px; }
+.projectionAside > p:first-child { color: var(--text-secondary); font-size: 18px; line-height: 1.5; margin: 0; }
+.utilityLine {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 26px;
+  border-top: 1px solid var(--border); margin-top: 34px; padding-top: 18px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted);
+}
+.utilityLine b { color: var(--text-primary); font-size: 17px; font-weight: 600; letter-spacing: 0; margin-right: 7px; font-variant-numeric: tabular-nums; }
+.utilityLine .sep { color: var(--accent); }
+
+/* ---------- vertical tabs ---------- */
+.verticalTabs {
+  background: rgba(11, 14, 12, .86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(202,218,211,.13); border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.018);
+  display: flex; margin: 20px var(--pad-x) 0; overflow-x: auto;
+  position: sticky; top: 10px; z-index: 20;
+}
+.verticalTab {
+  background: transparent; border: 0; border-right: 1px solid rgba(202,218,211,.11);
+  color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono);
+  font-size: 12px; letter-spacing: .08em; min-height: 64px; padding: 0 38px; text-transform: uppercase;
+  transition: color .2s ease, background .25s ease;
+}
+.verticalTab:hover, .verticalTab.tabActive {
+  background: linear-gradient(90deg, rgba(98,223,195,.07), rgba(23,63,54,.16) 68%, rgba(3,5,4,.08));
+  color: var(--accent-bright); box-shadow: inset 0 -1px 0 rgba(98,223,195,.75);
+}
+.verticalTab.tabActive::before { background: var(--accent); border-radius: 50%; box-shadow: 0 0 0 3px rgba(89,214,187,.09); content: ""; display: inline-block; height: 6px; width: 6px; margin-right: 12px; vertical-align: 1px; }
+
+/* ---------- section scaffolding ---------- */
+.section { padding: 64px var(--pad-x) 88px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; margin: 0 0 22px; text-transform: uppercase; color: var(--text-muted); }
+.eyebrow .lit { color: var(--accent); }
+.sectionIntro { display: grid; grid-template-columns: minmax(0,1fr) minmax(360px,.92fr); column-gap: clamp(48px, 8vw, 140px); row-gap: 12px; margin-bottom: 44px; }
+.sectionIntro h2 { font-size: clamp(36px, 4.6vw, 68px); font-weight: 430; letter-spacing: -.05em; line-height: .98; margin: 0; }
+.sectionIntro .aside { color: var(--text-secondary); font-size: 17px; line-height: 1.5; align-self: end; }
+.verdict { border-top: 1px solid var(--border); margin-top: 22px; padding-top: 14px; font-size: 15px; color: var(--text-secondary); }
+.verdict strong { font-family: var(--font-serif); font-style: italic; font-weight: 400; font-size: 18px; color: var(--amber); margin-right: 10px; letter-spacing: .01em; }
+
+/* ---------- ranked cards ---------- */
+.rankGrid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 22px; }
+.rankCard {
+  position: relative; overflow: clip;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 26px 28px 22px; min-height: 240px;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 26px;
+  transition: transform .3s cubic-bezier(.2,.7,.2,1), border-color .3s ease, box-shadow .3s ease;
+}
+.rankCard:hover { transform: translateY(-3px); border-color: rgba(98,223,195,.4); box-shadow: 0 18px 44px rgba(0,0,0,.45), 0 0 0 1px rgba(98,223,195,.07); }
+.rankCard.featured { grid-column: 1 / -1; min-height: 300px; }
+.ghostRank {
+  position: absolute; right: -6px; bottom: -42px; z-index: 0;
+  font-family: var(--font-mono); font-weight: 700; font-size: 210px; line-height: 1; letter-spacing: -.06em;
+  color: transparent; -webkit-text-stroke: 1px rgba(202,218,211,.10);
+  user-select: none; pointer-events: none;
+}
+.rankCard.featured .ghostRank { font-size: 280px; bottom: -60px; }
+.cardArt { position: absolute; inset: 0 0 0 34%; z-index: 0; opacity: .8; transition: opacity .45s ease, filter .45s ease; filter: saturate(.9); }
+.cardArt svg { width: 100%; height: 100%; display: block; }
+.rankCard:hover .cardArt { opacity: 1; filter: saturate(1.15) brightness(1.12); }
+.rankCard > .cardBody, .rankCard > .cardFoot { position: relative; z-index: 1; }
+.cardTopline { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.rankNo { color: var(--accent); font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
+.cardDate { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+.laneChip { margin-left: auto; border: 1px solid rgba(98,223,195,.45); border-radius: 999px; color: var(--accent-bright); font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; padding: 5px 11px; text-transform: uppercase; }
+.laneChip.movies { border-color: rgba(213,163,111,.5); color: var(--amber); }
+.rankCard h3 { font-size: clamp(26px, 2.6vw, 44px); font-weight: 480; letter-spacing: -.035em; line-height: 1.02; margin: 0 0 8px; max-width: 62%; }
+.rankCard.featured h3 { font-size: clamp(34px, 3.6vw, 58px); color: var(--accent-bright); text-shadow: 0 0 32px rgba(98,223,195,.25); }
+.cardVenue { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 12px; }
+.cardWhy { color: var(--text-secondary); font-size: 15.5px; line-height: 1.45; margin: 0; max-width: 58%; }
+.cardFoot { border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; padding-top: 14px; }
+
+/* data-as-texture: hassle dial + urgency + fit */
+.fitChip { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.hassle { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.hassleTicks { display: inline-flex; gap: 2.5px; }
+.hassleTicks i { width: 5px; height: 12px; border-radius: 1.5px; background: rgba(202,218,211,.14); }
+.hassleTicks i.on { background: var(--accent); box-shadow: 0 0 6px rgba(98,223,195,.5); }
+.hassleTicks.warm i.on { background: var(--amber); box-shadow: 0 0 6px rgba(213,163,111,.5); }
+.urgency { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-secondary); }
+.urgency::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+.urgency.watch { color: var(--accent-bright); }
+.urgency.watch::before { background: var(--accent); animation: pulse 2.2s ease-out infinite; }
+.cardActions { margin-left: auto; display: flex; gap: 10px; }
+.btn {
+  background: transparent; border: 1px solid var(--border-strong); border-radius: 999px;
+  color: var(--text-primary); cursor: pointer; font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: .1em; padding: 9px 18px; text-transform: uppercase;
+  transition: border-color .2s ease, background .2s ease, color .2s ease;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent-bright); background: var(--accent-wash); }
+.btn.primary { background: var(--accent-dark); border-color: transparent; color: var(--accent-bright); }
+.btn.primary:hover { background: #1d4c41; }
+.viewLink { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; text-decoration: none; color: var(--text-secondary); }
+.viewLink:hover { color: var(--accent-bright); }
+
+/* plan ahead */
+.planAheadHead { display: flex; align-items: baseline; gap: 18px; margin: 72px 0 26px; }
+.planAheadHead h3 { font-family: var(--font-serif); font-style: italic; font-weight: 400; font-size: clamp(24px, 2.4vw, 34px); margin: 0; color: var(--text-primary); }
+.planAheadHead p { color: var(--text-muted); font-size: 14.5px; margin: 0; }
+.planGrid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 22px; }
+.planGrid .rankCard { min-height: 210px; }
+.planGrid .rankCard h3 { max-width: 100%; font-size: clamp(22px, 1.9vw, 30px); }
+.planGrid .cardWhy { max-width: 100%; font-size: 14px; }
+.planGrid .cardArt { inset: 0 0 0 20%; opacity: .45; }
+.planGrid .rankCard:hover .cardArt { opacity: .75; }
+
+/* ---------- source health board ---------- */
+.board { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.boardGroup { border-top: 1px solid var(--border); }
+.boardGroup:first-child { border-top: 0; }
+.boardGroupHead { display: flex; align-items: baseline; gap: 14px; padding: 18px 26px 6px; }
+.boardGroupHead h4 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.boardGroupHead span { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+.srcRow {
+  display: grid; grid-template-columns: 13px minmax(180px, 1.1fr) 96px minmax(120px, 1fr) minmax(0, 1.4fr);
+  gap: 18px; align-items: center; padding: 11px 26px; border-top: 1px solid rgba(202,218,211,.07);
+  font-size: 13.5px; transition: background .2s ease;
+}
+.srcRow:hover { background: rgba(98,223,195,.03); }
+.led { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(98,223,195,.6); }
+.led.partial { background: var(--amber); box-shadow: 0 0 8px rgba(213,163,111,.6); }
+.led.down { background: #4a5450; box-shadow: none; }
+.srcName { font-weight: 500; }
+.srcCount { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+.srcBar { height: 4px; border-radius: 2px; background: rgba(202,218,211,.1); overflow: hidden; }
+.srcBar i { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent-dark), var(--accent)); width: var(--w, 0%); transition: width 1s cubic-bezier(.2,.7,.2,1) .15s; }
+.srcRow.warn .srcBar i { background: linear-gradient(90deg, #4a3722, var(--amber)); }
+.srcNote { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srcNote em { color: var(--amber); font-style: normal; }
+
+/* ---------- method rail ---------- */
+.methodRail { position: relative; margin-top: 8px; }
+.methodRail::before { content: ""; position: absolute; left: 17px; top: 10px; bottom: 10px; width: 1px; background: linear-gradient(180deg, var(--accent) 0%, var(--border) 60%); opacity: .5; }
+.methodStep { position: relative; display: grid; grid-template-columns: 56px minmax(0, 220px) 1fr; gap: 26px; padding: 26px 0; }
+.methodStep + .methodStep { border-top: 1px solid rgba(202,218,211,.07); }
+.methodNode {
+  width: 35px; height: 35px; border-radius: 50%; border: 1px solid var(--border-strong);
+  display: grid; place-items: center; background: var(--surface-raised);
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); position: relative; z-index: 1;
+  transition: border-color .4s ease, color .4s ease, box-shadow .4s ease;
+}
+.methodStep.on .methodNode { border-color: var(--accent); color: var(--accent-bright); box-shadow: 0 0 16px rgba(98,223,195,.25); }
+.methodStep h4 { margin: 4px 0 0; font-size: 19px; font-weight: 560; letter-spacing: -.02em; }
+.methodStep p { margin: 2px 0 0; color: var(--text-secondary); font-size: 15.5px; line-height: 1.5; max-width: 760px; }
+
+/* ---------- taste health ---------- */
+.tasteWrap { display: grid; grid-template-columns: minmax(0,1fr) minmax(360px,.92fr); column-gap: clamp(48px, 8vw, 140px); }
+.tasteWrap p { color: var(--text-secondary); font-size: 16px; line-height: 1.55; }
+.formatWatch { border-top: 1px solid var(--border); margin-top: 26px; padding-top: 16px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); line-height: 2; }
+.formatWatch b { color: var(--amber); font-weight: 500; }
+
+/* ---------- footer ---------- */
+footer { border-top: 1px solid var(--border); padding: 40px var(--pad-x) 56px; display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; }
+footer .fine { color: var(--text-muted); font-size: 12.5px; }
+footer .sig { font-family: var(--font-serif); font-style: italic; font-size: 17px; color: var(--text-secondary); }
+
+@media (max-width: 900px) {
+  .projectionInner, .sectionIntro, .tasteWrap { grid-template-columns: 1fr; }
+  .rankGrid, .planGrid { grid-template-columns: 1fr; }
+  .rankCard h3, .cardWhy { max-width: 100%; }
+  .cardArt { inset: 0 0 0 15%; opacity: .4; }
+  .srcRow { grid-template-columns: 13px 1fr 70px; }
+  .srcBar, .srcNote { display: none; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <radialGradient id="mBloom" cx="72%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#62dfc3" stop-opacity=".34"/><stop offset="38%" stop-color="#2ba58c" stop-opacity=".16"/><stop offset="72%" stop-color="#173f36" stop-opacity=".05"/><stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mBar" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#62dfc3" stop-opacity="0"/><stop offset="55%" stop-color="#62dfc3" stop-opacity=".5"/><stop offset="100%" stop-color="#84ecd5" stop-opacity=".9"/>
+    </linearGradient>
+    <linearGradient id="fadeL" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#030504" stop-opacity="1"/><stop offset="55%" stop-color="#030504" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sCone" x1="0" y1="0" x2=".28" y2="1">
+      <stop offset="0%" stop-color="#84ecd5" stop-opacity=".5"/><stop offset="45%" stop-color="#62dfc3" stop-opacity=".14"/><stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sCone2" x1="1" y1="0" x2=".72" y2="1">
+      <stop offset="0%" stop-color="#84ecd5" stop-opacity=".32"/><stop offset="50%" stop-color="#62dfc3" stop-opacity=".1"/><stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="sField" cx="60%" cy="112%" r="90%">
+      <stop offset="0%" stop-color="#173f36" stop-opacity=".9"/><stop offset="45%" stop-color="#0d2b25" stop-opacity=".4"/><stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="vBeam" x1="1" y1=".5" x2="0" y2=".5">
+      <stop offset="0%" stop-color="#eadbc4" stop-opacity=".42"/><stop offset="30%" stop-color="#d5a36f" stop-opacity=".16"/><stop offset="70%" stop-color="#62dfc3" stop-opacity=".05"/><stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="vLamp" cx="96%" cy="34%" r="45%">
+      <stop offset="0%" stop-color="#fff6e6" stop-opacity=".75"/><stop offset="18%" stop-color="#eecf9e" stop-opacity=".3"/><stop offset="60%" stop-color="#d5a36f" stop-opacity=".07"/><stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="8"/></filter>
+    <filter id="haze" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="34"/></filter>
+
+    <symbol id="art-music" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+      <rect width="800" height="500" fill="url(#mBloom)"/>
+      <ellipse cx="590" cy="140" rx="260" ry="150" fill="#62dfc3" opacity=".15" filter="url(#haze)"/>
+      <g filter="url(#soft)" opacity=".85">
+        <rect x="418" y="292" width="9" height="118" rx="4" fill="url(#mBar)"/><rect x="446" y="236" width="9" height="174" rx="4" fill="url(#mBar)"/><rect x="474" y="308" width="9" height="102" rx="4" fill="url(#mBar)"/><rect x="502" y="184" width="9" height="226" rx="4" fill="url(#mBar)"/><rect x="530" y="252" width="9" height="158" rx="4" fill="url(#mBar)"/><rect x="558" y="128" width="9" height="282" rx="4" fill="url(#mBar)"/><rect x="586" y="212" width="9" height="198" rx="4" fill="url(#mBar)"/><rect x="614" y="268" width="9" height="142" rx="4" fill="url(#mBar)"/><rect x="642" y="172" width="9" height="238" rx="4" fill="url(#mBar)"/><rect x="670" y="298" width="9" height="112" rx="4" fill="url(#mBar)"/><rect x="698" y="244" width="9" height="166" rx="4" fill="url(#mBar)"/><rect x="726" y="322" width="9" height="88" rx="4" fill="url(#mBar)"/>
+      </g>
+      <rect width="800" height="500" fill="url(#fadeL)"/>
+    </symbol>
+    <symbol id="art-sports" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+      <rect width="800" height="500" fill="url(#sField)"/>
+      <g filter="url(#soft)">
+        <polygon points="470,-20 420,-20 610,500 760,500" fill="url(#sCone)"/>
+        <polygon points="820,10 770,-30 560,500 700,500" fill="url(#sCone2)"/>
+      </g>
+      <g stroke="#62dfc3" fill="none" opacity=".33">
+        <path d="M 340 520 A 300 300 0 0 1 900 470" stroke-width="1.4"/>
+        <path d="M 400 540 A 240 240 0 0 1 860 500" stroke-width="1" opacity=".6"/>
+      </g>
+      <circle cx="452" cy="-6" r="15" fill="#c9fff1" opacity=".8" filter="url(#soft)"/>
+      <circle cx="788" cy="-8" r="12" fill="#c9fff1" opacity=".6" filter="url(#soft)"/>
+      <rect width="800" height="500" fill="url(#fadeL)"/>
+    </symbol>
+    <symbol id="art-movies" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+      <rect width="800" height="500" fill="url(#vLamp)"/>
+      <g filter="url(#soft)">
+        <polygon points="800,150 800,190 240,335 240,255" fill="url(#vBeam)"/>
+        <polygon points="800,168 800,176 300,306 300,282" fill="#eadbc4" opacity=".1"/>
+      </g>
+      <g fill="#eadbc4">
+        <circle cx="588" cy="236" r="1.6" opacity=".55"/><circle cx="530" cy="272" r="1.2" opacity=".4"/><circle cx="646" cy="216" r="1.3" opacity=".5"/><circle cx="470" cy="290" r="1.5" opacity=".35"/><circle cx="700" cy="200" r="1.8" opacity=".6"/><circle cx="620" cy="258" r="1" opacity=".3"/><circle cx="552" cy="238" r="1.1" opacity=".45"/><circle cx="418" cy="306" r="1.2" opacity=".3"/>
+      </g>
+      <rect width="800" height="500" fill="url(#fadeL)"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="masthead">
+  <a class="wordmark" href="#top"><span>TASTE</span><span>ENGINE<em>.</em></span></a>
+  <nav class="mastheadMeta">
+    <span class="liveDot">Los Angeles</span>
+    <span>Refreshed Jul 13</span>
+    <a href="#engine-notes">Engine notes ↓</a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="projection">
+    <div class="projectionLight"></div>
+    <div class="projectionInner">
+      <div class="rv">
+        <p class="kicker">The projection</p>
+        <h1>One taste engine.<br>Several ways <span class="lit">out</span>.</h1>
+      </div>
+      <div class="projectionAside rv" style="--rv-delay:120ms">
+        <p>Start with the short list, then switch verticals without losing the timing lens. Music remains the primary learned taste signal; films and Dodgers games stay legible, bounded, and explainable.</p>
+        <div class="utilityLine">
+          <span><b data-count="142">0</b>ranked candidates</span><span class="sep">·</span>
+          <span><b data-count="283">0</b>taste signals</span><span class="sep">·</span>
+          <span><b data-count="180">0</b>-day horizon</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <nav class="verticalTabs" aria-label="Verticals">
+    <button class="verticalTab tabActive">Overview</button>
+    <button class="verticalTab">Music</button>
+    <button class="verticalTab">Movies</button>
+    <button class="verticalTab">Sports</button>
+    <button class="verticalTab">Taste</button>
+  </nav>
+
+  <section class="section" id="overview">
+    <p class="eyebrow rv"><span class="lit">Current call</span> · next 14 days · refreshed Jul 13</p>
+    <div class="sectionIntro">
+      <h2 class="rv">Electronic music highlights for late July.</h2>
+      <div class="aside rv" style="--rv-delay:120ms">
+        The next two weeks feature several electronic options, including a performance at the Hollywood Bowl. Music leads the broader shortlist through July 25.
+        <p class="verdict"><strong>Skip call</strong> Consider staying home if the travel to specific venues does not align with your evening plans.</p>
+      </div>
+    </div>
+
+    <div class="rankGrid" data-stagger>
+      <article class="rankCard featured rv">
+        <div class="cardArt"><svg><use href="#art-music"/></svg></div>
+        <span class="ghostRank">01</span>
+        <div class="cardBody">
+          <div class="cardTopline"><span class="rankNo">01</span><span class="cardDate">Sat, Jul 18</span><span class="laneChip">Music</span></div>
+          <h3>Murda Beatz <small style="font-size:.45em;vertical-align:middle;color:var(--text-muted)">21+</small></h3>
+          <p class="cardVenue">The Spotlight · Los Angeles</p>
+          <p class="cardWhy">Murda Beatz is a strong signal in 2 selected playlists.</p>
+        </div>
+        <div class="cardFoot">
+          <span class="fitChip">Wildcard</span>
+          <span class="hassle">Hassle <span class="hassleTicks" data-value="1"></span></span>
+          <span class="urgency watch">Watch</span>
+          <a class="viewLink" href="#overview">View in Music →</a>
+          <div class="cardActions"><button class="btn primary">Plan</button><button class="btn">Hold date</button></div>
+        </div>
+      </article>
+
+      <article class="rankCard rv">
+        <div class="cardArt"><svg><use href="#art-music"/></svg></div>
+        <span class="ghostRank">02</span>
+        <div class="cardBody">
+          <div class="cardTopline"><span class="rankNo">02</span><span class="cardDate">Sat, Jul 25</span><span class="laneChip">Music</span></div>
+          <h3>Max Dean B2B Luke Dean</h3>
+          <p class="cardVenue">Expo Lawn · Los Angeles</p>
+          <p class="cardWhy">Luke Dean is a strong signal in 2 selected playlists.</p>
+        </div>
+        <div class="cardFoot">
+          <span class="fitChip">Wildcard</span>
+          <span class="hassle">Hassle <span class="hassleTicks" data-value="5"></span></span>
+          <span class="urgency">Safe to wait</span>
+          <div class="cardActions"><button class="btn">Plan</button></div>
+        </div>
+      </article>
+
+      <article class="rankCard rv">
+        <div class="cardArt"><svg><use href="#art-music"/></svg></div>
+        <span class="ghostRank">03</span>
+        <div class="cardBody">
+          <div class="cardTopline"><span class="rankNo">03</span><span class="cardDate">Thu, Jul 23</span><span class="laneChip">Music</span></div>
+          <h3>Slayyyter</h3>
+          <p class="cardVenue">The GRAMMY Museum · Los Angeles</p>
+          <p class="cardWhy">Slayyyter is a strong signal in 1 selected playlist.</p>
+        </div>
+        <div class="cardFoot">
+          <span class="fitChip">Watch</span>
+          <span class="hassle">Hassle <span class="hassleTicks" data-value="0"></span></span>
+          <span class="urgency">Safe to wait</span>
+          <div class="cardActions"><button class="btn">Plan</button></div>
+        </div>
+      </article>
+
+      <article class="rankCard rv">
+        <div class="cardArt"><svg><use href="#art-sports"/></svg></div>
+        <span class="ghostRank">04</span>
+        <div class="cardBody">
+          <div class="cardTopline"><span class="rankNo">04</span><span class="cardDate">Sun, Jul 19</span><span class="laneChip">Music</span></div>
+          <h3>KCRW World Festival with Cannons</h3>
+          <p class="cardVenue">Hollywood Bowl · Los Angeles</p>
+          <p class="cardWhy">Bob Moses is in the Framework artist roster; this listing comes from SeatGeek + Ticketmaster.</p>
+        </div>
+        <div class="cardFoot">
+          <span class="fitChip">Watch</span>
+          <span class="hassle">Hassle <span class="hassleTicks" data-value="1"></span></span>
+          <span class="urgency watch">Watch</span>
+          <div class="cardActions"><button class="btn">Plan</button></div>
+        </div>
+      </article>
+
+      <article class="rankCard rv">
+        <div class="cardArt"><svg><use href="#art-music"/></svg></div>
+        <span class="ghostRank">05</span>
+        <div class="cardBody">
+          <div class="cardTopline"><span class="rankNo">05</span><span class="cardDate">Sat, Jul 18</span><span class="laneChip">Music</span></div>
+          <h3>SOSA</h3>
+          <p class="cardVenue">Expo Lawn · Los Angeles</p>
+          <p class="cardWhy">SOSA is a strong signal in 1 selected playlist.</p>
+        </div>
+        <div class="cardFoot">
+          <span class="fitChip">Watch</span>
+          <span class="hassle">Hassle <span class="hassleTicks" data-value="5"></span></span>
+          <span class="urgency watch">Watch</span>
+          <div class="cardActions"><button class="btn">Plan</button></div>
+        </div>
+      </article>
+    </div>
+
+    <div class="planAheadHead rv">
+      <h3>Plan ahead</h3>
+      <p>Exceptional longer-lead dates, kept separate from the current call.</p>
+    </div>
+    <div class="planGrid" data-stagger>
+      <article class="rankCard rv">
+        <div class="cardArt"><svg><use href="#art-music"/></svg></div>
+        <div class="cardBody">
+          <div class="cardTopline"><span class="rankNo">01</span><span class="cardDate">Wed, Oct 14</span><span class="laneChip">Music</span></div>
+          <h3>Prospa</h3>
+          <p class="cardVenue">Shrine Expo Hall · Los Angeles</p>
+          <p class="cardWhy">A current top artist and a strong signal in 2 selected playlists.</p>
+        </div>
+        <div class="cardFoot">
+          <span class="fitChip">Selective</span>
+          <span class="hassle">Hassle <span class="hassleTicks" data-value="0"></span></span>
+          <div class="cardActions"><button class="btn">Plan</button></div>
+        </div>
+      </article>
+      <article class="rankCard rv">
+        <div class="cardArt"><svg><use href="#art-music"/></svg></div>
+        <div class="cardBody">
+          <div class="cardTopline"><span class="rankNo">02</span><span class="cardDate">Sat, Aug 1</span><span class="laneChip">Music</span></div>
+          <h3>Hard Summer — Saturday</h3>
+          <p class="cardVenue">Hollywood Park · Inglewood</p>
+          <p class="cardWhy">Omar+ is a current top artist; Mau P, Kali Uchis, and Chris Lorenzo headline.</p>
+        </div>
+        <div class="cardFoot">
+          <span class="fitChip">Selective</span>
+          <span class="hassle">Hassle <span class="hassleTicks" data-value="1"></span></span>
+          <div class="cardActions"><button class="btn">Plan</button></div>
+        </div>
+      </article>
+      <article class="rankCard rv">
+        <div class="cardArt"><svg><use href="#art-music"/></svg></div>
+        <div class="cardBody">
+          <div class="cardTopline"><span class="rankNo">03</span><span class="cardDate">Sat, Oct 3</span><span class="laneChip">Music</span></div>
+          <h3>aespa</h3>
+          <p class="cardVenue">Intuit Dome · Inglewood</p>
+          <p class="cardWhy">A current top artist, sustained favorite, and strong signal in 2 selected playlists.</p>
+        </div>
+        <div class="cardFoot">
+          <span class="fitChip">Selective</span>
+          <span class="hassle">Hassle <span class="hassleTicks" data-value="1"></span></span>
+          <div class="cardActions"><button class="btn">Plan</button></div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" id="sources">
+    <p class="eyebrow rv"><span class="lit">Source health</span></p>
+    <div class="sectionIntro">
+      <h2 class="rv">Partial data stays visible.</h2>
+      <div class="aside rv" style="--rv-delay:120ms">Open a lane to see which providers and local passes are carrying it. Missing sources stay on the board instead of silently becoming guesses.</div>
+    </div>
+    <div class="board rv">
+      <div class="boardGroup">
+        <div class="boardGroupHead"><h4>Music</h4><span>8 sources</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">Spotify Top Artists</span><span class="srcCount">59 items</span><span class="srcBar"><i data-w="26"></i></span><span class="srcNote">clean · refreshed Jul 13 · expires Jul 20</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">Framework artist roster</span><span class="srcCount">135 items</span><span class="srcBar"><i data-w="44"></i></span><span class="srcNote">clean</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">SeatGeek events</span><span class="srcCount">1,560 items</span><span class="srcBar"><i data-w="100"></i></span><span class="srcNote">clean</span></div>
+        <div class="srcRow warn"><span class="led partial"></span><span class="srcName">Ticketmaster music</span><span class="srcCount">1,004 items</span><span class="srcBar"><i data-w="88"></i></span><span class="srcNote"><em>23 warnings</em></span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">Framework events</span><span class="srcCount">19 items</span><span class="srcBar"><i data-w="18"></i></span><span class="srcNote">clean</span></div>
+        <div class="srcRow"><span class="led down"></span><span class="srcName">Insomniac events</span><span class="srcCount">0 items</span><span class="srcBar"><i data-w="0"></i></span><span class="srcNote"><em>unavailable · 1 warning</em></span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">EDMTrain lineup enrichment</span><span class="srcCount">156 items</span><span class="srcBar"><i data-w="47"></i></span><span class="srcNote">156 matched · 325 lineup artists · 4 ambiguous</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">Ollama music advisories</span><span class="srcCount">16 items</span><span class="srcBar"><i data-w="16"></i></span><span class="srcNote">no prior passes needed</span></div>
+      </div>
+      <div class="boardGroup">
+        <div class="boardGroupHead"><h4>Sports</h4><span>4 sources</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">MLB schedule</span><span class="srcCount">31 items</span><span class="srcBar"><i data-w="22"></i></span><span class="srcNote">clean</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">SeatGeek sports tickets</span><span class="srcCount">31 items</span><span class="srcBar"><i data-w="22"></i></span><span class="srcNote">clean</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">Ticketmaster sports tickets</span><span class="srcCount">31 items</span><span class="srcBar"><i data-w="22"></i></span><span class="srcNote">clean</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">Ollama sports advisories</span><span class="srcCount">12 items</span><span class="srcBar"><i data-w="14"></i></span><span class="srcNote">no prior passes needed</span></div>
+      </div>
+      <div class="boardGroup">
+        <div class="boardGroupHead"><h4>Movies</h4><span>1 source</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">TMDB film candidates</span><span class="srcCount">20 items</span><span class="srcBar"><i data-w="18"></i></span><span class="srcNote">clean</span></div>
+      </div>
+      <div class="boardGroup">
+        <div class="boardGroupHead"><h4>Editorial</h4><span>2 sources</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">Ollama overview queue</span><span class="srcCount">8 items</span><span class="srcBar"><i data-w="12"></i></span><span class="srcNote">clean</span></div>
+        <div class="srcRow"><span class="led"></span><span class="srcName">Ollama editorial brief</span><span class="srcCount">1 item</span><span class="srcBar"><i data-w="6"></i></span><span class="srcNote">clean</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="engine-notes">
+    <p class="eyebrow rv"><span class="lit">How it thinks</span></p>
+    <div class="sectionIntro">
+      <h2 class="rv">Preference first. Friction second.</h2>
+      <div class="aside rv" style="--rv-delay:120ms">Deterministic scores make the call. Local prose can clarify it, but never becomes the source of truth.</div>
+    </div>
+    <div class="methodRail">
+      <div class="methodStep">
+        <span class="methodNode">01</span>
+        <h4>Listen</h4>
+        <p>Selected playlists and the three Spotify Top Artists windows become replaceable revealed-preference evidence; Last.fm adds constrained similarity and tag neighborhoods without pretending they are direct taste.</p>
+      </div>
+      <div class="methodStep">
+        <span class="methodNode">02</span>
+        <h4>Retrieve</h4>
+        <p>Music comes from independent SeatGeek, Ticketmaster, Framework, and Insomniac paths. MLB defines Dodgers games; TMDB keeps a refined theatrical film shortlist.</p>
+      </div>
+      <div class="methodStep">
+        <span class="methodNode">03</span>
+        <h4>Join &amp; rank</h4>
+        <p>Duplicates collapse across providers, while fit, interest, hassle, urgency, and confidence stay separate. A ticket source can enrich a game without becoming its identity.</p>
+      </div>
+      <div class="methodStep">
+        <span class="methodNode">04</span>
+        <h4>Explain</h4>
+        <p>Deterministic scores make the call. Local Gemma may add concise personal prose and advisories from explicitly allowed non-Spotify fields, but it cannot add candidates, change rankings, or make unsupported scarcity claims.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="taste">
+    <p class="eyebrow rv"><span class="lit">Taste health</span></p>
+    <div class="tasteWrap">
+      <div>
+        <h2 class="sectionIntro rv" style="display:block;margin-bottom:24px">2 source playlists anchor three bounded verticals.</h2>
+        <p class="rv">Music remains the learned center of gravity, with current Spotify affinity kept as replaceable cache evidence rather than a permanent listening history. Movies are refined by film-profile evidence and theater-format confirmation; Dodgers games are grounded in MLB schedule and standings data.</p>
+      </div>
+      <div class="rv" style="--rv-delay:120ms">
+        <p>The seed is intentionally editable. Add representative playlists as your taste shifts, then refresh the projection. After each outing, a quick worth-it check-in is the feedback loop that can change future fit.</p>
+        <p class="formatWatch"><b>Premium-format watch</b><br>TCL Chinese Theatre IMAX · Universal Cinema AMC CityWalk · AMC Century City 15 · AMC Burbank 16</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span class="sig">Private, personal, explainable.</span>
+  <span class="fine">This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
+</footer>
+
+<script>
+/* motion layer: reveal, stagger, counters, method rail, hassle ticks */
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (!e.isIntersecting) return;
+  e.target.classList.add("on");
+  io.unobserve(e.target);
+}), { rootMargin: "0px 0px -8% 0px", threshold: .12 });
+document.querySelectorAll(".rv, .methodStep").forEach(el => io.observe(el));
+
+/* stagger siblings marked with data-stagger */
+document.querySelectorAll("[data-stagger]").forEach(parent => {
+  [...parent.children].forEach((c, i) => c.style.setProperty("--rv-delay", `${i * 70}ms`));
+});
+
+/* count-up utility stats */
+function countUp(el) {
+  const target = +el.dataset.count, dur = 900, t0 = performance.now();
+  if (reduced) { el.textContent = target; return; }
+  (function tick(t) {
+    const p = Math.min(1, (t - t0) / dur), eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(target * eased);
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+const cio = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { countUp(e.target); cio.unobserve(e.target); }
+}));
+document.querySelectorAll("[data-count]").forEach(el => cio.observe(el));
+
+/* hassle dials */
+document.querySelectorAll(".hassleTicks").forEach(el => {
+  const n = +el.dataset.value;
+  el.innerHTML = Array.from({length: 10}, (_, i) => `<i${i < n ? ' class="on"' : ""}></i>`).join("");
+  if (n >= 6) el.classList.add("warm");
+});
+
+/* source bars animate in */
+const bio = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { e.target.style.setProperty("--w", e.target.dataset.w + "%"); bio.unobserve(e.target); }
+}));
+document.querySelectorAll(".srcBar i").forEach(el => bio.observe(el));
+
+/* demo tab highlight on scroll (anchor-based, no SPA logic) */
+document.querySelectorAll(".verticalTab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".verticalTab").forEach(x => x.classList.remove("tabActive"));
+  t.classList.add("tabActive");
+}));
+</script>
+</body>
+</html>
