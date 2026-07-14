@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashTree } from '../refreshWorkflow.js';
@@ -24,9 +24,7 @@ async function promote() {
   if (await hashTree(previewDir) !== manifest.contentSha256) throw new Error('preview changed after validation; run taste:validate');
   const rollbackDir = join(workflowRoot, 'rollback/latest');
   await rm(rollbackDir, { recursive: true, force: true });
-  await mkdir(join(rollbackDir, 'site/app/data'), { recursive: true });
-  await cp(join(root, 'site/app/data/upcoming.json'), join(rollbackDir, 'site/app/data/upcoming.json'));
-  await cp(join(root, 'site/dist'), join(rollbackDir, 'site/dist'), { recursive: true });
+  await copyAcceptedArtifacts(root, rollbackDir);
   await swapAccepted(previewDir, root);
   await writeFile(join(workflowRoot, 'promotion-metadata.json'), `${JSON.stringify({
     metadataVersion: 1,
@@ -44,30 +42,60 @@ async function rollback() {
 }
 
 async function swapAccepted(sourceRoot, targetRoot) {
-  const projection = join(targetRoot, 'site/app/data/upcoming.json');
-  const bundle = join(targetRoot, 'site/dist');
-  const stagedProjection = `${projection}.staging-${process.pid}`;
-  const stagedBundle = `${bundle}.staging-${process.pid}`;
-  const oldProjection = `${projection}.previous-${process.pid}`;
-  const oldBundle = `${bundle}.previous-${process.pid}`;
-  await cp(join(sourceRoot, 'site/app/data/upcoming.json'), stagedProjection);
-  await cp(join(sourceRoot, 'site/dist'), stagedBundle, { recursive: true });
-  let projectionMoved = false;
-  let bundleMoved = false;
+  const artifactPaths = [
+    'site/app/data/upcoming.json',
+    'site/dist',
+    'data/taste/recommendation-history.json',
+    'data/taste/feedback-snapshots.json'
+  ];
+  const artifacts = [];
+  for (const relativePath of artifactPaths) {
+    const source = join(sourceRoot, relativePath);
+    const target = join(targetRoot, relativePath);
+    const staging = `${target}.staging-${process.pid}`;
+    const previous = `${target}.previous-${process.pid}`;
+    await mkdir(dirname(target), { recursive: true });
+    const sourceExists = await exists(source);
+    if (sourceExists) await cp(source, staging, { recursive: true });
+    artifacts.push({ target, staging, previous, sourceExists, moved: false, installed: false });
+  }
+  if (!artifacts.find((item) => item.target.endsWith('upcoming.json'))?.sourceExists
+    || !artifacts.find((item) => item.target.endsWith('site/dist'))?.sourceExists) {
+    throw new Error('projection and bundle are required for an accepted-artifact swap');
+  }
   try {
-    await rename(projection, oldProjection); projectionMoved = true;
-    await rename(bundle, oldBundle); bundleMoved = true;
-    await rename(stagedProjection, projection);
-    await rename(stagedBundle, bundle);
-    await rm(oldProjection, { force: true });
-    await rm(oldBundle, { recursive: true, force: true });
+    for (const artifact of artifacts) {
+      if (await exists(artifact.target)) {
+        await rename(artifact.target, artifact.previous);
+        artifact.moved = true;
+      }
+    }
+    for (const artifact of artifacts) {
+      if (!artifact.sourceExists) continue;
+      await rename(artifact.staging, artifact.target);
+      artifact.installed = true;
+    }
+    for (const artifact of artifacts) await rm(artifact.previous, { recursive: true, force: true });
   } catch (error) {
-    await rm(stagedProjection, { force: true });
-    await rm(stagedBundle, { recursive: true, force: true });
-    if (projectionMoved) { await rm(projection, { force: true }); await rename(oldProjection, projection); }
-    if (bundleMoved) { await rm(bundle, { recursive: true, force: true }); await rename(oldBundle, bundle); }
+    for (const artifact of [...artifacts].reverse()) {
+      await rm(artifact.staging, { recursive: true, force: true });
+      if (artifact.installed) await rm(artifact.target, { recursive: true, force: true });
+      if (artifact.moved) await rename(artifact.previous, artifact.target);
+    }
     throw error;
   }
 }
+
+async function copyAcceptedArtifacts(sourceRoot, targetRoot) {
+  for (const relativePath of ['site/app/data/upcoming.json', 'site/dist', 'data/taste/recommendation-history.json', 'data/taste/feedback-snapshots.json']) {
+    const source = join(sourceRoot, relativePath);
+    if (!await exists(source)) continue;
+    const target = join(targetRoot, relativePath);
+    await mkdir(dirname(target), { recursive: true });
+    await cp(source, target, { recursive: true });
+  }
+}
+
+async function exists(path) { return stat(path).then(() => true).catch(() => false); }
 
 function valueAfter(flag) { const index = args.indexOf(flag); return index >= 0 ? args[index + 1] : null; }

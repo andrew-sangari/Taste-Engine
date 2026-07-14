@@ -42,6 +42,7 @@ import { enhancementFor, toDisplayEvent, toDisplaySportsGame } from '../src/proj
 import { buildFeedbackSnapshot, mergeSnapshotIndex } from '../src/feedbackSnapshots.js';
 import { buildTasteProfile } from '../src/tasteProfile.js';
 import { DEFAULT_CHANGES_TOP_N, buildChangesSinceRefresh } from '../src/projectionChanges.js';
+import { updateProjectionHistory } from '../src/recommendationHistory.js';
 
 loadEnv();
 
@@ -521,6 +522,17 @@ try {
   });
 } catch (error) {
   diagnostics.feedbackSnapshotIndexWarning = sanitizeErrorMessage(error);
+}
+try {
+  await updateProjectionHistory({
+    projection: exportData,
+    now: generatedAt,
+    retentionDays: config.recommendationHistoryRetentionDays ?? undefined,
+    shortlistLimit: 5
+  });
+} catch (error) {
+  diagnostics.recommendationHistoryWarning = sanitizeErrorMessage(error);
+  exportData.recentHistory = Array.isArray(previousProjection?.recentHistory) ? previousProjection.recentHistory : [];
 }
 const output = resolve('site/app/data/upcoming.json');
 await mkdir(dirname(output), { recursive: true });

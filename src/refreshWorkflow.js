@@ -3,9 +3,9 @@ import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { diffProjections } from './projectionDiff.js';
 
-const REQUIRED_PROJECTION_FIELDS = ['schemaVersion', 'generatedAt', 'horizon', 'events', 'sports', 'movies', 'sourceHealth', 'overview', 'overviewPlanAhead'];
+const REQUIRED_PROJECTION_FIELDS = ['schemaVersion', 'generatedAt', 'horizon', 'events', 'sports', 'movies', 'sourceHealth', 'overview', 'overviewPlanAhead', 'recentHistory'];
 const COLLECTIONS = ['events', 'sports', 'movies'];
-const PRIVATE_NAME = /(?:build-report|feedback-report|feedback-state|feedback-snapshots|feedback\.jsonl|personal-context|spotify-playlists|\.env)/i;
+const PRIVATE_NAME = /(?:build-report|feedback-report|feedback-state|feedback-snapshots|recommendation-history|feedback-inbox|feedback\.jsonl|personal-context|spotify-playlists|\.env)/i;
 
 export const DEFAULT_WORKFLOW_PATHS = Object.freeze({
   workflowRoot: 'data/taste/workflow',
@@ -42,6 +42,9 @@ export async function validatePreview({
     if (new Set(ids).size !== ids.length) errors.push(issue('duplicate-published-id', 'Published candidate arrays contain duplicate IDs.'));
     if (!Array.isArray(projection.sourceHealth)) errors.push(issue('source-health-inconsistent', 'Source health must be an array.'));
     if (ids.length > 0 && !Array.isArray(projection.overview)) errors.push(issue('overview-invalid', 'Overview must be present when candidates exist.'));
+    if (!Array.isArray(projection.recentHistory) || projection.recentHistory.some((item) => !validPublicHistoryItem(item))) {
+      errors.push(issue('recommendation-history-invalid', 'Recent recommendation history must use the public-safe schema.'));
+    }
   }
 
   const publicFiles = await listFiles(join(previewDir, 'site', 'dist'));
@@ -183,4 +186,19 @@ async function safeRead(path) {
 
 function issue(code, message) {
   return { code, message };
+}
+
+function validPublicHistoryItem(item) {
+  const allowed = ['historyId', 'canonicalEventId', 'feedbackSnapshotId', 'vertical', 'title', 'dateLocal', 'locationLabel', 'firstShownAt', 'lastShownAt', 'surfaces', 'bestRank'];
+  return Boolean(item && typeof item === 'object' && !Array.isArray(item)
+    && Object.keys(item).every((key) => allowed.includes(key))
+    && allowed.every((key) => Object.hasOwn(item, key))
+    && typeof item.historyId === 'string' && typeof item.canonicalEventId === 'string'
+    && (item.feedbackSnapshotId === null || typeof item.feedbackSnapshotId === 'string')
+    && ['music', 'sports', 'movies'].includes(item.vertical)
+    && typeof item.title === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(String(item.dateLocal))
+    && (item.locationLabel === null || typeof item.locationLabel === 'string')
+    && Number.isFinite(Date.parse(item.firstShownAt)) && Number.isFinite(Date.parse(item.lastShownAt))
+    && Array.isArray(item.surfaces) && item.surfaces.every((surface) => ['overview', 'plan-ahead', 'shortlist'].includes(surface))
+    && (item.bestRank === null || (Number.isInteger(item.bestRank) && item.bestRank > 0)));
 }
