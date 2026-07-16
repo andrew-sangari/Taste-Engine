@@ -1,0 +1,23 @@
+{
+  "projectId": "890566f6-4a2b-49b5-a77b-8cf2789b3131",
+  "shape": "package",
+  "pkg": "taste-engine-site",
+  "globalName": "TasteEngineSite",
+  "srcDir": "app",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": "dist/client/assets/index-DwLmCcjp.css",
+  "componentSrcMap": {
+    "FeedbackProvider": null,
+    "Reveal": null
+  },
+  "overrides": {
+    "MovieExplorer": { "cardMode": "column" },
+    "OverviewExplorer": { "cardMode": "column" },
+    "TasteExplorer": { "cardMode": "column" },
+    "FilterDisclosure": { "viewport": "375x260" }
+  },
+  "readmeHeader": ".design-sync/conventions.md",
+  "libOverrides": {
+    "source-kit.mjs": "exclude Next.js app-router reserved route files (layout/page/loading/error/...) from synth-entry file selection — they execute Next-only code (next/font, next/headers, globals.css->tailwindcss) at module top-level that breaks the bundle even when componentSrcMap excludes their component names"
+  }
+}

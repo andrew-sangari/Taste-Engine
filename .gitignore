@@ -5,3 +5,10 @@ config/personal-context.json
 data/
 .env
 .DS_Store
+
+# design-sync
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
