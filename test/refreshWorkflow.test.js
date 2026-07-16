@@ -26,6 +26,7 @@ function projection(overrides = {}) {
     events: [event], sports: [], movies: [],
     sourceHealth: [{ source: 'seatgeek', status: 'active', itemCount: 1, warningCount: 0 }],
     overview: [{ id: event.id }], overviewPlanAhead: [],
+    recentHistory: [],
     ...overrides
   };
 }

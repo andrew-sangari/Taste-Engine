@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/pr
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createValidationManifest, feedbackSimulationArgs, validatePreview, writeValidationManifest } from '../refreshWorkflow.js';
+import { processFeedbackInbox } from '../feedbackInbox.js';
 
 const root = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const workflowRoot = resolve(root, 'data/taste/workflow');
@@ -12,6 +13,11 @@ const reportPath = join(workflowRoot, 'latest-refresh-report.json');
 const args = new Set(process.argv.slice(2));
 
 try {
+  const inbox = await processFeedbackInbox({ root, args: process.argv.slice(2) });
+  if (inbox.enabled) {
+    console.log(`Feedback inbox: ${inbox.scannedCount} file(s), ${inbox.newCount} new record(s), ${inbox.archivedCount} archived.`);
+    if (inbox.warningCodes.length) console.log(`Feedback inbox warnings: ${inbox.warningCodes.join(', ')}.`);
+  }
   await rm(previewDir, { recursive: true, force: true });
   await mkdir(previewDir, { recursive: true });
   await copyWorkspace(previewDir);
@@ -23,6 +29,7 @@ try {
     await run(process.execPath, ['scripts/build-site.js'], previewDir);
   } else {
     warnings.push(args.has('--cached-only') ? 'Cached-only refresh requested; reused the last accepted projection.' : playlistSync.warning);
+    await run(process.execPath, ['scripts/update-recommendation-history.js'], previewDir);
     await run(npm(), ['run', 'build'], join(previewDir, 'site'));
   }
 

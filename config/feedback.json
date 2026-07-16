@@ -1,4 +1,7 @@
 {
+  "autoImport": {
+    "enabled": false
+  },
   "feedback": {
     "enabled": true,
     "applyToPublishedRanking": false,

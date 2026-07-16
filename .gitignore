@@ -3,6 +3,7 @@ config/brief.json
 config/movies.json
 config/personal-context.json
 data/
+config/feedback.local.json
 .env
 .DS_Store
 
