@@ -2,11 +2,11 @@
 
 ## Product decision
 
-The product is one synthesized weekly brief. Sites is the durable, interactive presentation layer for that brief—not a separate analytics dashboard.
+The product is one synthesized weekly brief. Sites is the private application runtime and durable interactive layer for that brief—not a separate analytics dashboard. D1 is the production serving store; local JSON and Markdown remain audit, migration, and recovery representations.
 
 Keep three representations of the same result:
 
-1. **Canonical JSON** for the pipeline and site publishing.
+1. **Canonical D1 snapshot** for hosted serving, with a schema-compatible JSON export for audit and recovery.
 2. **Markdown snapshot** for auditability, portability, and version history.
 3. **Sites view** for daily use, saving, ticket links, and feedback. Its access policy is managed separately from the build and is preserved by automation.
 
@@ -49,24 +49,17 @@ Use ChatGPT sign-in and an explicit server-side allowlist because this contains 
 
 R2 is unnecessary for the first version. Browser storage may remember visual preferences, but it must not be the source of truth for feedback.
 
-## Local-to-site sync
+## Hosted execution and migration sync
 
-The local project remains responsible for credentials, ingestion, matching, and ranking. The site is responsible for presentation and feedback.
+Production ingestion, matching, deterministic ranking, source health, feedback, and serving belong in Sites. Hosted secrets hold source credentials. Browser writes require the signed-in user and server-side authorization; no source or model credential enters the browser.
 
-At publication time:
+During cutover, the guarded local producer may send a validated display-safe snapshot to the protected D1 projection route. This is a migration and disaster-recovery path, not the final production architecture. Once hosted adapter parity passes, an external scheduler calls a protected refresh route that contains no product logic itself.
 
-1. the local pipeline generates canonical JSON and Markdown
-2. a protected sync endpoint receives the display-safe brief snapshot
-3. Sites writes the brief to D1
-4. the site displays it to the signed-in user
-5. feedback is stored in D1
-6. the next local scheduled run pulls new feedback through a protected export endpoint before ranking
+## Scheduled discovery
 
-Use a separate sync secret for machine-to-site calls. Browser writes require the signed-in user and server-side authorization. Do not place Spotify or ticket-source credentials in the browser.
+Use a minimal external scheduler to call the protected Sites refresh route. Taste Engine logic, source credentials, Spotify tokens, normalization, ranking, and publication remain inside the hosted application. The scheduler contains only the endpoint, bearer secret, cadence, and retry policy.
 
-## Scheduled native web discovery
-
-Use a local desktop scheduled task, not a web-only ChatGPT task. Local scheduled tasks can read this project and the latest Spotify-derived artist snapshot; web-only tasks cannot access a folder on the computer. The refresh preflights Playlist Sync: if `user-top-read` is missing, emit one reconnect warning and continue immediately with playlist-only evidence; never wait for interactive authorization.
+The hosted refresh preflights the three Spotify affinity windows. A missing scope or failed window preserves valid cached windows and continues with playlist-only evidence; it never waits for interactive authorization.
 
 Recommended cadence:
 
@@ -87,19 +80,19 @@ Movie discovery uses the refined TMDB shortlist plus `config/movies.json`. Searc
 
 Structured sources fail independently. A missing Ticketmaster or TMDB key marks that source `not configured`; runtime failures mark it `unavailable` or `partial`. The valid remaining sources still render and publish with source health visible.
 
-The repeatable local build command is `npm run build:site`. It refreshes Spotify/Last.fm, exports independent sources, runs local Ollama, builds the Sites bundle, and prints one timing line per phase plus the total so a slow local inference pass is legible without noisy per-request logs.
+`npm run build:site` remains the repeatable recovery and parity command during migration. Production refreshes must not rebuild or redeploy the application merely to update recommendations.
 
 ## Date-aware rendering and deployment access
 
-The published projection is intentionally static data plus a client-side date boundary. The site uses the current Los Angeles calendar date—not the projection's original `generatedAt`—to hide past music events, sports games, movie releases, Overview items, and Plan Ahead items. The boundary updates while the page remains open, so events age out without a source rebuild. Unknown dates remain visible because they cannot be proven to be past. New events, changed rankings, ticket observations, and editorial copy still require the normal local refresh.
+The published projection is an active D1 snapshot plus a client-side date boundary. The site uses the current Los Angeles calendar date—not the snapshot's original `generatedAt`—to hide past music events, sports games, movie releases, Overview items, and Plan Ahead items. The boundary updates while the page remains open, so events age out without a refresh. Unknown dates remain visible because they cannot be proven to be past. New events, changed rankings, ticket observations, and editorial copy require a hosted refresh; the validated bundled snapshot remains the migration fallback.
 
 Site automation must preserve the site's existing access policy. It must not switch share visibility to “just me,” publish to all, or switch back as a deployment workaround. Before deployment, inspect the current policy and use the owner-only deployment path only when the current caller is verified as the sole allowed viewer. If the existing policy is shared or public and the automation is explicitly authorized to publish under that policy, use the normal deployment path. If access cannot be verified, stop and report the policy issue; never mutate access settings automatically.
 
-Do not make an LLM or Codex an implicit dependency of ingestion or ranking. The optional local Ollama stage runs after deterministic ranking and uses structured output. The editorial pass emphasizes the next 7–14 days and receives aggregate counts plus a small source-allowlisted named shortlist. Spotify-derived playlist membership, artist payloads, ranks, affinities, seed strengths, labels, and explanation text are excluded by a provenance-aware allowlist serializer; independently sourced non-Spotify artist names remain eligible. SeatGeek-only music candidates remain unnamed; a merged SeatGeek + Ticketmaster occurrence may use only Ticketmaster-normalized title/date/venue context. Separate per-event passes use opaque references and sanitized personal-taste or MLB-derived features. No pass receives prices, URLs, source IDs, raw SeatGeek payloads, or third-party payload fields. Every pass validates output, rejects unsupported scarcity/sellout/availability claims, validates mention references, preserves provenance, falls back independently, and cannot mutate canonical candidates.
+Do not make an LLM or Codex an implicit dependency of ingestion or ranking. The optional hosted Ollama Cloud stage runs sequentially after deterministic ranking and uses structured output. The editorial pass emphasizes the next 7–14 days and receives aggregate counts plus a small source-allowlisted named shortlist. Spotify-derived playlist membership, artist payloads, ranks, affinities, seed strengths, labels, and explanation text are excluded by a provenance-aware allowlist serializer; independently sourced non-Spotify artist names remain eligible. SeatGeek-only music candidates remain unnamed; a merged SeatGeek + Ticketmaster occurrence may use only Ticketmaster-normalized title/date/venue context. Separate per-event passes use opaque references and sanitized personal-taste or MLB-derived features. No pass receives prices, URLs, source IDs, raw SeatGeek payloads, or third-party payload fields. Every pass validates output, rejects unsupported scarcity/sellout/availability claims, validates mention references, preserves provenance, falls back independently, and cannot mutate canonical candidates.
 
 The sports vertical uses MLB Stats API as the canonical Dodgers schedule and standings source. SeatGeek and Ticketmaster are optional ticket observations joined by teams, local date, and venue; missing ticket coverage leaves the game visible with unknown urgency. Sports source failures are independent and visible in source health.
 
-Framework and Insomniac are followed promoter calendars. Framework also supplies a low-frequency public artist roster; exact roster names expand deterministic SeatGeek performer and Ticketmaster attraction lookups and contribute promoter evidence without overriding direct taste signals. All of these sources are deduplicated into the same candidate contract, may be absent when unavailable or protected by an access challenge, and remain visible in grouped source health and the separate provider filter. Overview candidates are explicitly queued for the local Ollama advisory pass ahead of the general per-event cap; deterministic ranking remains authoritative.
+Framework and Insomniac are followed promoter calendars. Framework also supplies a low-frequency public artist roster; exact roster names expand deterministic SeatGeek performer and Ticketmaster attraction lookups and contribute promoter evidence without overriding direct taste signals. All of these sources are deduplicated into the same candidate contract, may be absent when unavailable or protected by an access challenge, and remain visible in grouped source health and the separate provider filter. Overview candidates are explicitly queued for the Ollama Cloud advisory pass ahead of the general per-event cap; deterministic ranking remains authoritative.
 
 The native search is a discovery adapter, not the ranker. It creates candidates; the deterministic pipeline deduplicates and scores them later.
 
@@ -135,6 +128,8 @@ If nothing meaningful changed, record a successful no-change run without produci
 2. Generate Brief 001 locally in Markdown.
 3. Test the web-discovery prompt manually against a small artist set.
 4. Build and validate the Sites view locally, create a preview deployment, run acceptance checks, then promote the accepted version through the existing Sites access policy.
-5. Add D1 feedback and protected sync.
-6. Schedule the tested local discovery and publication workflow.
-7. Review the first four runs before reducing human review.
+5. Deploy D1 feedback, hosted Spotify, and the protected migration projection route.
+6. Port and parity-test each source adapter in the Worker runtime.
+7. Wire sequential Ollama Cloud advisories behind the existing safety serializers.
+8. Add the protected hosted refresh route and external scheduler.
+9. Review two hosted refreshes before retiring local production automation.

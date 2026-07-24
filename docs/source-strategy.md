@@ -4,7 +4,7 @@
 
 ### 1. Spotify playlists — taste seed
 
-Reuse from the sibling `Playlist Sync` project:
+The hosted Sites runtime now owns the production read-only Spotify path, ported from the sibling `Playlist Sync` project:
 
 - Spotify authorization-code flow with PKCE
 - token storage and refresh
@@ -14,9 +14,7 @@ Reuse from the sibling `Playlist Sync` project:
 - playlist artist summaries with track counts and sample tracks
 - Last.fm artist tags
 
-The existing project currently passes all 18 tests.
-
-For the first slice, use Playlist Sync's local HTTP endpoints as a stable boundary: Playlist Sync owns Spotify authentication and Taste Engine owns preference evidence. Extract shared modules later only if operating two local services becomes burdensome.
+Playlist Sync remains the local parity and recovery implementation during cutover. Production stores tokens, selected playlists, and replaceable Top Artists windows in D1 and must not depend on its localhost endpoints.
 
 ### Spotify evidence rules
 

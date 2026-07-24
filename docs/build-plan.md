@@ -2,11 +2,13 @@
 
 ## Recommendation
 
-Start with a local-first decision pipeline that emits Markdown briefs. Reuse the working Node/Spotify foundation from the sibling `Playlist Sync` project. Add a small feedback form only after the brief format works. Do not build the full application shell first.
+The local-first prototype proved the ranking and source contracts. The active plan is now to move production execution and state into the private Sites application while retaining the local pipeline as a parity and recovery harness during cutover.
 
-The order is:
+The current order is:
 
-`Spotify taste seed + structured events + scheduled web discovery -> first brief -> private site + feedback -> learned ranking`
+`D1 serving + durable feedback -> hosted Spotify -> hosted source adapters -> Ollama Cloud -> protected refresh -> external schedule -> retire local production dependency`
+
+See `docs/hosted-runtime-migration.md` for cutover gates and hosted secret names.
 
 ## Phase 0 — build the thin vertical slice (2–3 days)
 
