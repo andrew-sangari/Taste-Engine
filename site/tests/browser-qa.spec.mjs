@@ -74,15 +74,20 @@ test("renders the complete frozen fixture and its source-health states", async (
   expect(musicVisualState.some((visual) => visual.kind === "image" && visual.role === "img" && visual.label)).toBeTruthy();
 });
 
-test("renders distinct recommendation signals and vertical light fields without changing card content", async ({ page }) => {
+test("renders a compact decision score with expandable factors and shared light fields", async ({ page }) => {
   await visit(page);
   await expect(page.locator(".ghostRank")).toHaveCount(8);
-  const signals = page.locator(".recommendationSignals").first();
-  await expect(signals).toContainText("Fit");
-  await expect(signals).toContainText("Friction");
-  await expect(signals).toContainText("Urgency");
-  await expect(signals).toContainText("Confidence");
-  await expect(signals).toContainText("Status");
+  const score = page.locator(".recommendationScore").first();
+  await expect(score).toHaveCount(1);
+  await expect(score.locator("summary")).toContainText("Decision points");
+  await expect(score).not.toHaveAttribute("open", "");
+  await score.locator("summary").click();
+  await expect(score).toHaveAttribute("open", "");
+  await expect(score.locator(".recommendationScoreFactors")).toContainText("Fit");
+  await expect(score.locator(".recommendationScoreFactors")).toContainText("Friction");
+  await expect(score.locator(".recommendationScoreFactors")).toContainText("Urgency");
+  await expect(score.locator(".recommendationScoreFactors")).toContainText("Confidence");
+  await expect(score.locator(".recommendationScoreFactors")).toContainText("Status");
   await expect(page.locator(".sourceHealthList.board")).toHaveCount(1);
   await expect(page.locator(".srcRow")).toHaveCount(12);
   await expect(page.locator(".srcNote").filter({ hasText: /active|partial|unavailable|not configured/i }).first()).toHaveCount(1);
@@ -96,6 +101,35 @@ test("renders distinct recommendation signals and vertical light fields without 
   const sportsTexture = page.locator('.recommendationVisual[data-kind="texture"][data-variant^="sports-"]').first();
   await expect(sportsTexture).toHaveCount(1);
   expect(await sportsTexture.evaluate((element) => getComputedStyle(element).backgroundImage)).toContain("visual-sports.svg");
+});
+
+test("applies, clears, and visibly reruns vertical filters", async ({ page }) => {
+  await visit(page);
+  await page.getByRole("tab", { name: "Music" }).click();
+  const type = page.getByRole("combobox", { name: "Music event type" });
+  await type.selectOption("festival");
+  await expect(type).toHaveValue("festival");
+  await expect(page.locator(".eventSignals > span:first-child").filter({ hasText: "festival" }).first()).toBeVisible();
+  const clear = page.getByRole("button", { name: "Clear filters" });
+  await expect(clear).toBeVisible();
+  await clear.click();
+  await expect(type).toHaveValue("all");
+
+  await page.getByRole("tab", { name: "Sports" }).click();
+  const sort = page.getByRole("combobox", { name: "Sports sort order" });
+  await sort.selectOption("date");
+  await expect(sort).toHaveValue("date");
+  await expect(page.getByRole("button", { name: "Clear filters" })).toBeVisible();
+});
+
+test("ranks Taste signals by contribution with differentiated bars", async ({ page }) => {
+  await visit(page);
+  await page.getByRole("tab", { name: "Taste" }).click();
+  const rows = page.locator(".tasteArtistRow");
+  await expect(rows.first()).toBeVisible();
+  const widths = await rows.evaluateAll((items) => items.slice(0, 6).map((item) => Number.parseFloat(getComputedStyle(item.querySelector(".tasteArtistTrack span")).width)));
+  expect(new Set(widths).size).toBeGreaterThan(1);
+  await expect(rows.filter({ hasText: /Direct taste · Adjacent discovery/i })).toHaveCount(0);
 });
 
 test("switches all tabs and preserves the ARIA tab contract", async ({ page }) => {
@@ -429,7 +463,15 @@ async function readLayout(page) {
     const visible = (element) => {
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
-      return style.display !== "none" && style.visibility !== "hidden" && !element.closest("details:not([open])") && rect.width > 0 && rect.height > 0;
+      let parent = element.parentElement;
+      while (parent) {
+        if (parent instanceof HTMLDetailsElement && !parent.open) {
+          const summary = parent.querySelector(":scope > summary");
+          if (element !== summary && !summary?.contains(element)) return false;
+        }
+        parent = parent.parentElement;
+      }
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
     };
     const rect = (element) => {
       const value = element.getBoundingClientRect();
@@ -449,7 +491,7 @@ async function readLayout(page) {
       }).length;
       return { clientWidth: group.clientWidth, scrollWidth: group.scrollWidth, separatorStarts };
     });
-    const targets = [...document.querySelectorAll(".overviewUtilityCta,.eventFooter > a,.movieCardContent > a,.gameLinks a,.filterDisclosureToggle,.sourceHealthGroup summary,.localTake details summary,.seriesDetails summary,.occurrenceList summary")].filter(visible).map((element) => rect(element));
+    const targets = [...document.querySelectorAll(".overviewUtilityCta,.eventFooter > a,.movieCardContent > a,.gameLinks a,.filterDisclosureToggle,.sourceHealthGroup summary,.localTake details summary,.seriesDetails summary,.occurrenceList summary,.recommendationScore summary")].filter(visible).map((element) => rect(element));
     const visuals = [...document.querySelectorAll(".recommendationVisual")].map((element) => ({ pointerEvents: getComputedStyle(element).pointerEvents }));
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },

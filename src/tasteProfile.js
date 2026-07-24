@@ -5,11 +5,10 @@ import { normalizeArtistName } from './ranking.js';
 // playlist names/ids, sample tracks, raw evidence arrays, top-artist window
 // ranks and weights, Spotify genres/popularity/followers, and Spotify artist
 // ids all stay private. Tags come only from the Last.fm-derived taxonomy.
-export function buildTasteProfile(expandedSnapshot, { feedbackState = null, topArtistLimit = 12 } = {}) {
+export function buildTasteProfile(expandedSnapshot, { feedbackState = null, topArtistLimit = 12, now = new Date() } = {}) {
   if (!expandedSnapshot || !Array.isArray(expandedSnapshot.artists)) return null;
   const artists = expandedSnapshot.artists;
   const maxSeedStrength = artists.reduce((max, artist) => Math.max(max, Number(artist.seedStrength) || 0), 0);
-  const now = new Date(expandedSnapshot.generatedAt ?? Date.now());
   const signalRows = artists.map((artist) => ({
     artist,
     contribution: signalContribution(artist, maxSeedStrength, expandedSnapshot.topItems, now)

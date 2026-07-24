@@ -16,7 +16,10 @@ export async function fetchDodgersHomeGames({
   url.searchParams.set('teamId', String(teamId));
   url.searchParams.set('startDate', startDate);
   url.searchParams.set('endDate', endDate);
-  url.searchParams.set('hydrate', 'team,venue,seriesStatus,probablePitcher');
+  // Keep MLB as the canonical game record. The schedule hydration provides
+  // series and probable-starter identity; season stats are fetched separately
+  // so an absent probable never blocks a useful game card.
+  url.searchParams.set('hydrate', 'team,venue,seriesStatus,probablePitcher,linescore');
   url.searchParams.set('includeSeriesNumber', 'true');
   if (season != null) url.searchParams.set('season', String(season));
   const body = await requestJson(url, fetchImpl, 'schedule');
@@ -65,9 +68,11 @@ export async function fetchMlbPitcherStats(pitcherIds, {
           era: numberOrNull(stat.era),
           whip: numberOrNull(stat.whip),
           strikeoutsPer9: numberOrNull(stat.strikeoutsPer9Inn),
+          strikeouts: numberOrNull(stat.strikeOuts ?? stat.strikeouts),
           inningsPitched: numberOrNull(String(stat.inningsPitched ?? '').replace(/[^0-9.]/g, '')),
           wins: numberOrNull(stat.wins),
           losses: numberOrNull(stat.losses),
+          handedness: pitcherHandedness(person),
           season: split.season ?? season ?? null
         });
       } catch {
@@ -92,7 +97,7 @@ export function normalizeMlbGame(game, { timezone = 'America/Los_Angeles', teamI
     ? `mlb:${season}:${seriesNumber}:${Math.min(Number(homeTeam.id ?? teamId), Number(awayTeam.id ?? 0))}:${Math.max(Number(homeTeam.id ?? teamId), Number(awayTeam.id ?? 0))}`
     : null;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: `mlb:${game.gamePk}`,
     source: 'mlb',
     sourceEventId: String(game.gamePk),
@@ -105,6 +110,16 @@ export function normalizeMlbGame(game, { timezone = 'America/Los_Angeles', teamI
     timeTbd: Boolean(game.status?.startTimeTBD),
     dateTbd: !game.officialDate,
     status: game.status?.detailedState ?? 'Scheduled',
+    scheduleStatus: {
+      abstractState: String(game.status?.abstractGameState ?? '').trim() || null,
+      detailedState: String(game.status?.detailedState ?? '').trim() || 'Scheduled',
+      codedState: String(game.status?.codedGameState ?? game.status?.statusCode ?? '').trim() || null,
+      reason: String(game.status?.reason ?? game.rescheduleGameDate ?? '').trim() || null,
+      changed: scheduleChanged(game.status),
+      delayed: /delay/i.test(String(game.status?.detailedState ?? '')),
+      postponed: /postpon|suspend/i.test(String(game.status?.detailedState ?? '')),
+      rescheduled: /resched/i.test(String(game.status?.detailedState ?? ''))
+    },
     venue: {
       sourceId: venue.id == null ? null : String(venue.id),
       name: String(venue.name ?? 'Dodger Stadium').trim(),
@@ -147,7 +162,8 @@ export function normalizeStandings(body) {
   for (const record of body.records ?? []) {
     for (const teamRecord of record.teamRecords ?? []) {
       const team = normalizeTeam(teamRecord.team);
-      const lastTen = (teamRecord.records?.splitRecords ?? []).find((split) => split.type === 'lastTen');
+      const splits = teamRecord.records?.splitRecords ?? [];
+      const lastTen = splitRecord(splits, 'lastTen');
       standings.set(String(team.id), {
         team,
         leagueRank: numberOrNull(teamRecord.leagueRank),
@@ -156,8 +172,16 @@ export function normalizeStandings(body) {
         losses: numberOrNull(teamRecord.losses ?? teamRecord.leagueRecord?.losses),
         winPct: numberOrNull(teamRecord.winningPercentage ?? teamRecord.leagueRecord?.pct),
         lastTen: lastTen ? `${lastTen.wins}-${lastTen.losses}` : null,
+        lastTenRecord: lastTen,
         streak: teamRecord.streak?.streakCode ?? null,
         gamesBack: numberOrNull(teamRecord.gamesBack),
+        wildCardGamesBack: numberOrNull(teamRecord.wildCardGamesBack),
+        runDifferential: numberOrNull(teamRecord.runDifferential),
+        runsScored: numberOrNull(teamRecord.runsScored),
+        runsAllowed: numberOrNull(teamRecord.runsAllowed),
+        homeRecord: splitRecord(splits, 'home'),
+        awayRecord: splitRecord(splits, 'away'),
+        above500Record: splitRecord(splits, 'vsAbove500'),
         division: team.division,
         league: team.league
       });
@@ -182,10 +206,14 @@ export function normalizePitcher(pitcher) {
   return {
     id: pitcher.id == null ? null : String(pitcher.id),
     name: String(pitcher.fullName ?? '').trim(),
+    handedness: pitcherHandedness(pitcher),
     era: null,
     whip: null,
     strikeoutsPer9: null,
-    inningsPitched: null
+    strikeouts: null,
+    inningsPitched: null,
+    wins: null,
+    losses: null
   };
 }
 
@@ -232,4 +260,24 @@ async function requestJson(url, fetchImpl, context) {
 function numberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function splitRecord(splits, type) {
+  const split = splits.find((item) => String(item?.type ?? '').toLowerCase() === type.toLowerCase());
+  if (!split) return null;
+  const wins = numberOrNull(split.wins);
+  const losses = numberOrNull(split.losses);
+  if (wins == null || losses == null) return null;
+  return { wins, losses, winPct: wins + losses ? wins / (wins + losses) : null };
+}
+
+function pitcherHandedness(person) {
+  const code = String(person?.pitchHand?.code ?? person?.pitchHand?.description ?? '').trim().toUpperCase();
+  return code === 'L' || code === 'R' ? code : null;
+}
+
+function scheduleChanged(status = {}) {
+  const detailed = String(status?.detailedState ?? '');
+  const abstract = String(status?.abstractGameState ?? '');
+  return /postpon|delay|suspend|resched|cancel/i.test(`${detailed} ${abstract}`);
 }

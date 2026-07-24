@@ -654,6 +654,19 @@
       "bestRank": 2
     }
   ],
+  "tasteProfile": {
+    "generatedAt": "2026-07-12T19:00:00.000Z",
+    "seedSummary": { "playlistCount": 2, "sourceArtistCount": 4, "topArtistCount": 2, "artistCount": 4 },
+    "topArtists": [
+      { "name": "Signal Beta", "relativeSignal": 83, "signalContribution": 50, "playlistDiversity": 0, "seedTrackCount": 0, "origin": "similar", "signalKind": "inferred", "evidenceLabels": ["Adjacent discovery"] },
+      { "name": "Signal Alpha", "relativeSignal": 100, "signalContribution": 60, "playlistDiversity": 2, "seedTrackCount": 4, "origin": "source", "signalKind": "direct", "evidenceLabels": ["Playlist anchor"] },
+      { "name": "Signal Gamma", "relativeSignal": 67, "signalContribution": 40, "playlistDiversity": 1, "seedTrackCount": 2, "origin": "top-items", "signalKind": "direct", "evidenceLabels": ["Current top artist"] },
+      { "name": "Signal Delta", "relativeSignal": 42, "signalContribution": 25, "playlistDiversity": 0, "seedTrackCount": 0, "origin": "tag", "signalKind": "inferred", "evidenceLabels": ["Adjacent discovery"] }
+    ],
+    "topTags": ["electronic", "house"],
+    "expansionByOrigin": { "source": 2, "similar": 1, "tag": 1, "top-items": 1 },
+    "feedback": { "statusCounts": {}, "attendedCount": 0 }
+  },
   "overviewAdvisory": {
     "queuedCount": 8,
     "enhancedCount": 0,

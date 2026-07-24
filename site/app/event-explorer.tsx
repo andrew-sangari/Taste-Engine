@@ -7,7 +7,7 @@ import { CardActions, calendarInputFrom, planningInputFrom } from "./card-action
 import type { PublicFeedbackSnapshot } from "./feedback-store";
 import { FilterDisclosure } from "./filter-disclosure";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
-import { RecommendationSignals, UrgencyChip } from "./signal-texture";
+import { RecommendationScore, UrgencyChip } from "./signal-texture";
 import { eventAnchor } from "./event-anchor";
 import { daysFromLocalDate, formatLocalDate, formatLocalTime } from "./local-date";
 
@@ -97,24 +97,24 @@ export function EventExplorer({ events, generatedAt, targetEventId = null }: { e
             <button aria-pressed={windowFilter === value} className={windowFilter === value ? "filterActive" : ""} key={value} onClick={() => { setWindowFilter(value); setShowAll(false); }} type="button">{label}</button>
           ))}
         </div>
-        <FilterDisclosure count={[eventType !== "all", provider !== "all", sortMode !== "fit", urgentOnly, lowHassleOnly].filter(Boolean).length}>
+        <FilterDisclosure count={[eventType !== "all", provider !== "all", sortMode !== "fit", urgentOnly, lowHassleOnly].filter(Boolean).length} onClear={() => { setEventType("all"); setProvider("all"); setSortMode("fit"); setUrgentOnly(false); setLowHassleOnly(false); setShowAll(false); }}>
             <label className="selectControl">Type
-              <select aria-label="Music event type" onChange={(event) => setEventType(event.target.value as EventTypeFilter)} value={eventType}>
+              <select aria-label="Music event type" onChange={(event) => { setEventType(event.target.value as EventTypeFilter); setShowAll(false); }} value={eventType}>
                 <option value="all">All</option><option value="concert">Concerts</option><option value="festival">Festivals</option><option value="dj set">DJ sets</option>
               </select>
             </label>
             <label className="selectControl">Provider
-              <select aria-label="Music event provider" onChange={(event) => setProvider(event.target.value as ProviderFilter)} value={provider}>
+              <select aria-label="Music event provider" onChange={(event) => { setProvider(event.target.value as ProviderFilter); setShowAll(false); }} value={provider}>
                 <option value="all">All</option><option value="seatgeek">SeatGeek</option><option value="ticketmaster">Ticketmaster</option><option value="framework">Framework</option><option value="insomniac">Insomniac</option>
               </select>
             </label>
             <label className="selectControl">Sort
-              <select aria-label="Music event sort order" onChange={(event) => setSortMode(event.target.value as SortMode)} value={sortMode}>
+              <select aria-label="Music event sort order" onChange={(event) => { setSortMode(event.target.value as SortMode); setShowAll(false); }} value={sortMode}>
                 <option value="fit">Personal fit</option><option value="date">Date</option><option value="urgency">Urgency</option><option value="hassle">Lowest hassle</option>
               </select>
             </label>
-            <label className="hassleToggle"><input checked={urgentOnly} onChange={(event) => setUrgentOnly(event.target.checked)} type="checkbox" /><span>Urgent</span></label>
-            <label className="hassleToggle"><input checked={lowHassleOnly} onChange={(event) => setLowHassleOnly(event.target.checked)} type="checkbox" /><span>Low hassle</span></label>
+            <label className="hassleToggle"><input checked={urgentOnly} onChange={(event) => { setUrgentOnly(event.target.checked); setShowAll(false); }} type="checkbox" /><span>Urgent</span></label>
+            <label className="hassleToggle"><input checked={lowHassleOnly} onChange={(event) => { setLowHassleOnly(event.target.checked); setShowAll(false); }} type="checkbox" /><span>Low hassle</span></label>
         </FilterDisclosure>
         <span className="resultCount">{showAll ? groups.length : Math.min(groups.length, 8)} of {groups.length} entries · {filtered.length} dates</span>
       </div>
@@ -162,7 +162,7 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
         {lineup && lineup.totalArtists > 0 ? <LineupDetails lineup={lineup} /> : null}
       </div>
 
-      <div className="scoreBlock"><div className="scoreLabel"><span>Deterministic fit</span><strong>{event.ranking.artistFit}</strong></div><div className="scoreTrack"><span style={{ width: `${event.ranking.artistFit}%` }} /></div></div>
+      <div className="scoreBlock"><RecommendationScore confidence={event.ranking.confidence} fit={event.ranking.artistFit} friction={event.ranking.hassleScore} score={event.ranking.utility} status={event.ranking.utility >= 55 ? "Selective" : "Watch"} urgency={event.ranking.urgency} /></div>
 
       {occurrences.length > 1 ? (
         <details className="occurrenceList">
@@ -176,7 +176,7 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
       ) : null}
 
       <div className="eventFooter">
-        <div>{!event.timeTbd && formatLocalTime(event.startLocal) ? <span>{formatLocalTime(event.startLocal)}</span> : <span className="signalAbsent">Time TBD</span>}{price == null ? null : <span>From ${price}</span>}<RecommendationSignals confidence={event.ranking.confidence} fit={event.ranking.artistFit} friction={event.ranking.hassleScore} status={event.ranking.utility >= 55 ? "Selective" : "Watch"} urgency={event.ranking.urgency} /></div>
+        <div>{!event.timeTbd && formatLocalTime(event.startLocal) ? <span>{formatLocalTime(event.startLocal)}</span> : <span className="signalAbsent">Time TBD</span>}{price == null ? null : <span>From ${price}</span>}</div>
         <CardActions
           calendarEvent={calendarInputFrom({ ...event, title: displayTitle, description: event.ranking.whyYou })}
           layout="music"

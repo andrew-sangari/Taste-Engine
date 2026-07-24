@@ -5,7 +5,10 @@ import { normalizeArtistName } from "./deterministic-engine.js";
 export function buildHostedTasteProfile(snapshot: Record<string, unknown>, feedback: Record<string, unknown> | null = null) {
   const artists = Array.isArray(snapshot.artists) ? snapshot.artists as Array<Record<string, unknown>> : [];
   const maxSeed = Math.max(0, ...artists.map((artist) => finite(artist.seedStrength)));
-  const now = new Date(String(snapshot.generatedAt ?? Date.now()));
+  // Cache freshness is evaluated when the projection is built, not when the
+  // Spotify snapshot happened to be written. An old snapshot must never keep
+  // expired Top Artists evidence alive in the public profile.
+  const now = new Date();
   const signals = artists.map((artist) => ({ artist, score: contribution(artist, maxSeed, record(snapshot.topItems), now) }))
     .filter((row) => row.score > 0)
     .sort((left, right) => right.score - left.score || normalizeArtistName(left.artist.name).localeCompare(normalizeArtistName(right.artist.name)));
@@ -35,7 +38,7 @@ export function buildHostedTasteProfile(snapshot: Record<string, unknown>, feedb
 function contribution(artist: Record<string, unknown>, maxSeed: number, topItems: Record<string, unknown>, now: Date) {
   const playlist = maxSeed ? finite(artist.seedStrength) / maxSeed * 60 : 0;
   const top = topContribution(record(artist.topEvidence), topItems, now);
-  return direct(artist.origin) ? Math.max(playlist, top) : Math.max(playlist * .55, top);
+  return direct(artist.origin) ? Math.max(playlist, top) : Math.max(Math.min(32, playlist * .55), top);
 }
 function topContribution(evidence: Record<string, unknown>, topItems: Record<string, unknown>, now: Date) {
   const windows = [["shortTerm", .4, evidence.shortTermRank], ["mediumTerm", .35, evidence.mediumTermRank], ["longTerm", .25, evidence.longTermRank]]

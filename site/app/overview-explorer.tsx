@@ -2,7 +2,7 @@ import { CardActions, calendarInputFrom, planningInputFrom } from "./card-action
 import { ChangesStrip, type ChangesSinceRefresh } from "./changes-strip";
 import type { PublicFeedbackSnapshot } from "./feedback-store";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
-import { RecommendationSignals } from "./signal-texture";
+import { RecommendationScore } from "./signal-texture";
 import { eventHref } from "./event-anchor";
 import { formatLocalDate as formatLaDate } from "./local-date";
 
@@ -104,10 +104,11 @@ function OverviewCard({ item, index, planAhead = false }: { item: OverviewItem; 
         <p className="overviewPlace">{item.venue?.name ?? 'Venue TBD'} · {item.venue?.city ?? 'Los Angeles'}</p>
         <p className="overviewReason">{item.reason}</p>
         <div className="overviewUtility">
-          <RecommendationSignals
+          <RecommendationScore
             confidence={item.confidence}
             fit={item.interestScore ?? item.score}
             friction={item.hassleScore}
+            score={item.score}
             status={item.call ?? callLabel(item.score)}
             urgency={item.urgency}
           />

@@ -37,12 +37,14 @@ test('builds an allowlisted profile with relative signal and coarse evidence lab
   assert.equal(profile.seedSummary.playlistCount, 2);
   assert.equal(profile.topArtists[0].name, 'Prospa');
   assert.equal(profile.topArtists[0].relativeSignal, 100);
+  assert.equal(profile.topArtists[0].signalKind, 'direct');
   assert.deepEqual(profile.topArtists[0].evidenceLabels, ['Current top artist', 'Sustained favorite', 'Playlist anchor']);
   // Direct playlist contribution outranks bounded inferred discovery.
   assert.deepEqual(profile.topArtists.slice(1).map((artist) => artist.name), ['Zed Artist', 'Biscits']);
   assert.equal(profile.topArtists[1].relativeSignal, 93);
   assert.deepEqual(profile.topArtists[1].evidenceLabels, []);
   assert.deepEqual(profile.topArtists[2].evidenceLabels, ['Adjacent discovery']);
+  assert.equal(profile.topArtists[2].signalKind, 'inferred');
   assert.deepEqual(profile.topTags, ['electronic', 'house', 'pop']);
   assert.equal(profile.expansionByOrigin.source, 3);
   assert.equal(profile.expansionByOrigin.similar, 1);
@@ -50,6 +52,17 @@ test('builds an allowlisted profile with relative signal and coarse evidence lab
     statusCounts: { 'attended-worth-it': 2, 'skipped-still-interested': 1 },
     attendedCount: 2
   });
+});
+
+test('does not retain expired Top Artists contribution after the snapshot ages', () => {
+  const input = snapshot();
+  input.artists = [{
+    name: 'Windowed favorite', seedStrength: 0, playlistDiversity: 0, trackCount: 0,
+    origin: 'top-items', topEvidence: { shortTermRank: 1 }
+  }];
+  input.topItems = { windows: { shortTerm: { status: 'cached', expiresAt: '2026-07-11T00:00:00.000Z' } } };
+  const profile = buildTasteProfile(input, { now: new Date('2026-07-12T00:00:00.000Z') });
+  assert.deepEqual(profile.topArtists, []);
 });
 
 test('never leaks private fields anywhere in the profile tree', () => {

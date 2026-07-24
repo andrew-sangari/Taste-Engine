@@ -6,7 +6,7 @@ import { CardActions, calendarInputFrom, planningInputFrom } from "./card-action
 import type { PublicFeedbackSnapshot } from "./feedback-store";
 import { FilterDisclosure } from "./filter-disclosure";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
-import { RecommendationSignals } from "./signal-texture";
+import { RecommendationScore } from "./signal-texture";
 import { eventAnchor } from "./event-anchor";
 import { daysFromLocalDate, formatLocalDate, formatLocalTime } from "./local-date";
 
@@ -19,7 +19,19 @@ type SportsGame = {
   homeTeam: { name: string; shortName: string; abbreviation: string };
   awayTeam: { name: string; shortName: string; abbreviation: string };
   series: { id: string | null; gameNumber: number | null; gameCount: number | null };
-  sportsContext: { rivalryTier: string; playoffLeverage: string; probablePitchers: { home: { name: string; era: number | null } | null; away: { name: string; era: number | null } | null; confirmed: boolean } };
+  sportsContext: {
+    rivalryTier: string;
+    playoffLeverage: string;
+    opponentTags?: string[];
+    pitcherMatchupTier?: "ace" | "notable" | "standard" | "unknown";
+    seriesPosition?: { label: string; gameNumber: number | null; gameCount: number | null };
+    schedule?: { detailedState?: string; changed?: boolean; delayed?: boolean; postponed?: boolean; rescheduled?: boolean };
+    probablePitchers: {
+      home: { name: string; era: number | null; whip?: number | null; handedness?: string | null; wins?: number | null; losses?: number | null; strikeouts?: number | null } | null;
+      away: { name: string; era: number | null; whip?: number | null; handedness?: string | null; wins?: number | null; losses?: number | null; strikeouts?: number | null } | null;
+      confirmed: boolean;
+    };
+  };
   tags: string[];
   ticketObservations: Array<{ source: string; url: string; lowestPriceUsd: number | null; status: string }>;
   sourceLinks: Array<{ source: string; url: string }>;
@@ -61,10 +73,10 @@ export function SportsExplorer({ games, generatedAt, featuredThreshold = 70, tar
         <div className="dateFilterGroup" aria-label="Sports date filter">
           {([['all', 'All dates'], ['soon', 'Next 30 days'], ['later', 'Later']] as const).map(([value, label]) => <button aria-pressed={windowFilter === value} className={windowFilter === value ? "filterActive" : ""} key={value} onClick={() => { setWindowFilter(value); setShowAll(false); }} type="button">{label}</button>)}
         </div>
-        <FilterDisclosure count={[sortMode !== "interest", ticketFilter !== "all", rivalryOnly].filter(Boolean).length}>
-            <label className="selectControl">Sort<select aria-label="Sports sort order" onChange={(event) => setSortMode(event.target.value as SortMode)} value={sortMode}><option value="interest">Interest</option><option value="date">Date</option><option value="hassle">Lowest hassle</option><option value="urgency">Ticket urgency</option></select></label>
-            <label className="selectControl">Tickets<select aria-label="Sports ticket coverage" onChange={(event) => setTicketFilter(event.target.value as TicketFilter)} value={ticketFilter}><option value="all">All</option><option value="ticketed">Ticket link</option><option value="unknown">Unknown</option></select></label>
-            <label className="hassleToggle"><input checked={rivalryOnly} onChange={(event) => setRivalryOnly(event.target.checked)} type="checkbox" /><span>Rivalries</span></label>
+        <FilterDisclosure count={[sortMode !== "interest", ticketFilter !== "all", rivalryOnly].filter(Boolean).length} onClear={() => { setSortMode("interest"); setTicketFilter("all"); setRivalryOnly(false); setShowAll(false); }}>
+            <label className="selectControl">Sort<select aria-label="Sports sort order" onChange={(event) => { setSortMode(event.target.value as SortMode); setShowAll(false); }} value={sortMode}><option value="interest">Interest</option><option value="date">Date</option><option value="hassle">Lowest hassle</option><option value="urgency">Ticket urgency</option></select></label>
+            <label className="selectControl">Tickets<select aria-label="Sports ticket coverage" onChange={(event) => { setTicketFilter(event.target.value as TicketFilter); setShowAll(false); }} value={ticketFilter}><option value="all">All</option><option value="ticketed">Ticket link</option><option value="unknown">Unknown</option></select></label>
+            <label className="hassleToggle"><input checked={rivalryOnly} onChange={(event) => { setRivalryOnly(event.target.checked); setShowAll(false); }} type="checkbox" /><span>Rivalries</span></label>
         </FilterDisclosure>
         <span className="resultCount">{showAll ? series.length : Math.min(series.length, 3)} of {series.length} series · {filtered.length} games</span>
       </div>
@@ -80,7 +92,7 @@ function SeriesCard({ games, featuredThreshold, isFeatured }: { games: SportsGam
   const opponent = friendlyOpponentName(games[0].awayTeam);
   return <article className={`seriesCard rv ${isFeatured ? "seriesFeatured" : "seriesCompact"}`}>
     <RecommendationVisual className="seriesVisual" visual={games[0].visual} />
-    <div className="seriesHeader"><div><p className="eyebrow">{games[0].series.gameCount ? `${games[0].series.gameCount}-game series` : "Dodgers home series"}</p><h3>{opponent}</h3><p>{games[0].tags.slice(0, 3).join(" · ") || "Regular-season home games"}</p></div><strong>{Math.max(...games.map((game) => game.ranking.interestScore))}</strong></div>
+    <div className="seriesHeader"><div><p className="eyebrow">{games[0].series.gameCount ? `${games[0].series.gameCount}-game series` : "Dodgers home series"}</p><h3>{opponent}</h3><p>{best.tags.slice(0, 3).join(" · ") || "Regular-season home games"}</p></div><strong>{Math.max(...games.map((game) => game.ranking.interestScore))}</strong></div>
     <div className="seriesGames">{shown.map((game) => <GameRow game={game} key={game.id} />)}</div>
     {games.length > shown.length ? <details className="seriesDetails"><summary>View series · all {games.length} games</summary><div className="seriesGames">{games.filter((game) => !shown.some((shownGame) => shownGame.id === game.id)).map((game) => <GameRow game={game} key={game.id} />)}</div></details> : null}
   </article>;
@@ -88,19 +100,41 @@ function SeriesCard({ games, featuredThreshold, isFeatured }: { games: SportsGam
 
 function GameRow({ game }: { game: SportsGame }) {
   const pitchers = game.sportsContext.probablePitchers;
+  const opponentContext = game.sportsContext.opponentTags?.slice(0, 3) ?? [];
+  const pitcherLine = pitchers.confirmed ? formatPitcherMatchup(pitchers.away, pitchers.home) : null;
+  const tier = game.sportsContext.pitcherMatchupTier;
   return <div className="gameRow" id={eventAnchor(game.id)}>
     <div className="gameDate"><span>{formatLocalDate(game.startLocal, { weekday: "short", month: "short" }) ?? "TBD"}</span><strong>{formatLocalDate(game.startLocal, { day: "numeric" }) ?? "—"}</strong></div>
-    <div className="gameMatchup"><strong>{game.awayTeam.abbreviation} at {game.homeTeam.abbreviation}</strong><span>{!game.timeTbd && formatLocalTime(game.startLocal) ? formatLocalTime(game.startLocal) : "Time TBD"}{pitchers.confirmed ? ` · ${pitchers.away?.name ?? "TBD"} / ${pitchers.home?.name ?? "TBD"}` : ""}</span></div>
-    <div className="gameSignals"><RecommendationSignals confidence={game.ranking.confidence} fit={game.ranking.interestScore} friction={game.ranking.hassleScore} status={game.ranking.interestScore >= 55 ? "Recommended" : "Watch"} urgency={game.ticketObservations.length ? game.ranking.urgency : "ticket coverage unknown"} /></div>
-    {game.ranking.interestScore >= 55 && game.ranking.hassleScore >= 6 ? <p className="planningObstacle">Strong matchup · planning obstacle: {(game.ranking.hassleReasons ?? []).join(" · ") || "check logistics before committing"}.</p> : null}
-    <div className="gameLinks">{game.sourceLinks.map((link) => <a href={link.url} key={`${link.source}|${link.url}`} rel="noreferrer" target="_blank">{providerLabel(link.source)} ↗</a>)}</div>
-    <CardActions
-      calendarEvent={calendarInputFrom({ ...game, title: gameTitle(game), description: game.ranking.whyYou })}
-      layout="sports"
-      planning={planningInputFrom("sports", { ...game, title: gameTitle(game) })}
-    />
-    {game.localEnhancement?.recommendation && isGroundedAdvisory(game.localEnhancement.recommendation) ? <p className="gameAdvisory"><strong>{game.localEnhancement.recommendation.verdict}</strong> {game.localEnhancement.recommendation.explanation}</p> : null}
+    <div className="gameMain">
+      <div className="gameMatchup">
+        <strong>{game.awayTeam.abbreviation} at {game.homeTeam.abbreviation}</strong>
+        <span>{!game.timeTbd && formatLocalTime(game.startLocal) ? formatLocalTime(game.startLocal) : "Time TBD"}</span>
+        {opponentContext.length ? <p className="gameContextLine">{opponentContext.join(" · ")}</p> : null}
+        {pitcherLine ? <p className={`gamePitching matchup-${tier ?? "unknown"}`}>{pitcherLine}{tier && tier !== "unknown" ? <b>{tier === "ace" ? "Ace matchup" : tier === "notable" ? "Notable matchup" : "Probable matchup"}</b> : null}</p> : <p className="gamePitching gamePitchingUnknown">Probable pitchers TBD</p>}
+        {game.sportsContext.seriesPosition?.label ? <p className="gameSeriesPosition">{game.sportsContext.seriesPosition.label}</p> : null}
+        {game.sportsContext.schedule?.changed ? <p className="gameScheduleUpdate">{game.sportsContext.schedule.detailedState || "Schedule update"} — verify before leaving.</p> : null}
+      </div>
+      <div className="gameSignals"><RecommendationScore confidence={game.ranking.confidence} fit={game.ranking.interestScore} friction={game.ranking.hassleScore} score={game.ranking.utility} status={game.ranking.interestScore >= 55 ? "Recommended" : "Watch"} urgency={game.ticketObservations.length ? game.ranking.urgency : "ticket coverage unknown"} /></div>
+      {game.ranking.interestScore >= 55 && game.ranking.hassleScore >= 6 ? <p className="planningObstacle">Strong matchup · planning obstacle: {(game.ranking.hassleReasons ?? []).join(" · ") || "check logistics before committing"}.</p> : null}
+      <div className="gameLinks">{game.sourceLinks.map((link) => <a href={link.url} key={`${link.source}|${link.url}`} rel="noreferrer" target="_blank">{providerLabel(link.source)} ↗</a>)}</div>
+      <CardActions
+        calendarEvent={calendarInputFrom({ ...game, title: gameTitle(game), description: game.ranking.whyYou })}
+        layout="sports"
+        planning={planningInputFrom("sports", { ...game, title: gameTitle(game) })}
+      />
+      {game.localEnhancement?.recommendation && isGroundedAdvisory(game.localEnhancement.recommendation) ? <p className="gameAdvisory"><strong>{game.localEnhancement.recommendation.verdict}</strong> {game.localEnhancement.recommendation.explanation}</p> : null}
+    </div>
   </div>;
+}
+
+function formatPitcherMatchup(away: SportsGame["sportsContext"]["probablePitchers"]["away"], home: SportsGame["sportsContext"]["probablePitchers"]["home"]) {
+  return `${formatPitcher(away)} vs ${formatPitcher(home)}`;
+}
+
+function formatPitcher(pitcher: SportsGame["sportsContext"]["probablePitchers"]["home"]) {
+  if (!pitcher) return "TBD";
+  const detail = [pitcher.handedness ? `${pitcher.handedness}HP` : null, pitcher.era != null ? `${pitcher.era.toFixed(2)} ERA` : null].filter(Boolean).join(" · ");
+  return `${pitcher.name || "TBD"}${detail ? ` (${detail})` : ""}`;
 }
 
 function gameTitle(game: SportsGame) {

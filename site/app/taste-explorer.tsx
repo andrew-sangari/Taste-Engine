@@ -121,15 +121,16 @@ function RecentRecommendation({ entry }: { entry: HistoryQueueEntry }) {
 }
 
 function ProfilePanels({ profile }: { profile: TasteProfile }) {
+  const strongestSignals = normalizeStrongestSignals(profile.topArtists);
   return <>
     <p className="tasteSummaryLine">{profile.seedSummary.playlistCount} source playlists · {profile.seedSummary.sourceArtistCount} seeded artists · {profile.seedSummary.topArtistCount} top-artist signals · {profile.seedSummary.artistCount} artists after expansion</p>
     <div className="tasteColumns">
       <div className="tasteArtists">
-        <p className="eyebrow">Strongest signals</p><p className="tasteScaleNote">Relative signal within the current Taste Engine seed.</p>
-        {profile.topArtists.map((artist) => <div className="tasteArtistRow" key={artist.name}>
-          <div className="tasteArtistName"><strong>{artist.name}</strong><span>{artist.signalKind === "inferred" ? "Inferred discovery" : "Direct taste"}{(artist.evidenceLabels ?? artist.labels ?? []).length ? ` · ${(artist.evidenceLabels ?? artist.labels ?? []).join(" · ")}` : ""}</span></div>
-          <div className="tasteArtistTrack"><span style={{ width: `${artist.relativeSignal}%` }} /></div>
-        </div>)}
+        <p className="eyebrow">Strongest signals</p><p className="tasteScaleNote">Ranked by current deterministic contribution. Bars are scaled within this shortlist.</p>
+        {strongestSignals.length ? strongestSignals.map((artist) => <div className="tasteArtistRow" data-signal-kind={artist.signalKind} key={artist.name}>
+          <div className="tasteArtistName"><strong>{artist.name}</strong><span>{artist.signalKind === "inferred" ? "Inferred discovery" : "Direct taste"}{artist.labels.length ? ` · ${artist.labels.join(" · ")}` : ""}</span></div>
+          <div aria-label={`${artist.name}: ${artist.signalKind} signal`} className="tasteArtistTrack"><span style={{ width: `${artist.width}%` }} /></div>
+        </div>) : <p className="tasteQuietEmpty">No current signals are ready to rank. Refresh the taste seed to restore this view.</p>}
       </div>
       <div className="tasteMeta">
         <p className="eyebrow">Taste clusters</p><div className="tasteTags">{profile.topTags.map((tag) => <span key={tag}>{tag}</span>)}</div>
@@ -138,6 +139,38 @@ function ProfilePanels({ profile }: { profile: TasteProfile }) {
       </div>
     </div>
   </>;
+}
+
+function normalizeStrongestSignals(artists: TasteProfile["topArtists"]) {
+  const rows = artists
+    .map((artist) => {
+      const name = String(artist.name ?? "").trim();
+      const contribution = finiteSignal(artist.signalContribution) ?? finiteSignal(artist.relativeSignal);
+      const signalKind = artist.signalKind ?? (['similar', 'tag', 'promoter'].includes(artist.origin) ? "inferred" : "direct");
+      const labels = (artist.evidenceLabels ?? artist.labels ?? [])
+        .map((label) => String(label).trim())
+        .filter(Boolean)
+        .filter((label) => signalKind === "inferred" || !/adjacent discovery/i.test(label));
+      return { name, contribution, signalKind, labels };
+    })
+    .filter((artist): artist is { name: string; contribution: number; signalKind: "direct" | "inferred"; labels: string[] } => Boolean(artist.name) && artist.contribution != null)
+    .sort((left, right) => right.contribution - left.contribution || left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+  const values = rows.map((artist) => artist.contribution);
+  const maximum = Math.max(...values, 0);
+  const minimum = Math.min(...values, maximum);
+  const span = maximum - minimum;
+  return rows.map((artist) => ({
+    ...artist,
+    // The source score is intentionally not exposed as a raw preference
+    // value. This visual scale prevents a nearly-flat 87–100 list from
+    // looking like every artist has identical strength.
+    width: span > 0 ? Math.round(28 + ((artist.contribution - minimum) / span) * 72) : 100,
+  }));
+}
+
+function finiteSignal(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function ImportedHistory({ profile }: { profile: TasteProfile }) {

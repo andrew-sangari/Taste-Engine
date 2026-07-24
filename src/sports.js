@@ -125,21 +125,57 @@ export function enrichSportsGames(games, standings, config, {
   return games.map((game) => {
     const opponent = standings.get(String(game.awayTeam?.id));
     const rivalry = config.rivalries?.[String(game.awayTeam?.id)] ?? { tier: 'none', label: null };
+    const probablePitchers = {
+      home: mergePitcherStats(game.probablePitchers?.home, pitcherStats),
+      away: mergePitcherStats(game.probablePitchers?.away, pitcherStats),
+      confirmed: game.probablePitchers?.confirmed ?? false
+    };
+    const matchupTier = pitcherMatchupTier(probablePitchers);
+    const seriesPosition = seriesPositionFor(game);
+    const opponentTags = opponentStakesTags(game, opponent, rivalry);
     const sportsContext = {
       opponentWinPct: opponent?.winPct ?? null,
       opponentLeagueRank: opponent?.leagueRank ?? null,
       opponentDivisionRank: opponent?.divisionRank ?? null,
       opponentLast10: opponent?.lastTen ?? null,
+      opponentLastTenRecord: opponent?.lastTenRecord ?? null,
       opponentStreak: opponent?.streak ?? null,
+      opponentWildCardGamesBack: opponent?.wildCardGamesBack ?? null,
+      opponentRunDifferential: opponent?.runDifferential ?? null,
+      opponentHomeRecord: opponent?.homeRecord ?? null,
+      opponentAwayRecord: opponent?.awayRecord ?? null,
+      opponentAbove500Record: opponent?.above500Record ?? null,
       opponentLeagueName: opponent?.league?.name ?? null,
       opponentDivisionName: opponent?.division?.name ?? null,
       rivalryTier: rivalry.tier,
-      probablePitchers: {
-        home: mergePitcherStats(game.probablePitchers?.home, pitcherStats),
-        away: mergePitcherStats(game.probablePitchers?.away, pitcherStats),
-        confirmed: game.probablePitchers?.confirmed ?? false
+      probablePitchers,
+      pitcherMatchupTier: matchupTier,
+      seriesPosition,
+      opponentTags,
+      schedule: game.scheduleStatus ?? {
+        detailedState: game.status ?? 'Scheduled',
+        changed: false,
+        delayed: false,
+        postponed: false,
+        rescheduled: false
       },
-      playoffLeverage: playoffLeverage(game.startLocal, opponent)
+      playoffLeverage: playoffLeverage(game.startLocal, opponent),
+      // A small, deterministic context object keeps the card explanation
+      // legible without turning the Sports vertical into a stats dashboard.
+      gameContext: {
+        opponent: {
+          tags: opponentTags,
+          leagueRank: opponent?.leagueRank ?? null,
+          divisionRank: opponent?.divisionRank ?? null,
+          wildCardGamesBack: opponent?.wildCardGamesBack ?? null,
+          runDifferential: opponent?.runDifferential ?? null,
+          lastTen: opponent?.lastTen ?? null,
+          streak: opponent?.streak ?? null
+        },
+        pitching: { matchupTier, confirmed: probablePitchers.confirmed },
+        series: seriesPosition,
+        schedule: game.scheduleStatus ?? { detailedState: game.status ?? 'Scheduled', changed: false }
+      }
     };
     const tags = sportsTags(game, opponent, rivalry, sportsContext);
     const ranking = scoreSportsGame({ ...game, sportsContext, tags }, config, now);
@@ -149,6 +185,7 @@ export function enrichSportsGames(games, standings, config, {
 
 export function scoreSportsGame(game, config, now = new Date()) {
   const opponentQuality = opponentQualityScore(game.sportsContext);
+  const opponentStakesScore = opponentStakesScoreFor(game.sportsContext);
   const rivalryScore = ({ high: 15, medium: 8, low: 3, none: 0 }[game.sportsContext?.rivalryTier] ?? 0);
   const pitchingScore = pitchingMatchupScore(game.sportsContext?.probablePitchers);
   const leverageScore = ({ high: 10, medium: 6, low: 2, unknown: 0 }[game.sportsContext?.playoffLeverage] ?? 0);
@@ -156,15 +193,16 @@ export function scoreSportsGame(game, config, now = new Date()) {
   const convenienceScore = dateConvenience(game.startLocal);
   const hassle = sportsHassle(game, config);
   const hassleScore = hassle.score;
-  const interestScore = Math.min(100, 35 + opponentQuality + rivalryScore + pitchingScore + leverageScore + leagueRelevanceScore + convenienceScore);
+  const interestScore = Math.min(100, 35 + opponentQuality + opponentStakesScore + rivalryScore + pitchingScore + leverageScore + leagueRelevanceScore + convenienceScore);
   const urgency = sportsTicketUrgency(game.ticketObservations ?? [], game.startLocal, now);
   const confidence = game.sportsContext?.opponentWinPct == null ? 'medium' : game.sportsContext.probablePitchers.confirmed ? 'high' : 'medium';
-  const whyYou = sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, leagueRelevanceScore, convenienceScore, hassleScore });
+  const whyYou = sportsWhyYou(game, { opponentQuality, opponentStakesScore, rivalryScore, pitchingScore, leverageScore, leagueRelevanceScore, convenienceScore, hassleScore });
   return {
     excluded: false,
     interestScore,
     utility: interestScore - hassleScore * 2,
     opponentQuality,
+    opponentStakesScore,
     rivalryScore,
     pitchingScore,
     leverageScore,
@@ -179,18 +217,22 @@ export function scoreSportsGame(game, config, now = new Date()) {
   };
 }
 
-function sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, leagueRelevanceScore, convenienceScore, hassleScore }) {
+function sportsWhyYou(game, { opponentQuality, opponentStakesScore, rivalryScore, pitchingScore, leverageScore, leagueRelevanceScore, convenienceScore, hassleScore }) {
   const day = weekdayForLocalDate(game.startLocal);
   const friction = hassleScore <= 4 ? 'Low-hassle' : hassleScore <= 6 ? 'Manageable' : 'Higher-hassle';
   const reasons = [];
   if (rivalryScore >= 15) reasons.push(`${game.awayTeam.shortName || game.awayTeam.name} rivalry`);
-  else if (opponentQuality >= 8) reasons.push('a stronger-than-usual matchup');
-  if (pitchingScore >= 7) reasons.push('a strong pitching matchup');
+  else if (opponentStakesScore >= 4 || opponentQuality >= 8) reasons.push('a stronger-than-usual matchup');
+  if (game.sportsContext?.pitcherMatchupTier === 'ace') reasons.push('an ace matchup');
+  else if (pitchingScore >= 5) reasons.push('a notable pitching matchup');
   if (leverageScore >= 6) reasons.push('useful late-season leverage');
   if (leagueRelevanceScore >= 4) reasons.push('an AL East measuring-stick matchup');
   if (!reasons.length && convenienceScore >= 8) reasons.push('a good weekend timing window');
   if (!reasons.length) reasons.push('a worthwhile Dodgers home-game setup');
-  return `${friction} ${day ? `${day} ` : ''}game with ${joinReasons(reasons)}.`;
+  const series = game.sportsContext?.seriesPosition?.label;
+  const schedule = game.sportsContext?.schedule;
+  const statusNote = schedule?.changed ? ` ${schedule.detailedState || 'Schedule update'} — check MLB before leaving.` : '';
+  return `${friction} ${day ? `${day} ` : ''}game with ${joinReasons(reasons)}.${series ? ` ${series}.` : ''}${statusNote}`;
 }
 
 function joinReasons(reasons) {
@@ -237,22 +279,38 @@ export function ticketMatchesGame(ticket, game) {
 }
 
 function sportsTags(game, opponent, rivalry, context) {
-  const tags = [];
+  const tags = [...(context.opponentTags ?? [])];
   if (rivalry.label) tags.push(`${game.awayTeam.shortName || game.awayTeam.name} rivalry`);
-  if (opponent?.divisionRank === 1) tags.push(`${opponent.division?.name ?? 'Division'} leader`);
-  if (opponent?.leagueRank != null && opponent.leagueRank <= 5) tags.push('Contending opponent');
   if (/american league/i.test(String(opponent?.league?.name ?? ''))) tags.push('AL matchup');
   if (/american league east|al east/i.test(String(opponent?.division?.name ?? ''))) tags.push('AL East matchup');
-  if (context.probablePitchers.confirmed && pitchingMatchupScore(context.probablePitchers) >= 7) tags.push('Strong pitching matchup');
+  if (context.pitcherMatchupTier === 'ace') tags.push('Ace matchup');
+  else if (context.pitcherMatchupTier === 'notable') tags.push('Notable pitching matchup');
+  if (context.seriesPosition?.label) tags.push(context.seriesPosition.label);
+  if (context.schedule?.postponed) tags.push('Schedule update');
   if (context.playoffLeverage === 'high') tags.push('Late-season leverage');
   if ([0, 6].includes(localWeekdayIndex(game.startLocal))) tags.push('Weekend game');
-  return tags;
+  return [...new Set(tags)].slice(0, 7);
 }
 
 function opponentQualityScore(context = {}) {
   if (Number.isFinite(context.opponentLeagueRank)) return Math.max(0, Math.min(20, Math.round(20 - (context.opponentLeagueRank - 1) * 1.25)));
   if (Number.isFinite(context.opponentWinPct)) return Math.max(0, Math.min(20, Math.round((context.opponentWinPct - 0.35) * 66.67)));
   return 0;
+}
+
+function opponentStakesScoreFor(context = {}) {
+  let score = 0;
+  if (context.opponentDivisionRank === 1) score += 3;
+  else if (Number.isFinite(context.opponentWildCardGamesBack) && context.opponentWildCardGamesBack <= 3) score += 2;
+  if (Number.isFinite(context.opponentLeagueRank) && context.opponentLeagueRank <= 5) score += 2;
+  if (Number.isFinite(context.opponentRunDifferential)) {
+    if (context.opponentRunDifferential >= 75) score += 3;
+    else if (context.opponentRunDifferential >= 35) score += 2;
+    else if (context.opponentRunDifferential >= 15) score += 1;
+  }
+  if (context.opponentLastTenRecord?.wins >= 7) score += 1;
+  if (/^W[4-9]|^W\d{2,}/i.test(String(context.opponentStreak ?? ''))) score += 1;
+  return Math.min(10, score);
 }
 
 function leagueRelevance(context = {}) {
@@ -264,15 +322,55 @@ function leagueRelevance(context = {}) {
 }
 
 function pitchingMatchupScore(pitchers = {}) {
+  // Probables change. Do not reward a speculative single starter or a name
+  // without enough verified season context to classify the matchup.
+  if (!pitchers.confirmed) return 0;
   const quality = (pitcher) => {
-    if (!pitcher) return 0;
-    if (pitcher.era == null && pitcher.whip == null) return 1;
-    let score = 0;
-    if (pitcher.era != null) score += pitcher.era <= 3 ? 3 : pitcher.era <= 4 ? 2 : 1;
-    if (pitcher.whip != null) score += pitcher.whip <= 1.1 ? 2 : pitcher.whip <= 1.3 ? 1 : 0;
-    return Math.min(5, score);
+    if (!pitcher || pitcher.era == null || pitcher.whip == null || (pitcher.inningsPitched ?? 0) < 45) return 0;
+    if (pitcher.era <= 3.15 && pitcher.whip <= 1.15) return 5;
+    if (pitcher.era <= 3.75 && pitcher.whip <= 1.28) return 3;
+    return 1;
   };
-  return Math.min(10, quality(pitchers.home) + quality(pitchers.away));
+  const homeQuality = quality(pitchers.home);
+  const awayQuality = quality(pitchers.away);
+  if (!homeQuality || !awayQuality) return 0;
+  return Math.min(10, homeQuality + awayQuality);
+}
+
+function pitcherMatchupTier(pitchers = {}) {
+  const score = pitchingMatchupScore(pitchers);
+  if (!pitchers.confirmed || !score) return 'unknown';
+  if (score >= 9) return 'ace';
+  if (score >= 4) return 'notable';
+  return 'standard';
+}
+
+function opponentStakesTags(game, opponent, rivalry) {
+  if (!opponent) return rivalry.label ? [`${game.awayTeam.shortName || game.awayTeam.name} rivalry`] : [];
+  const tags = [];
+  if (opponent.divisionRank === 1) tags.push(`${compactDivision(opponent.division?.name) || 'Division'} leader`);
+  else if (Number.isFinite(opponent.wildCardGamesBack) && opponent.wildCardGamesBack <= 3) tags.push('Wild-card contender');
+  if (Number.isFinite(opponent.leagueRank) && opponent.leagueRank <= 5) tags.push('Top-five league record');
+  if (Number.isFinite(opponent.runDifferential) && opponent.runDifferential >= 15) tags.push(`${opponent.runDifferential >= 0 ? '+' : ''}${Math.round(opponent.runDifferential)} run differential`);
+  if (opponent.lastTenRecord?.wins >= 7) tags.push(`Won ${opponent.lastTenRecord.wins} of last 10`);
+  else if (/^W([4-9]|\d{2,})/i.test(String(opponent.streak ?? ''))) tags.push(`Won ${String(opponent.streak).slice(1)} straight`);
+  return tags;
+}
+
+function compactDivision(value) {
+  return String(value ?? '')
+    .replace(/^National League\s+/i, 'NL ')
+    .replace(/^American League\s+/i, 'AL ')
+    .trim();
+}
+
+function seriesPositionFor(game) {
+  const gameNumber = Number(game.series?.gameNumber);
+  const gameCount = Number(game.series?.gameCount);
+  if (!Number.isFinite(gameNumber) || !Number.isFinite(gameCount) || gameCount < 2) return { label: 'Single game', gameNumber: null, gameCount: null };
+  if (gameNumber === 1) return { label: 'Series opener', gameNumber, gameCount };
+  if (gameNumber >= gameCount) return { label: 'Series finale', gameNumber, gameCount };
+  return { label: `Game ${gameNumber} of ${gameCount}`, gameNumber, gameCount };
 }
 
 function playoffLeverage(startLocal, opponent) {

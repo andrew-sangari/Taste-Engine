@@ -39,27 +39,53 @@ test('fetches and filters Dodgers home games from the MLB schedule', async () =>
 test('normalizes standings and optional pitcher stats', async () => {
   const standingsBody = { records: [{ teamRecords: [{
     team: { id: 135, name: 'San Diego Padres', shortName: 'San Diego', abbreviation: 'SD', league: { id: 104, name: 'National League' }, division: { id: 203, name: 'National League West' } },
-    leagueRank: '4', divisionRank: '2', wins: 60, losses: 40, winningPercentage: '.600', streak: { streakCode: 'W3' },
-    records: { splitRecords: [{ type: 'lastTen', wins: 7, losses: 3 }] }
+    leagueRank: '4', divisionRank: '2', wins: 60, losses: 40, winningPercentage: '.600', streak: { streakCode: 'W3' }, wildCardGamesBack: '1.5', runDifferential: '72',
+    records: { splitRecords: [{ type: 'lastTen', wins: 7, losses: 3 }, { type: 'home', wins: 34, losses: 18 }, { type: 'away', wins: 26, losses: 22 }] }
   }] }] };
   const standings = await fetchMlbStandings({ season: 2026, fetchImpl: async () => new Response(JSON.stringify(standingsBody)) });
   assert.equal(standings.get('135').winPct, 0.6);
   assert.equal(standings.get('135').lastTen, '7-3');
+  assert.equal(standings.get('135').runDifferential, 72);
+  assert.equal(standings.get('135').homeRecord.wins, 34);
 
-  const statsBody = { people: [{ id: 10, fullName: 'Padres Ace', stats: [{ splits: [{ season: '2026', stat: { era: '2.80', whip: '1.05' } }] }] }] };
+  const statsBody = { people: [{ id: 10, fullName: 'Padres Ace', pitchHand: { code: 'L' }, stats: [{ splits: [{ season: '2026', stat: { era: '2.80', whip: '1.05', strikeOuts: '165', inningsPitched: '120.2' } }] }] }] };
   const stats = await fetchMlbPitcherStats(['10'], { season: 2026, fetchImpl: async () => new Response(JSON.stringify(statsBody)) });
   assert.equal(stats.get('10').era, 2.8);
+  assert.equal(stats.get('10').handedness, 'L');
+  assert.equal(stats.get('10').strikeouts, 165);
   assert.equal(applyPitcherStats([normalizeMlbGame(gameRaw)], stats)[0].probablePitchers.away.era, 2.8);
 });
 
-test('scores rivalry, standings, pitching, and convenience separately', () => {
+test('builds deterministic opponent, pitching, and series context for a game', () => {
   const base = normalizeMlbGame(gameRaw);
-  const enriched = enrichSportsGames([base], new Map([['135', { winPct: 0.6, leagueRank: 4, divisionRank: 2, lastTen: '7-3', streak: 'W3', gamesBack: 2, division: { name: 'National League West' } }]]), config, { pitcherStats: new Map([['10', { era: 2.8, whip: 1.05 }], ['11', { era: 3.1, whip: 1.1 }]]) });
+  const enriched = enrichSportsGames([base], new Map([['135', {
+    winPct: 0.6, leagueRank: 4, divisionRank: 2, lastTen: '7-3', lastTenRecord: { wins: 7, losses: 3 }, streak: 'W3', gamesBack: 2,
+    wildCardGamesBack: 1.5, runDifferential: 72, division: { name: 'National League West' }
+  }]]), config, { pitcherStats: new Map([
+    ['10', { era: 2.8, whip: 1.05, inningsPitched: 120, handedness: 'L' }],
+    ['11', { era: 3.1, whip: 1.1, inningsPitched: 115, handedness: 'R' }]
+  ]) });
   assert.equal(enriched[0].sportsContext.rivalryTier, 'high');
   assert.ok(enriched[0].ranking.rivalryScore >= 15);
   assert.ok(enriched[0].ranking.pitchingScore >= 7);
+  assert.equal(enriched[0].sportsContext.pitcherMatchupTier, 'ace');
+  assert.equal(enriched[0].sportsContext.seriesPosition.label, 'Game 2 of 3');
+  assert.ok(enriched[0].sportsContext.opponentTags.includes('+72 run differential'));
+  assert.equal(enriched[0].sportsContext.gameContext.pitching.matchupTier, 'ace');
   assert.ok(enriched[0].ranking.interestScore > 60);
   assert.equal(enriched[0].ranking.urgency, 'unknown');
+});
+
+test('keeps incomplete probable pitchers and changed schedule out of strong matchup claims', () => {
+  const normalized = normalizeMlbGame({ ...gameRaw, status: { detailedState: 'Postponed', abstractGameState: 'Final' }, teams: {
+    ...gameRaw.teams,
+    away: { ...gameRaw.teams.away, probablePitcher: null }
+  } });
+  const enriched = enrichSportsGames([normalized], new Map(), config)[0];
+  assert.equal(enriched.sportsContext.pitcherMatchupTier, 'unknown');
+  assert.equal(enriched.ranking.pitchingScore, 0);
+  assert.equal(enriched.sportsContext.schedule.postponed, true);
+  assert.ok(enriched.tags.includes('Schedule update'));
 });
 
 test('joins ticket sources without hiding an unticketed game', () => {
