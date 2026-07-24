@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="bloom" cx="72%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#62dfc3" stop-opacity=".34"/>
+      <stop offset="38%" stop-color="#2ba58c" stop-opacity=".16"/>
+      <stop offset="72%" stop-color="#173f36" stop-opacity=".05"/>
+      <stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bar" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#62dfc3" stop-opacity="0"/>
+      <stop offset="55%" stop-color="#62dfc3" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#84ecd5" stop-opacity=".9"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <filter id="haze" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="34"/>
+    </filter>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 .38 0 0 0 0 .87 0 0 0 0 .76 0 0 0 .05 0"/>
+    </filter>
+  </defs>
+  <rect width="800" height="500" fill="#030504"/>
+  <rect width="800" height="500" fill="url(#bloom)"/>
+  <ellipse cx="590" cy="140" rx="260" ry="150" fill="#62dfc3" opacity=".15" filter="url(#haze)"/>
+  <g filter="url(#soft)" opacity=".85">
+    <rect x="418" y="292" width="9" height="118" rx="4" fill="url(#bar)"/>
+    <rect x="446" y="236" width="9" height="174" rx="4" fill="url(#bar)"/>
+    <rect x="474" y="308" width="9" height="102" rx="4" fill="url(#bar)"/>
+    <rect x="502" y="184" width="9" height="226" rx="4" fill="url(#bar)"/>
+    <rect x="530" y="252" width="9" height="158" rx="4" fill="url(#bar)"/>
+    <rect x="558" y="128" width="9" height="282" rx="4" fill="url(#bar)"/>
+    <rect x="586" y="212" width="9" height="198" rx="4" fill="url(#bar)"/>
+    <rect x="614" y="268" width="9" height="142" rx="4" fill="url(#bar)"/>
+    <rect x="642" y="172" width="9" height="238" rx="4" fill="url(#bar)"/>
+    <rect x="670" y="298" width="9" height="112" rx="4" fill="url(#bar)"/>
+    <rect x="698" y="244" width="9" height="166" rx="4" fill="url(#bar)"/>
+    <rect x="726" y="322" width="9" height="88" rx="4" fill="url(#bar)"/>
+  </g>
+  <rect width="800" height="500" filter="url(#grain)" opacity=".5"/>
+  <linearGradient id="fadeL" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="#030504" stop-opacity="1"/>
+    <stop offset="55%" stop-color="#030504" stop-opacity="0"/>
+  </linearGradient>
+  <rect width="800" height="500" fill="url(#fadeL)"/>
+</svg>

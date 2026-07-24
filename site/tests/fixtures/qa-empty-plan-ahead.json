@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 5,
+  "generatedAt": "2026-07-12T12:00:00.000-07:00",
+  "horizon": { "startDate": "2026-07-12", "endDate": "2027-01-08", "days": 180 },
+  "sourcePlaylistCount": 0,
+  "sourceArtistCount": 0,
+  "topArtistCount": 0,
+  "expandedArtistCount": 0,
+  "scannedEventCount": 0,
+  "sourceHealth": [
+    { "source": "spotify-top-artists", "status": "unavailable", "itemCount": 0, "warningCount": 1 },
+    { "source": "seatgeek", "status": "unavailable", "itemCount": 0, "warningCount": 1 },
+    { "source": "mlb", "status": "partial", "itemCount": 0, "warningCount": 1 },
+    { "source": "tmdb", "status": "not configured", "itemCount": 0, "warningCount": 0 },
+    { "source": "ollama", "status": "unavailable", "itemCount": 0, "warningCount": 1 }
+  ],
+  "priorityTheaters": [],
+  "sportsConfig": { "teamName": "Synthetic Dodgers", "featuredInterestThreshold": 70 },
+  "events": [],
+  "sports": [],
+  "movies": [],
+  "overview": [],
+  "overviewPlanAhead": [],
+  "recentHistory": [],
+  "overviewAdvisory": { "queuedCount": 0, "enhancedCount": 0, "model": null, "status": "active" },
+  "eventEnhancement": { "mode": "unavailable", "model": null, "enhancedEventCount": 0, "passes": {} },
+  "sportsEnhancement": { "mode": "unavailable", "model": null, "enhancedGameCount": 0, "passes": {} }
+}

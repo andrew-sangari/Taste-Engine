@@ -2,7 +2,7 @@ config/spotify-playlists.json
 config/brief.json
 config/movies.json
 config/personal-context.json
-data/
+/data/
 config/feedback.local.json
 .env
 .DS_Store
