@@ -1,0 +1,21 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "taste-engine-refresh-scheduler",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-23",
+  "workers_dev": true,
+  "preview_urls": false,
+  "triggers": {
+    "crons": ["0 16 * * *"]
+  },
+  "workflows": [
+    {
+      "name": "taste-engine-refresh",
+      "binding": "TASTE_REFRESH_WORKFLOW",
+      "class_name": "TasteEngineRefreshWorkflow"
+    }
+  ],
+  "vars": {
+    "TASTE_ENGINE_REFRESH_URL": "https://taste-engine-la.andrewsangari.chatgpt.site/api/admin/refresh"
+  }
+}

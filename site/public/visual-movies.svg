@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="beam" x1="1" y1=".5" x2="0" y2=".5">
+      <stop offset="0%" stop-color="#eadbc4" stop-opacity=".42"/>
+      <stop offset="30%" stop-color="#d5a36f" stop-opacity=".16"/>
+      <stop offset="70%" stop-color="#62dfc3" stop-opacity=".05"/>
+      <stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="lamp" cx="96%" cy="34%" r="45%">
+      <stop offset="0%" stop-color="#fff6e6" stop-opacity=".75"/>
+      <stop offset="18%" stop-color="#eecf9e" stop-opacity=".3"/>
+      <stop offset="60%" stop-color="#d5a36f" stop-opacity=".07"/>
+      <stop offset="100%" stop-color="#030504" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft3" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <filter id="grain3">
+      <feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 .84 0 0 0 0 .72 0 0 0 0 .5 0 0 0 .05 0"/>
+    </filter>
+  </defs>
+  <rect width="800" height="500" fill="#030504"/>
+  <rect width="800" height="500" fill="url(#lamp)"/>
+  <g filter="url(#soft3)">
+    <polygon points="800,150 800,190 240,335 240,255" fill="url(#beam)"/>
+    <polygon points="800,168 800,176 300,306 300,282" fill="#eadbc4" opacity=".1"/>
+  </g>
+  <g fill="#eadbc4">
+    <circle cx="588" cy="236" r="1.6" opacity=".55"/>
+    <circle cx="530" cy="272" r="1.2" opacity=".4"/>
+    <circle cx="646" cy="216" r="1.3" opacity=".5"/>
+    <circle cx="470" cy="290" r="1.5" opacity=".35"/>
+    <circle cx="700" cy="200" r="1.8" opacity=".6"/>
+    <circle cx="620" cy="258" r="1" opacity=".3"/>
+    <circle cx="552" cy="238" r="1.1" opacity=".45"/>
+    <circle cx="418" cy="306" r="1.2" opacity=".3"/>
+  </g>
+  <rect width="800" height="500" filter="url(#grain3)" opacity=".5"/>
+  <linearGradient id="fadeL3" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="#030504" stop-opacity="1"/>
+    <stop offset="55%" stop-color="#030504" stop-opacity="0"/>
+  </linearGradient>
+  <rect width="800" height="500" fill="url(#fadeL3)"/>
+</svg>

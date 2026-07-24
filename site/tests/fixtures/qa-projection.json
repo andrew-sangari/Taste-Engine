@@ -1,0 +1,685 @@
+{
+  "schemaVersion": 5,
+  "generatedAt": "2026-07-12T12:00:00.000-07:00",
+  "horizon": {
+    "startDate": "2026-07-12",
+    "endDate": "2027-01-08",
+    "days": 180
+  },
+  "sourcePlaylistCount": 4,
+  "sourceArtistCount": 18,
+  "topArtistCount": 12,
+  "expandedArtistCount": 27,
+  "scannedEventCount": 16,
+  "sourceHealth": [
+    {
+      "source": "spotify-top-artists",
+      "status": "active",
+      "itemCount": 12,
+      "warningCount": 0,
+      "details": {
+        "shortTerm": "active",
+        "mediumTerm": "active",
+        "longTerm": "active",
+        "lastSuccessfulRefresh": "2026-07-12T11:45:00.000-07:00",
+        "cacheExpiry": "2026-07-19T11:45:00.000-07:00"
+      }
+    },
+    {
+      "source": "seatgeek",
+      "status": "partial",
+      "itemCount": 7,
+      "warningCount": 1,
+      "details": { "note": "One regional window was unavailable" }
+    },
+    {
+      "source": "ticketmaster",
+      "status": "unavailable",
+      "itemCount": 0,
+      "warningCount": 1,
+      "details": { "note": "Synthetic optional source failure" }
+    },
+    {
+      "source": "framework",
+      "status": "active",
+      "itemCount": 3,
+      "warningCount": 0
+    },
+    {
+      "source": "insomniac",
+      "status": "unavailable",
+      "itemCount": 0,
+      "warningCount": 1
+    },
+    {
+      "source": "mlb",
+      "status": "active",
+      "itemCount": 5,
+      "warningCount": 0
+    },
+    {
+      "source": "sports-seatgeek",
+      "status": "partial",
+      "itemCount": 2,
+      "warningCount": 1
+    },
+    {
+      "source": "sports-ticketmaster",
+      "status": "not configured",
+      "itemCount": 0,
+      "warningCount": 0
+    },
+    {
+      "source": "tmdb",
+      "status": "active",
+      "itemCount": 3,
+      "warningCount": 0
+    },
+    {
+      "source": "ollama-events",
+      "status": "partial",
+      "itemCount": 1,
+      "warningCount": 2
+    },
+    {
+      "source": "ollama-sports",
+      "status": "unavailable",
+      "itemCount": 0,
+      "warningCount": 1
+    },
+    {
+      "source": "ollama",
+      "status": "unavailable",
+      "itemCount": 0,
+      "warningCount": 1
+    }
+  ],
+  "priorityTheaters": [
+    { "name": "Synthetic Cinema", "formats": ["IMAX"] }
+  ],
+  "sportsConfig": {
+    "teamName": "Synthetic Dodgers",
+    "featuredInterestThreshold": 70
+  },
+  "events": [
+    {
+      "id": "qa-music-image",
+      "title": "Short Signal",
+      "sourceUrl": "https://example.com/synthetic/short-signal",
+      "sources": ["framework"],
+      "sourceLinks": [
+        { "source": "framework", "url": "https://example.com/synthetic/short-signal" }
+      ],
+      "eventType": "concert",
+      "startLocal": "2026-07-15T20:00:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "The Example Hall", "city": "Los Angeles", "state": "CA" },
+      "ticketObservation": { "lowestPriceUsd": 45, "listingCount": 18 },
+      "matchedArtists": [
+        { "name": "Short Signal", "seedStrength": 0.9, "primary": true, "origin": "source" }
+      ],
+      "lineup": ["Short Signal"],
+      "ranking": {
+        "artistFit": 92,
+        "hassleScore": 3,
+        "hassleReasons": ["Easy rail access"],
+        "utility": 91,
+        "confidence": "confirmed",
+        "urgency": "watch",
+        "whyYou": "A direct synthetic seed with a compact venue and a clean weeknight fit."
+      },
+      "visual": {
+        "kind": "image",
+        "url": "/tmdb-logo.svg",
+        "alt": "A synthetic atmospheric event image",
+        "focalPoint": { "x": 72, "y": 50 },
+        "attribution": "Synthetic local fixture"
+      }
+    },
+    {
+      "id": "qa-music-long",
+      "title": "An Extremely Long Synthetic Festival Billing With Many Words That Must Wrap Without Breaking The Recommendation Card",
+      "sourceUrl": "https://example.com/synthetic/long-billing",
+      "sources": ["seatgeek", "framework"],
+      "sourceLinks": [
+        { "source": "seatgeek", "url": "https://example.com/synthetic/long-billing" },
+        { "source": "seatgeek", "url": "https://example.com/synthetic/long-billing" },
+        { "source": "framework", "url": "https://example.com/synthetic/long-billing-framework" }
+      ],
+      "eventType": "concert",
+      "startLocal": "2026-07-18T21:00:00-07:00",
+      "timeTbd": false,
+      "venue": {
+        "name": "VenueWithAnUnbrokenSyntheticTokenThatShouldWrapWithoutEscapingItsCard",
+        "city": "Los Angeles",
+        "state": "CA"
+      },
+      "ticketObservation": { "lowestPriceUsd": null, "listingCount": null },
+      "matchedArtists": [
+        { "name": "Long Signal", "seedStrength": 0.82, "primary": true, "origin": "similar" },
+        { "name": "Support Artist One", "seedStrength": 0.34, "primary": false, "origin": "tag" },
+        { "name": "Support Artist Two", "seedStrength": 0.31, "primary": false, "origin": "promoter" },
+        { "name": "Support Artist Three", "seedStrength": 0.28, "primary": false, "origin": "source" },
+        { "name": "Support Artist Four", "seedStrength": 0.24, "primary": false, "origin": "similar" },
+        { "name": "Support Artist Five", "seedStrength": 0.22, "primary": false, "origin": "tag" },
+        { "name": "Support Artist Six", "seedStrength": 0.19, "primary": false, "origin": "promoter" },
+        { "name": "Support Artist Seven", "seedStrength": 0.16, "primary": false, "origin": "source" },
+        { "name": "Support Artist Eight", "seedStrength": 0.14, "primary": false, "origin": "similar" },
+        { "name": "Support Artist Nine", "seedStrength": 0.12, "primary": false, "origin": "tag" },
+        { "name": "Support Artist Ten", "seedStrength": 0.1, "primary": false, "origin": "source" }
+      ],
+      "lineup": [
+        "Long Signal", "Support Artist One", "Support Artist Two", "Support Artist Three",
+        "Support Artist Four", "Support Artist Five", "Support Artist Six", "Support Artist Seven",
+        "Support Artist Eight", "Support Artist Nine", "Support Artist Ten", "Support Artist Eleven"
+      ],
+      "ranking": {
+        "artistFit": 78,
+        "hassleScore": 7,
+        "hassleReasons": ["Unknown price", "Long venue transfer"],
+        "utility": 76,
+        "confidence": "likely",
+        "urgency": "safe to wait",
+        "whyYou": "The bridge is credible, but the unusually long bill and unknown price make this a deliberate rather than automatic yes."
+      },
+      "localEnhancement": {
+        "personalFit": { "score": 78, "label": "Selective", "explanation": "A useful adjacent signal with a lot to verify." },
+        "recommendation": { "verdict": "Consider", "explanation": "Keep it on the shortlist while the details settle." },
+        "urgency": { "label": "Safe to wait", "explanation": "No synthetic scarcity signal is available." },
+        "hassle": { "score": 7, "explanation": "The venue token and unknown price are the main friction." }
+      },
+      "visual": {
+        "kind": "texture",
+        "variant": "music-warehouse-beams",
+        "focalPoint": { "x": 80, "y": 40 }
+      }
+    },
+    {
+      "id": "qa-music-festival",
+      "title": "Synthetic Night Market + more",
+      "sourceUrl": "https://example.com/synthetic/night-market",
+      "sources": ["framework"],
+      "sourceLinks": [
+        { "source": "framework", "url": "https://example.com/synthetic/night-market" }
+      ],
+      "eventType": "festival",
+      "startLocal": "2026-07-25T18:30:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Synthetic River Park", "city": "Los Angeles", "state": "CA" },
+      "ticketObservation": { "lowestPriceUsd": 80, "listingCount": 24 },
+      "matchedArtists": [
+        { "name": "Night Market", "seedStrength": 0.74, "primary": true, "origin": "promoter" },
+        { "name": "More Synthetic Artists", "seedStrength": 0.3, "primary": false, "origin": "promoter" }
+      ],
+      "lineup": ["Night Market", "More Synthetic Artists"],
+      "ranking": {
+        "artistFit": 72,
+        "hassleScore": 6,
+        "hassleReasons": ["Festival footprint"],
+        "utility": 70,
+        "confidence": "exploratory",
+        "urgency": "watch",
+        "whyYou": "A promoter-followed festival shape with enough direct signal to inspect the lineup."
+      },
+      "visual": {
+        "kind": "texture",
+        "variant": "music-crowd-silhouette"
+      }
+    },
+    {
+      "id": "qa-music-none",
+      "title": "No Visual Set",
+      "sourceUrl": "https://example.com/synthetic/no-visual",
+      "sources": ["seatgeek"],
+      "sourceLinks": [
+        { "source": "seatgeek", "url": "https://example.com/synthetic/no-visual" }
+      ],
+      "eventType": "dj set",
+      "startLocal": "2026-08-04T22:00:00-07:00",
+      "timeTbd": true,
+      "venue": { "name": "Black Box Example", "city": "Los Angeles", "state": "CA" },
+      "ticketObservation": { "lowestPriceUsd": null, "listingCount": 0 },
+      "matchedArtists": [
+        { "name": "No Visual Set", "seedStrength": 0.66, "primary": true, "origin": "tag" }
+      ],
+      "lineup": [],
+      "ranking": {
+        "artistFit": 67,
+        "hassleScore": 5,
+        "hassleReasons": ["Time TBD"],
+        "utility": 64,
+        "confidence": "exploratory",
+        "urgency": "safe to wait",
+        "whyYou": "The fit is promising enough to keep visible even though the event has no declared visual or ticket price."
+      },
+      "visual": { "kind": "none" }
+    },
+    {
+      "id": "qa-music-broken-image",
+      "title": "Broken Image Fallback",
+      "sourceUrl": "https://example.com/synthetic/broken-image",
+      "sources": ["framework"],
+      "sourceLinks": [
+        { "source": "framework", "url": "https://example.com/synthetic/broken-image" }
+      ],
+      "eventType": "concert",
+      "startLocal": "2026-08-10T19:30:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Fallback Theater", "city": "Los Angeles", "state": "CA" },
+      "ticketObservation": { "lowestPriceUsd": 30, "listingCount": 5 },
+      "matchedArtists": [
+        { "name": "Fallback Signal", "seedStrength": 0.6, "primary": true, "origin": "source" }
+      ],
+      "lineup": ["Fallback Signal"],
+      "ranking": {
+        "artistFit": 61,
+        "hassleScore": 4,
+        "hassleReasons": [],
+        "utility": 59,
+        "confidence": "likely",
+        "urgency": "watch",
+        "whyYou": "The card should stay useful if its declared image cannot load."
+      },
+      "visual": {
+        "kind": "image",
+        "url": "/missing-qa-image.svg",
+        "alt": "Synthetic fallback image"
+      }
+    },
+    {
+      "id": "qa-music-later-one",
+      "title": "Later Signal One",
+      "sourceUrl": "https://example.com/synthetic/later-one",
+      "sources": ["framework"],
+      "sourceLinks": [{ "source": "framework", "url": "https://example.com/synthetic/later-one" }],
+      "eventType": "concert",
+      "startLocal": "2026-09-06T20:00:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Later Hall One", "city": "Los Angeles", "state": "CA" },
+      "ticketObservation": { "lowestPriceUsd": 50, "listingCount": 10 },
+      "matchedArtists": [{ "name": "Later Signal One", "seedStrength": 0.55, "primary": true, "origin": "source" }],
+      "ranking": { "artistFit": 58, "hassleScore": 3, "hassleReasons": [], "utility": 57, "confidence": "likely", "urgency": "safe to wait", "whyYou": "A later date kept for the full music view." },
+      "visual": { "kind": "texture", "variant": "music-stage-haze" }
+    },
+    {
+      "id": "qa-music-later-two",
+      "title": "Later Signal Two",
+      "sourceUrl": "https://example.com/synthetic/later-two",
+      "sources": ["framework"],
+      "sourceLinks": [{ "source": "framework", "url": "https://example.com/synthetic/later-two" }],
+      "eventType": "concert",
+      "startLocal": "2026-10-03T20:00:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Later Hall Two", "city": "Los Angeles", "state": "CA" },
+      "ticketObservation": { "lowestPriceUsd": 40, "listingCount": 8 },
+      "matchedArtists": [{ "name": "Later Signal Two", "seedStrength": 0.52, "primary": true, "origin": "similar" }],
+      "ranking": { "artistFit": 55, "hassleScore": 3, "hassleReasons": [], "utility": 54, "confidence": "exploratory", "urgency": "safe to wait", "whyYou": "A second later-date control case." },
+      "visual": { "kind": "texture", "variant": "music-architectural-light" }
+    },
+    {
+      "id": "qa-music-later-three",
+      "title": "Later Signal Three",
+      "sourceUrl": "https://example.com/synthetic/later-three",
+      "sources": ["framework"],
+      "sourceLinks": [{ "source": "framework", "url": "https://example.com/synthetic/later-three" }],
+      "eventType": "concert",
+      "startLocal": "2026-11-01T20:00:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Later Hall Three", "city": "Los Angeles", "state": "CA" },
+      "ticketObservation": { "lowestPriceUsd": 35, "listingCount": 6 },
+      "matchedArtists": [{ "name": "Later Signal Three", "seedStrength": 0.49, "primary": true, "origin": "tag" }],
+      "ranking": { "artistFit": 50, "hassleScore": 2, "hassleReasons": [], "utility": 49, "confidence": "exploratory", "urgency": "safe to wait", "whyYou": "A third later-date control case." },
+      "visual": { "kind": "texture", "variant": "music-crowd-silhouette" }
+    }
+  ],
+  "sports": [
+    {
+      "id": "qa-sports-rivalry-1",
+      "sourceUrl": "https://example.com/synthetic/rivalry-1",
+      "startLocal": "2026-07-16T19:10:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Synthetic Stadium", "city": "Los Angeles", "state": "CA" },
+      "homeTeam": { "name": "Synthetic Dodgers", "shortName": "Dodgers", "abbreviation": "SYN" },
+      "awayTeam": { "name": "Synthetic Giants", "shortName": "Giants", "abbreviation": "SGI" },
+      "series": { "id": "qa-series-rivalry", "gameNumber": 1, "gameCount": 3 },
+      "sportsContext": { "rivalryTier": "high", "playoffLeverage": "medium", "probablePitchers": { "home": { "name": "A. Example", "era": 2.8 }, "away": { "name": "B. Example", "era": 3.1 }, "confirmed": true } },
+      "tags": ["rivalry", "weeknight", "confirmed pitchers"],
+      "ticketObservations": [{ "source": "seatgeek", "url": "https://example.com/synthetic/rivalry-1-tickets", "lowestPriceUsd": 65, "status": "available" }],
+      "sourceLinks": [
+        { "source": "mlb", "url": "https://example.com/synthetic/rivalry-1" },
+        { "source": "seatgeek", "url": "https://example.com/synthetic/rivalry-1-tickets" }
+      ],
+      "ranking": { "interestScore": 91, "utility": 90, "hassleScore": 4, "urgency": "watch", "confidence": "confirmed", "whyYou": "High-leverage rivalry context with a clean night-game shape." },
+      "visual": { "kind": "texture", "variant": "sports-stadium-lights" }
+    },
+    {
+      "id": "qa-sports-rivalry-2",
+      "sourceUrl": "https://example.com/synthetic/rivalry-2",
+      "startLocal": "2026-07-17T19:10:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Synthetic Stadium", "city": "Los Angeles", "state": "CA" },
+      "homeTeam": { "name": "Synthetic Dodgers", "shortName": "Dodgers", "abbreviation": "SYN" },
+      "awayTeam": { "name": "Synthetic Giants", "shortName": "Giants", "abbreviation": "SGI" },
+      "series": { "id": "qa-series-rivalry", "gameNumber": 2, "gameCount": 3 },
+      "sportsContext": { "rivalryTier": "high", "playoffLeverage": "medium", "probablePitchers": { "home": null, "away": null, "confirmed": false } },
+      "tags": ["rivalry", "pitchers TBD"],
+      "ticketObservations": [],
+      "sourceLinks": [{ "source": "mlb", "url": "https://example.com/synthetic/rivalry-2" }],
+      "ranking": { "interestScore": 62, "utility": 60, "hassleScore": 4, "urgency": "unknown", "confidence": "confirmed", "whyYou": "The series remains interesting even while ticket coverage is unknown." },
+      "visual": { "kind": "texture", "variant": "sports-field-lines" }
+    },
+    {
+      "id": "qa-sports-high-leverage",
+      "sourceUrl": "https://example.com/synthetic/high-leverage",
+      "startLocal": "2026-07-22T18:40:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Synthetic Stadium", "city": "Los Angeles", "state": "CA" },
+      "homeTeam": { "name": "Synthetic Dodgers", "shortName": "Dodgers", "abbreviation": "SYN" },
+      "awayTeam": { "name": "Synthetic Yankees", "shortName": "Yankees", "abbreviation": "SYN" },
+      "series": { "id": "qa-series-high-leverage", "gameNumber": 1, "gameCount": 1 },
+      "sportsContext": { "rivalryTier": "medium", "playoffLeverage": "high", "probablePitchers": { "home": { "name": "C. Example", "era": 2.4 }, "away": { "name": "D. Example", "era": 2.9 }, "confirmed": true } },
+      "tags": ["high leverage", "early start"],
+      "ticketObservations": [{ "source": "seatgeek", "url": "https://example.com/synthetic/high-leverage-tickets", "lowestPriceUsd": 95, "status": "available" }],
+      "sourceLinks": [
+        { "source": "mlb", "url": "https://example.com/synthetic/high-leverage" },
+        { "source": "seatgeek", "url": "https://example.com/synthetic/high-leverage-tickets" }
+      ],
+      "ranking": { "interestScore": 88, "utility": 86, "hassleScore": 5, "urgency": "buy now", "confidence": "confirmed", "whyYou": "A high-leverage game with a specific reason to leave the house." },
+      "localEnhancement": { "recommendation": { "verdict": "Prioritize", "explanation": "The leverage is the point of this date." } },
+      "visual": { "kind": "texture", "variant": "sports-scoreboard-glow" }
+    },
+    {
+      "id": "qa-sports-night",
+      "sourceUrl": "https://example.com/synthetic/night-game",
+      "startLocal": "2026-07-28T20:10:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Synthetic Stadium", "city": "Los Angeles", "state": "CA" },
+      "homeTeam": { "name": "Synthetic Dodgers", "shortName": "Dodgers", "abbreviation": "SYN" },
+      "awayTeam": { "name": "Synthetic Padres", "shortName": "Padres", "abbreviation": "SPA" },
+      "series": { "id": "qa-series-night", "gameNumber": 1, "gameCount": 1 },
+      "sportsContext": { "rivalryTier": "medium", "playoffLeverage": "low", "probablePitchers": { "home": null, "away": null, "confirmed": false } },
+      "tags": ["night game", "weekend"],
+      "ticketObservations": [{ "source": "seatgeek", "url": "https://example.com/synthetic/night-game-tickets", "lowestPriceUsd": 55, "status": "available" }],
+      "sourceLinks": [
+        { "source": "mlb", "url": "https://example.com/synthetic/night-game" },
+        { "source": "seatgeek", "url": "https://example.com/synthetic/night-game-tickets" }
+      ],
+      "ranking": { "interestScore": 73, "utility": 71, "hassleScore": 6, "urgency": "watch", "confidence": "confirmed", "whyYou": "A low-pressure night-game option with the right atmosphere." },
+      "visual": { "kind": "texture", "variant": "sports-night-game" }
+    },
+    {
+      "id": "qa-sports-default",
+      "sourceUrl": "https://example.com/synthetic/default-game",
+      "startLocal": "2026-08-04T18:10:00-07:00",
+      "timeTbd": false,
+      "venue": { "name": "Synthetic Stadium", "city": "Los Angeles", "state": "CA" },
+      "homeTeam": { "name": "Synthetic Dodgers", "shortName": "Dodgers", "abbreviation": "SYN" },
+      "awayTeam": { "name": "Synthetic Mariners", "shortName": "Mariners", "abbreviation": "SMA" },
+      "series": { "id": "qa-series-default", "gameNumber": 1, "gameCount": 1 },
+      "sportsContext": { "rivalryTier": "none", "playoffLeverage": "low", "probablePitchers": { "home": null, "away": null, "confirmed": false } },
+      "tags": [],
+      "ticketObservations": [],
+      "sourceLinks": [{ "source": "mlb", "url": "https://example.com/synthetic/default-game" }],
+      "ranking": { "interestScore": 52, "utility": 50, "hassleScore": 3, "urgency": "unknown", "confidence": "confirmed", "whyYou": "A default texture case with no ticket price signal." },
+      "visual": { "kind": "texture", "variant": "sports-field-lines" }
+    }
+  ],
+  "movies": [
+    {
+      "id": "qa-movie-confirmed",
+      "title": "Synthetic Projection",
+      "sourceUrl": "https://example.com/synthetic/synthetic-projection",
+      "releaseDate": "2026-07-20",
+      "overview": "A synthetic theatrical description used only for browser QA.",
+      "tasteScore": 88,
+      "reasons": ["The local fixture confirms a premium presentation."],
+      "directors": ["Example Director"],
+      "runtimeMinutes": 124,
+      "formatStatus": "confirmed locally",
+      "format": "IMAX",
+      "theater": "Synthetic Cinema",
+      "premiumFormatConfirmed": true,
+      "posterUrl": "/tmdb-logo.svg",
+      "backdropUrl": "/tmdb-logo.svg",
+      "visual": {
+        "kind": "image",
+        "url": "/tmdb-logo.svg",
+        "alt": "Synthetic Projection poster",
+        "focalPoint": { "x": 78, "y": 50 },
+        "attribution": "Synthetic TMDB-style local fixture"
+      }
+    },
+    {
+      "id": "qa-movie-fallback",
+      "title": "Image Fallback Feature",
+      "sourceUrl": "https://example.com/synthetic/image-fallback-feature",
+      "releaseDate": "2026-07-30",
+      "overview": "This card keeps its title and reason when its declared image is missing.",
+      "tasteScore": 74,
+      "reasons": ["Format confirmation remains pending."],
+      "directors": [],
+      "runtimeMinutes": null,
+      "formatStatus": "release watch",
+      "format": null,
+      "theater": null,
+      "premiumFormatConfirmed": false,
+      "posterUrl": null,
+      "backdropUrl": "/missing-qa-movie.svg",
+      "visual": { "kind": "image", "url": "/missing-qa-movie.svg", "alt": "Synthetic fallback feature image" }
+    },
+    {
+      "id": "qa-movie-long-lead",
+      "title": "Long Lead Cinema",
+      "sourceUrl": "https://example.com/synthetic/long-lead-cinema",
+      "releaseDate": null,
+      "overview": "A no-date movie case remains visible without inventing a release date.",
+      "tasteScore": 63,
+      "reasons": [],
+      "directors": ["Pending Director"],
+      "runtimeMinutes": 99,
+      "formatStatus": "long lead",
+      "format": null,
+      "theater": null,
+      "premiumFormatConfirmed": false,
+      "posterUrl": null,
+      "backdropUrl": null,
+      "visual": { "kind": "texture", "variant": "movie-projection-light" }
+    }
+  ],
+  "overview": [
+    {
+      "vertical": "music",
+      "id": "qa-music-image",
+      "title": "Short Signal",
+      "sourceUrl": "https://example.com/synthetic/short-signal",
+      "startLocal": "2026-07-15T20:00:00-07:00",
+      "venue": { "name": "The Example Hall", "city": "Los Angeles" },
+      "score": 92,
+      "interestScore": null,
+      "hassleScore": 3,
+      "urgency": "watch",
+      "confidence": "confirmed",
+      "reason": "A direct synthetic seed with a compact weeknight fit.",
+      "call": "Strong fit",
+      "bucket": "current",
+      "visual": { "kind": "image", "url": "/tmdb-logo.svg", "alt": "Short Signal atmosphere" }
+    },
+    {
+      "vertical": "sports",
+      "id": "qa-sports-rivalry-1",
+      "title": "Giants",
+      "sourceUrl": "https://example.com/synthetic/rivalry-1",
+      "startLocal": "2026-07-16T19:10:00-07:00",
+      "venue": { "name": "Synthetic Stadium", "city": "Los Angeles" },
+      "score": 91,
+      "interestScore": 91,
+      "hassleScore": 4,
+      "urgency": "watch",
+      "confidence": "confirmed",
+      "reason": "High-leverage rivalry context with a clean night-game shape.",
+      "call": "Prioritize",
+      "bucket": "current",
+      "visual": { "kind": "texture", "variant": "sports-stadium-lights" }
+    },
+    {
+      "vertical": "movies",
+      "id": "qa-movie-confirmed",
+      "title": "Synthetic Projection",
+      "sourceUrl": "https://example.com/synthetic/synthetic-projection",
+      "startLocal": "2026-07-20T12:00:00-07:00",
+      "venue": { "name": "Synthetic Cinema", "city": "Los Angeles" },
+      "score": 88,
+      "interestScore": null,
+      "hassleScore": null,
+      "urgency": "watch",
+      "confidence": "likely",
+      "reason": "The local fixture confirms a premium presentation.",
+      "call": "Consider",
+      "bucket": "current",
+      "visual": { "kind": "image", "url": "/tmdb-logo.svg", "alt": "Synthetic Projection poster" }
+    },
+    {
+      "vertical": "music",
+      "id": "qa-music-festival",
+      "title": "Synthetic Night Market + more",
+      "sourceUrl": "https://example.com/synthetic/night-market",
+      "startLocal": "2026-07-25T18:30:00-07:00",
+      "venue": { "name": "Synthetic River Park", "city": "Los Angeles" },
+      "score": 72,
+      "interestScore": null,
+      "hassleScore": 6,
+      "urgency": "watch",
+      "confidence": "exploratory",
+      "reason": "A promoter-followed festival shape with enough direct signal to inspect the lineup.",
+      "call": "Selective",
+      "bucket": "current",
+      "visual": { "kind": "texture", "variant": "music-crowd-silhouette" }
+    },
+    {
+      "vertical": "sports",
+      "id": "qa-sports-night",
+      "title": "Padres",
+      "sourceUrl": "https://example.com/synthetic/night-game",
+      "startLocal": "2026-07-28T20:10:00-07:00",
+      "venue": { "name": "Synthetic Stadium", "city": "Los Angeles" },
+      "score": 73,
+      "interestScore": 73,
+      "hassleScore": 6,
+      "urgency": "watch",
+      "confidence": "confirmed",
+      "reason": "A low-pressure night-game option with the right atmosphere.",
+      "call": "Wildcard",
+      "bucket": "current",
+      "visual": { "kind": "texture", "variant": "sports-night-game" }
+    }
+  ],
+  "overviewPlanAhead": [
+    {
+      "vertical": "music",
+      "id": "qa-music-later-one",
+      "title": "Later Signal One",
+      "sourceUrl": "https://example.com/synthetic/later-one",
+      "startLocal": "2026-09-06T20:00:00-07:00",
+      "venue": { "name": "Later Hall One", "city": "Los Angeles" },
+      "score": 78,
+      "interestScore": null,
+      "hassleScore": 3,
+      "urgency": "safe to wait",
+      "confidence": "likely",
+      "reason": "A later date worth holding without pulling it into the current call.",
+      "call": "Consider",
+      "bucket": "plan-ahead",
+      "visual": { "kind": "texture", "variant": "music-stage-haze" }
+    },
+    {
+      "vertical": "sports",
+      "id": "qa-sports-high-leverage",
+      "title": "Yankees",
+      "sourceUrl": "https://example.com/synthetic/high-leverage",
+      "startLocal": "2026-09-18T18:40:00-07:00",
+      "venue": { "name": "Synthetic Stadium", "city": "Los Angeles" },
+      "score": 84,
+      "interestScore": 88,
+      "hassleScore": 5,
+      "urgency": "safe to wait",
+      "confidence": "confirmed",
+      "reason": "High leverage remains useful planning context even outside the current window.",
+      "call": "Prioritize",
+      "bucket": "plan-ahead",
+      "visual": { "kind": "texture", "variant": "sports-scoreboard-glow" }
+    },
+    {
+      "vertical": "movies",
+      "id": "qa-movie-long-lead",
+      "title": "Long Lead Cinema",
+      "sourceUrl": "https://example.com/synthetic/long-lead-cinema",
+      "startLocal": "2026-10-01T12:00:00-07:00",
+      "venue": { "name": "Synthetic Cinema", "city": "Los Angeles" },
+      "score": 76,
+      "interestScore": null,
+      "hassleScore": null,
+      "urgency": "safe to wait",
+      "confidence": "exploratory",
+      "reason": "A long-lead film placeholder kept separate until local presentation is confirmed.",
+      "call": "Watch",
+      "bucket": "plan-ahead",
+      "visual": { "kind": "texture", "variant": "movie-projection-light" }
+    }
+  ],
+  "recentHistory": [
+    {
+      "historyId": "rh-qa-past-music",
+      "canonicalEventId": "qa-past-music",
+      "feedbackSnapshotId": "fs-qa-past-music",
+      "vertical": "music",
+      "title": "Past Synthetic Set",
+      "dateLocal": "2026-07-01",
+      "locationLabel": "Synthetic Hall · Los Angeles",
+      "firstShownAt": "2026-06-20T19:00:00.000Z",
+      "lastShownAt": "2026-06-30T19:00:00.000Z",
+      "surfaces": ["overview", "shortlist"],
+      "bestRank": 1
+    },
+    {
+      "historyId": "rh-qa-past-movie",
+      "canonicalEventId": "qa-past-movie",
+      "feedbackSnapshotId": null,
+      "vertical": "movies",
+      "title": "Past Synthetic Film",
+      "dateLocal": "2026-06-28",
+      "locationLabel": null,
+      "firstShownAt": "2026-06-15T19:00:00.000Z",
+      "lastShownAt": "2026-06-25T19:00:00.000Z",
+      "surfaces": ["shortlist"],
+      "bestRank": 2
+    }
+  ],
+  "overviewAdvisory": {
+    "queuedCount": 8,
+    "enhancedCount": 0,
+    "model": null,
+    "status": "unavailable"
+  },
+  "eventEnhancement": {
+    "mode": "partial",
+    "model": null,
+    "enhancedEventCount": 1,
+    "passes": {}
+  },
+  "sportsEnhancement": {
+    "mode": "unavailable",
+    "model": null,
+    "enhancedGameCount": 0,
+    "passes": {}
+  },
+  "editorial": {
+    "mode": "deterministic",
+    "status": "unavailable",
+    "headline": "A few synthetic options clear the bar.",
+    "verdict": "selective",
+    "lead": "The fixture keeps the current call small while leaving the longer evidence available in each vertical.",
+    "decisionNotes": ["Direct signals remain separate from exploratory bridges.", "Unknown price stays unknown."],
+    "skipCall": "Do not confuse a complete-looking card with confirmed availability.",
+    "caution": "Synthetic browser fixture only."
+  }
+}

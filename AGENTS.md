@@ -84,6 +84,7 @@ For music advisory passes, missing lineup, genre, or identity detail in the sour
 
 ## Automation contract
 
+- `site/` is an ordinary tracked directory in the main Taste Engine repository, not a submodule or nested Git repository. Keep the personal GitHub SSH remote as the only persistent `origin`; never persist a Sites source credential or managed Sites remote in local Git configuration. Sites publication must derive a site-rooted source commit from the `site/` subtree, push it with a short-lived per-command Sites credential, and package the matching `site/` build.
 - The target production scheduler is a minimal external trigger for a protected Sites refresh route; it contains no Taste Engine logic or source credentials beyond its refresh secret.
 - Keep the guarded local Codex automation as a recovery and parity producer until every hosted adapter, validation gate, and two consecutive scheduled refreshes pass.
 - Monday and Thursday morning runs should preflight `user-top-read`, reuse valid Top Artists windows or the last valid Spotify snapshot when Playlist Sync is unavailable, refresh Last.fm, Framework's artist roster, MLB, ticket observations, and structured sources independently, run tests, update the projection, and preview-validate before promoting through the site's existing Sites access policy. Source health is grouped in the site by Music, Sports, Movies, and Editorial; `spotify-top-artists` exposes only restrained window freshness and cache expiry, never authorization or token details.
