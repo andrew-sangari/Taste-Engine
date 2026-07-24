@@ -1,3 +1,5 @@
+import { localDateDifference, localWeekdayIndex, weekdayForLocalDate } from './localDate.js';
+
 const SEATGEEK_EVENTS_URL = 'https://api.seatgeek.com/2/events';
 const TICKETMASTER_EVENTS_URL = 'https://app.ticketmaster.com/discovery/v2/events.json';
 
@@ -129,6 +131,8 @@ export function enrichSportsGames(games, standings, config, {
       opponentDivisionRank: opponent?.divisionRank ?? null,
       opponentLast10: opponent?.lastTen ?? null,
       opponentStreak: opponent?.streak ?? null,
+      opponentLeagueName: opponent?.league?.name ?? null,
+      opponentDivisionName: opponent?.division?.name ?? null,
       rivalryTier: rivalry.tier,
       probablePitchers: {
         home: mergePitcherStats(game.probablePitchers?.home, pitcherStats),
@@ -148,12 +152,14 @@ export function scoreSportsGame(game, config, now = new Date()) {
   const rivalryScore = ({ high: 15, medium: 8, low: 3, none: 0 }[game.sportsContext?.rivalryTier] ?? 0);
   const pitchingScore = pitchingMatchupScore(game.sportsContext?.probablePitchers);
   const leverageScore = ({ high: 10, medium: 6, low: 2, unknown: 0 }[game.sportsContext?.playoffLeverage] ?? 0);
+  const leagueRelevanceScore = leagueRelevance(game.sportsContext);
   const convenienceScore = dateConvenience(game.startLocal);
-  const hassleScore = sportsHassle(game, config);
-  const interestScore = Math.min(100, 35 + opponentQuality + rivalryScore + pitchingScore + leverageScore + convenienceScore);
+  const hassle = sportsHassle(game, config);
+  const hassleScore = hassle.score;
+  const interestScore = Math.min(100, 35 + opponentQuality + rivalryScore + pitchingScore + leverageScore + leagueRelevanceScore + convenienceScore);
   const urgency = sportsTicketUrgency(game.ticketObservations ?? [], game.startLocal, now);
   const confidence = game.sportsContext?.opponentWinPct == null ? 'medium' : game.sportsContext.probablePitchers.confirmed ? 'high' : 'medium';
-  const whyYou = sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, convenienceScore, hassleScore });
+  const whyYou = sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, leagueRelevanceScore, convenienceScore, hassleScore });
   return {
     excluded: false,
     interestScore,
@@ -162,24 +168,26 @@ export function scoreSportsGame(game, config, now = new Date()) {
     rivalryScore,
     pitchingScore,
     leverageScore,
+    leagueRelevanceScore,
     convenienceScore,
     hassleScore,
-    hassleReasons: sportsHassleReasons(game, config),
+    hassleBreakdown: hassle,
+    hassleReasons: hassle.reasons,
     urgency,
     confidence,
     whyYou
   };
 }
 
-function sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, convenienceScore, hassleScore }) {
-  const date = game.startLocal ? new Date(game.startLocal) : null;
-  const day = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('en-US', { weekday: 'long' }) : null;
+function sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, leagueRelevanceScore, convenienceScore, hassleScore }) {
+  const day = weekdayForLocalDate(game.startLocal);
   const friction = hassleScore <= 4 ? 'Low-hassle' : hassleScore <= 6 ? 'Manageable' : 'Higher-hassle';
   const reasons = [];
   if (rivalryScore >= 15) reasons.push(`${game.awayTeam.shortName || game.awayTeam.name} rivalry`);
   else if (opponentQuality >= 8) reasons.push('a stronger-than-usual matchup');
   if (pitchingScore >= 7) reasons.push('a strong pitching matchup');
   if (leverageScore >= 6) reasons.push('useful late-season leverage');
+  if (leagueRelevanceScore >= 4) reasons.push('an AL East measuring-stick matchup');
   if (!reasons.length && convenienceScore >= 8) reasons.push('a good weekend timing window');
   if (!reasons.length) reasons.push('a worthwhile Dodgers home-game setup');
   return `${friction} ${day ? `${day} ` : ''}game with ${joinReasons(reasons)}.`;
@@ -233,15 +241,25 @@ function sportsTags(game, opponent, rivalry, context) {
   if (rivalry.label) tags.push(`${game.awayTeam.shortName || game.awayTeam.name} rivalry`);
   if (opponent?.divisionRank === 1) tags.push(`${opponent.division?.name ?? 'Division'} leader`);
   if (opponent?.leagueRank != null && opponent.leagueRank <= 5) tags.push('Contending opponent');
+  if (/american league/i.test(String(opponent?.league?.name ?? ''))) tags.push('AL matchup');
+  if (/american league east|al east/i.test(String(opponent?.division?.name ?? ''))) tags.push('AL East matchup');
   if (context.probablePitchers.confirmed && pitchingMatchupScore(context.probablePitchers) >= 7) tags.push('Strong pitching matchup');
   if (context.playoffLeverage === 'high') tags.push('Late-season leverage');
-  if ([0, 6].includes(new Date(game.startLocal).getDay())) tags.push('Weekend game');
+  if ([0, 6].includes(localWeekdayIndex(game.startLocal))) tags.push('Weekend game');
   return tags;
 }
 
 function opponentQualityScore(context = {}) {
   if (Number.isFinite(context.opponentLeagueRank)) return Math.max(0, Math.min(20, Math.round(20 - (context.opponentLeagueRank - 1) * 1.25)));
   if (Number.isFinite(context.opponentWinPct)) return Math.max(0, Math.min(20, Math.round((context.opponentWinPct - 0.35) * 66.67)));
+  return 0;
+}
+
+function leagueRelevance(context = {}) {
+  const league = String(context.opponentLeagueName ?? '');
+  const division = String(context.opponentDivisionName ?? '');
+  if (/american league east|al east/i.test(division)) return 5;
+  if (/american league/i.test(league)) return 2;
   return 0;
 }
 
@@ -266,28 +284,43 @@ function playoffLeverage(startLocal, opponent) {
 }
 
 function dateConvenience(startLocal) {
-  const date = new Date(startLocal);
-  if (Number.isNaN(date.getTime())) return 0;
-  const day = date.getDay();
+  const day = localWeekdayIndex(startLocal);
+  if (day == null) return 0;
   if (day === 0 || day === 6) return 10;
   if (day === 5) return 8;
   return 4;
 }
 
 function sportsHassle(game, config) {
-  let score = 4;
-  if (!game.ticketObservations?.length) score += 1;
-  if (game.timeTbd || game.dateTbd) score += 2;
-  if (config.homeVenueNames?.length && !config.homeVenueNames.some((name) => normalizeTeamText(game.venue.name).includes(normalizeTeamText(name)))) score += 1;
-  return Math.min(10, score);
-}
-
-function sportsHassleReasons(game, config) {
-  const reasons = ['Dodger Stadium logistics'];
-  if (!game.ticketObservations?.length) reasons.push('ticket coverage unknown');
-  if (game.timeTbd || game.dateTbd) reasons.push('time or date is TBD');
-  if (config.homeVenueNames?.length && !config.homeVenueNames.some((name) => normalizeTeamText(game.venue.name).includes(normalizeTeamText(name)))) reasons.push('venue confirmation pending');
-  return reasons;
+  const logisticalReasons = ['Dodger Stadium logistics'];
+  const commercialReasons = [];
+  let logistical = 2;
+  let commercial = 0;
+  if (game.timeTbd || game.dateTbd) {
+    logistical += 2;
+    logisticalReasons.push('time or date is TBD');
+  }
+  if (config.homeVenueNames?.length && !config.homeVenueNames.some((name) => normalizeTeamText(game.venue.name).includes(normalizeTeamText(name)))) {
+    logistical += 1;
+    logisticalReasons.push('venue confirmation pending');
+  }
+  const lowest = (game.ticketObservations ?? []).map((item) => Number(item.lowestPriceUsd)).filter(Number.isFinite).sort((a, b) => a - b)[0];
+  if (lowest != null) {
+    commercialReasons.push(`from $${lowest}`);
+    if (Number.isFinite(config.maxTicketPriceUsd) && lowest > config.maxTicketPriceUsd) {
+      commercial += 2;
+      commercialReasons.push('above ticket budget');
+    }
+  }
+  const personalContext = Math.max(-2, Math.min(2, Number(game.personalContextFriction ?? 0) || 0));
+  return {
+    score: Math.max(0, Math.min(10, logistical + commercial + personalContext)),
+    logistical,
+    commercial,
+    personalContext,
+    commercialUncertain: lowest == null,
+    reasons: [...logisticalReasons, ...commercialReasons]
+  };
 }
 
 function mergePitcherStats(pitcher, stats) {
@@ -343,8 +376,7 @@ function distanceMiles(lat1, lon1, lat2, lon2) {
 }
 
 function daysUntil(startLocal, now) {
-  const date = new Date(startLocal);
-  return Number.isNaN(date.getTime()) ? null : Math.ceil((date.getTime() - now.getTime()) / 86_400_000);
+  return localDateDifference(startLocal, now);
 }
 
 async function requestJson(url, fetchImpl, label) {

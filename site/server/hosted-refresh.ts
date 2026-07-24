@@ -7,7 +7,7 @@ import {
   type HostedPlaylistEvidence,
 } from "./hosted-refresh-contract";
 import { buildHostedProjection } from "./hosted-projection";
-import { readActiveProjection } from "./persistence";
+import { readActiveProjection, readFeedbackRecords } from "./persistence";
 import {
   getSpotifyPlaylistArtists,
   readPlaylistSelections,
@@ -113,6 +113,7 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
         topArtists.status === "active" ? "active" : "partial",
         topArtists.artists.length,
         topArtists.warnings.length,
+        topArtistHealthDetails(topArtists.windows),
       ));
     } catch (error) {
       sourceHealth.push(health("spotify-top-artists", "unavailable", 0, 1));
@@ -160,12 +161,14 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
       warnings,
     };
     const previousProjection = await readActiveProjection();
+    const feedbackRecords = await readFeedbackRecords(ownerEmail);
     const hosted = await buildHostedProjection({
       sourceSnapshot,
       initialSourceHealth: sourceHealth,
       previousProjection: previousProjection && typeof previousProjection === "object"
         ? previousProjection as Record<string, unknown>
         : null,
+      feedbackRecords,
       generatedAt,
     });
     if (hosted.publicationBlockers.length) {
@@ -379,6 +382,17 @@ function health(
   details?: SourceHealth["details"],
 ): SourceHealth {
   return { source, status, itemCount, warningCount, ...(details ? { details } : {}) };
+}
+
+function topArtistHealthDetails(windows: unknown): Record<string, unknown> {
+  const input = windows && typeof windows === "object" ? windows as Record<string, unknown> : {};
+  const summary: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const window = value && typeof value === "object" ? value as Record<string, unknown> : {};
+    const status = String(window.status ?? "unavailable");
+    summary[key] = status === "active" || status === "fresh" ? "fresh" : status === "cached" ? "cached" : "unavailable";
+  }
+  return summary;
 }
 
 function safeWarning(label: string, error: unknown): string {

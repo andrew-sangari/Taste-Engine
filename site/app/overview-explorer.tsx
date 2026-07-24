@@ -2,7 +2,9 @@ import { CardActions, calendarInputFrom, planningInputFrom } from "./card-action
 import { ChangesStrip, type ChangesSinceRefresh } from "./changes-strip";
 import type { PublicFeedbackSnapshot } from "./feedback-store";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
-import { HassleDial, UrgencyChip } from "./signal-texture";
+import { RecommendationSignals } from "./signal-texture";
+import { eventHref } from "./event-anchor";
+import { formatLocalDate as formatLaDate } from "./local-date";
 
 type OverviewItem = {
   vertical: 'music' | 'movies' | 'sports';
@@ -69,7 +71,7 @@ export function OverviewExplorer({ overview, planAhead, generatedAt, projectionG
       )}
 
       <section className="planAhead" aria-label="Plan ahead recommendations">
-        <div className="planAheadIntro rv"><h3>Plan ahead</h3><p>Exceptional longer-lead dates, kept separate from the current call.</p></div>
+        <div className="planAheadIntro rv"><h3>Plan ahead</h3><p>Exceptional longer-lead dates · ranked by fit.</p></div>
         {planAhead.length ? <div className="planAheadGrid" data-stagger="">
           {planAhead.slice(0, 3).map((item, index) => <OverviewCard item={item} index={index} key={item.id} planAhead />)}
         </div> : <p className="planAheadEmpty">No later date currently clears the planning bar.</p>}
@@ -102,12 +104,14 @@ function OverviewCard({ item, index, planAhead = false }: { item: OverviewItem; 
         <p className="overviewPlace">{item.venue?.name ?? 'Venue TBD'} · {item.venue?.city ?? 'Los Angeles'}</p>
         <p className="overviewReason">{item.reason}</p>
         <div className="overviewUtility">
-          <div className="overviewUtilitySignals" aria-label="Recommendation signals">
-            <span>{item.call ?? callLabel(item.score)}</span>
-            {item.hassleScore == null ? null : <HassleDial score={item.hassleScore} />}
-            {item.urgency ? <UrgencyChip urgency={item.urgency} /> : null}
-          </div>
-          <a className="overviewUtilityCta" href={`#${item.vertical}`}>View in {verticalLabel} <span aria-hidden="true">→</span></a>
+          <RecommendationSignals
+            confidence={item.confidence}
+            fit={item.interestScore ?? item.score}
+            friction={item.hassleScore}
+            status={item.call ?? callLabel(item.score)}
+            urgency={item.urgency}
+          />
+          <a className="overviewUtilityCta" href={eventHref(item.id)}>View in {verticalLabel} <span aria-hidden="true">→</span></a>
           <CardActions
             calendarEvent={calendarInputFrom({ ...item, description: item.reason })}
             layout="overview"
@@ -156,10 +160,7 @@ function formatEditorialHeadline(headline: string) {
 }
 
 function formatLocalDate(value: string | null) {
-  if (!value) return 'Date TBD';
-  const dateKey = value.slice(0, 10);
-  const stableDate = new Date(`${dateKey}T12:00:00Z`);
-  return stableDate.toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' });
+  return formatLaDate(value, { weekday: 'short', month: 'short', day: 'numeric' }) ?? 'Date TBD';
 }
 
 function callLabel(score: number) {

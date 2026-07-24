@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { NO_INFORMATION_ADVISORY, isGroundedAdvisory } from "./advisories";
 import { CardActions, calendarInputFrom, planningInputFrom } from "./card-actions";
 import type { PublicFeedbackSnapshot } from "./feedback-store";
 import { FilterDisclosure } from "./filter-disclosure";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
-import { HassleDial, UrgencyChip } from "./signal-texture";
+import { RecommendationSignals, UrgencyChip } from "./signal-texture";
+import { eventAnchor } from "./event-anchor";
+import { daysFromLocalDate, formatLocalDate, formatLocalTime } from "./local-date";
 
 type LocalEnhancement = {
   personalFit?: { score: number; label: string; explanation: string };
@@ -32,6 +34,7 @@ type EventItem = {
     artistFit: number;
     hassleScore: number;
     hassleReasons: string[];
+    hassleBreakdown?: { logistical: number; commercial: number; personalContext: number; commercialUncertain?: boolean };
     utility: number;
     confidence: string;
     urgency: string;
@@ -57,7 +60,7 @@ type EventTypeFilter = "all" | "concert" | "festival" | "dj set";
 type ProviderFilter = "all" | "seatgeek" | "ticketmaster" | "framework" | "insomniac";
 type SortMode = "fit" | "date" | "urgency" | "hassle";
 
-export function EventExplorer({ events, generatedAt }: { events: EventItem[]; generatedAt: string }) {
+export function EventExplorer({ events, generatedAt, targetEventId = null }: { events: EventItem[]; generatedAt: string; targetEventId?: string | null }) {
   const [windowFilter, setWindowFilter] = useState<WindowFilter>("soon");
   const [eventType, setEventType] = useState<EventTypeFilter>("all");
   const [provider, setProvider] = useState<ProviderFilter>("all");
@@ -65,12 +68,13 @@ export function EventExplorer({ events, generatedAt }: { events: EventItem[]; ge
   const [lowHassleOnly, setLowHassleOnly] = useState(false);
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const generated = useMemo(() => new Date(generatedAt), [generatedAt]);
+  useEffect(() => {
+    if (targetEventId) { setWindowFilter("all"); setShowAll(true); }
+  }, [targetEventId]);
 
   const filtered = useMemo(() => {
     const result = events.filter((event) => {
-      const start = event.startLocal ? new Date(event.startLocal) : null;
-      const daysAway = start ? (start.getTime() - generated.getTime()) / 86_400_000 : Number.POSITIVE_INFINITY;
+      const daysAway = daysFromLocalDate(event.startLocal, generatedAt) ?? Number.POSITIVE_INFINITY;
       if (windowFilter === "soon" && daysAway > 30) return false;
       if (windowFilter === "later" && daysAway <= 30) return false;
       if (eventType !== "all" && (event.eventType ?? "concert") !== eventType) return false;
@@ -80,7 +84,7 @@ export function EventExplorer({ events, generatedAt }: { events: EventItem[]; ge
       return true;
     });
     return result.sort(eventComparator(sortMode));
-  }, [eventType, events, generated, lowHassleOnly, provider, sortMode, urgentOnly, windowFilter]);
+  }, [eventType, events, generatedAt, lowHassleOnly, provider, sortMode, urgentOnly, windowFilter]);
 
   const groups = useMemo(() => collateEvents(filtered), [filtered]);
   const visibleGroups = showAll ? groups : groups.slice(0, 8);
@@ -128,7 +132,6 @@ export function EventExplorer({ events, generatedAt }: { events: EventItem[]; ge
 }
 
 function EventCard({ event, featured, occurrences }: { event: EventItem; featured: boolean; occurrences: EventItem[] }) {
-  const date = event.startLocal ? new Date(event.startLocal) : null;
   const price = event.ticketObservation.lowestPriceUsd;
   const origin = event.matchedArtists[0]?.origin ?? "source";
   const originLabel = origin === "similar" ? "Similar artist" : origin === "tag" ? "Genre discovery" : origin === "promoter" ? "Promoter pick" : "In your rotation";
@@ -138,10 +141,10 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
   const lineupPreview = lineup?.orderedArtists.filter((artist) => artist.relation !== "unknown" && !displayTitle.toLocaleLowerCase().includes(artist.displayName.toLocaleLowerCase())).slice(0, 3) ?? [];
 
   return (
-    <article className={`eventCard rv ${featured ? "eventFeatured" : "eventCompact"}`}>
+    <article className={`eventCard rv ${featured ? "eventFeatured" : "eventCompact"}`} id={eventAnchor(event.id)}>
       <RecommendationVisual className="eventVisual" visual={event.visual} />
       <div className="eventTopline">
-        <div className="eventDate"><span>{date ? date.toLocaleDateString("en-US", { month: "short" }).toUpperCase() : "TBD"}</span><strong>{date ? date.getDate() : "—"}</strong></div>
+        <div className="eventDate"><span>{formatLocalDate(event.startLocal, { month: "short" })?.toUpperCase() ?? "TBD"}</span><strong>{formatLocalDate(event.startLocal, { day: "numeric" }) ?? "—"}</strong></div>
         <div className="eventSignals">
           <span>{event.eventType ?? "concert"}</span>
           <span className={`origin-${origin}`}>{originLabel}</span>
@@ -154,6 +157,7 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
         <h3>{displayTitle}</h3>
         {lineupPreview.length ? <p className="lineupPreview">Taste matches in the lineup: {lineupPreview.map((artist) => artist.displayName).join(" · ")}</p> : null}
         <p className="eventWhy">{event.ranking.whyYou}</p>
+        {event.ranking.artistFit >= 55 && event.ranking.hassleScore >= 6 ? <p className="planningObstacle">Strong fit · planning obstacle: {event.ranking.hassleReasons.join(" · ") || "check logistics before committing"}.</p> : null}
         {enhancement ? <LocalTake enhancement={enhancement} /> : null}
         {lineup && lineup.totalArtists > 0 ? <LineupDetails lineup={lineup} /> : null}
       </div>
@@ -163,8 +167,8 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
       {occurrences.length > 1 ? (
         <details className="occurrenceList">
           <summary>View all {occurrences.length} dates</summary>
-          {collateOccurrenceRows(occurrences).map((row) => <div className="occurrenceRow" key={row.key}>
-            <span>{row.date ? row.date.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" }) : "Date TBD"}</span>
+          {collateOccurrenceRows(occurrences).map((row) => <div className="occurrenceRow" id={row.eventId === event.id ? undefined : eventAnchor(row.eventId)} key={row.key}>
+            <span>{formatLocalDate(row.dateLocal, { month: "short", day: "numeric", weekday: "short" }) ?? "Date TBD"}</span>
             <span>{row.venue}</span>
             <span className="occurrenceLinks">{row.links.map((link) => <a href={link.url} key={`${link.source}|${link.url}`} rel="noreferrer" target="_blank">{providerLabel(link.source)} ↗</a>)}</span>
           </div>)}
@@ -172,7 +176,7 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
       ) : null}
 
       <div className="eventFooter">
-        <div>{date && !event.timeTbd ? <span>{date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span> : <span className="signalAbsent">Time TBD</span>}{price == null ? null : <span>From ${price}</span>}<HassleDial score={event.ranking.hassleScore} /></div>
+        <div>{!event.timeTbd && formatLocalTime(event.startLocal) ? <span>{formatLocalTime(event.startLocal)}</span> : <span className="signalAbsent">Time TBD</span>}{price == null ? null : <span>From ${price}</span>}<RecommendationSignals confidence={event.ranking.confidence} fit={event.ranking.artistFit} friction={event.ranking.hassleScore} status={event.ranking.utility >= 55 ? "Selective" : "Watch"} urgency={event.ranking.urgency} /></div>
         <CardActions
           calendarEvent={calendarInputFrom({ ...event, title: displayTitle, description: event.ranking.whyYou })}
           layout="music"
@@ -192,7 +196,7 @@ function LineupDetails({ lineup }: { lineup: NonNullable<EventItem["lineupDispla
     <div className="lineupGroups">
       {[...groups.entries()].map(([index, artists]) => <p key={index}>{artists.map((artist) => <span className={`lineup-${artist.relation}`} key={artist.lineupEntryId}>{artist.displayName}</span>).reduce<ReactNode[]>((items, artist, artistIndex) => artistIndex ? [...items, <b aria-hidden="true" key={`sep-${index}-${artistIndex}`}> B2B </b>, artist] : [artist], [])}</p>)}
       {lineup.ages ? <p className="lineupAges">Ages: {lineup.ages}</p> : null}
-      {lineup.sourceUrl ? <a href={lineup.sourceUrl} rel="noreferrer" target="_blank">Lineup via EDMTrain ↗</a> : null}
+      {lineup.sourceUrl ? <a href={lineup.sourceUrl} rel="noreferrer" target="_blank">Lineup via EDMTrain</a> : null}
     </div>
   </details>;
 }
@@ -229,20 +233,19 @@ function groupKey(event: EventItem) {
 }
 
 function collateOccurrenceRows(occurrences: EventItem[]) {
-  const rows = new Map<string, { key: string; date: Date | null; venue: string; links: Array<{ source: string; url: string }> }>();
+  const rows = new Map<string, { key: string; eventId: string; dateLocal: string | null; venue: string; links: Array<{ source: string; url: string }> }>();
   for (const occurrence of occurrences) {
-    const date = occurrence.startLocal ? new Date(occurrence.startLocal) : null;
     const dateKey = occurrence.startLocal ? String(occurrence.startLocal).slice(0, 10) : "tbd";
     const venue = occurrence.venue.name || occurrence.venue.city || "Venue TBD";
     const key = `${dateKey}|${venue.toLocaleLowerCase()}`;
-    const row = rows.get(key) ?? { key, date, venue, links: [] };
+    const row = rows.get(key) ?? { key, eventId: occurrence.id, dateLocal: occurrence.startLocal, venue, links: [] };
     const links = occurrence.sourceLinks?.length ? occurrence.sourceLinks : [{ source: occurrence.sources?.[0] ?? "source", url: occurrence.sourceUrl }];
     for (const link of links) {
       if (link.url && !row.links.some((existing) => existing.source === link.source && existing.url === link.url)) row.links.push(link);
     }
     rows.set(key, row);
   }
-  return [...rows.values()].sort((left, right) => String(left.date).localeCompare(String(right.date)));
+  return [...rows.values()].sort((left, right) => String(left.dateLocal).localeCompare(String(right.dateLocal)));
 }
 
 function providerLabel(value: string) {

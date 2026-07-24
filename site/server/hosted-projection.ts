@@ -7,7 +7,6 @@ import {
   applyPitcherStats,
   buildExpandedArtistSnapshot,
   buildOverviewBuckets,
-  buildTasteProfile,
   deduplicateCandidates,
   enrichEventsWithEdmtrain,
   enrichMovieMetadata,
@@ -41,8 +40,11 @@ import {
   resolveMusicVisual,
   resolveSeatGeekPerformers,
   resolveSportsVisual,
+  scoreSportsGame,
   selectMovieCandidates,
 } from "./deterministic-engine.js";
+import { buildHostedTasteProfile } from "./taste-profile.ts";
+import { applyHostedFeedbackAdjustments, applyHostedPersonalContext } from "./feedback-learning.ts";
 import { enhanceHostedMusic, enhanceHostedSports, generateHostedEditorial } from "./hosted-advisory.ts";
 import { readHostedPipelineConfig } from "./hosted-config.ts";
 
@@ -70,11 +72,13 @@ export async function buildHostedProjection({
   sourceSnapshot,
   initialSourceHealth,
   previousProjection,
+  feedbackRecords = [],
   generatedAt = new Date(),
 }: {
   sourceSnapshot: Record<string, unknown>;
   initialSourceHealth: SourceHealth[];
   previousProjection: Record<string, unknown> | null;
+  feedbackRecords?: Array<Record<string, unknown>>;
   generatedAt?: Date;
 }): Promise<HostedProjectionResult> {
   const config = readHostedPipelineConfig();
@@ -309,18 +313,24 @@ export async function buildHostedProjection({
     [...framework.items, ...insomniac.items],
     frameworkArtists,
   );
-  const edmtrainEnrichment = enrichEventsWithEdmtrain(canonicalConcerts, edmtrain.items, rankedSnapshot);
+  const concertContext = applyHostedPersonalContext(array(canonicalConcerts).map(record), feedbackRecords, generatedAt);
+  const edmtrainEnrichment = enrichEventsWithEdmtrain(concertContext, edmtrain.items, rankedSnapshot);
   updateEdmtrainHealth(sourceHealth, edmtrain.items.length, edmtrainEnrichment);
   const rankedAll = rankCandidates(edmtrainEnrichment.events, rankedSnapshot, config.brief, generatedAt);
-  const ranked = array(rankedAll)
+  const musicLearning = applyHostedFeedbackAdjustments(array(rankedAll).map(record), feedbackRecords, generatedAt);
+  const ranked = musicLearning.candidates
     .filter((candidate) => !record(record(candidate).ranking).excluded && array(record(candidate).matchedArtists).length > 0)
     .slice(0, 120);
-  const sports = joinSportsTickets(
+  const sportsRaw = joinSportsTickets(
     mlb.items,
     [...sportsSeatGeek.items, ...sportsTicketmaster.items],
     sportsSourceConfig,
     generatedAt,
   );
+  const sportsContext = applyHostedPersonalContext(array(sportsRaw).map(record), feedbackRecords, generatedAt)
+    .map((game) => ({ ...game, ranking: scoreSportsGame(game, sportsSourceConfig, generatedAt) }));
+  const sportsLearning = applyHostedFeedbackAdjustments(sportsContext, feedbackRecords, generatedAt);
+  const sports = sportsLearning.candidates;
 
   const deterministicMusic = ranked.map((candidate) => toDisplayEvent(candidate, null));
   const deterministicSports = array(sports).map((game) => toDisplaySportsGame(game, null));
@@ -406,7 +416,13 @@ export async function buildHostedProjection({
     overview: overview.current,
     overviewPlanAhead: overview.planAhead,
     overviewAdvisory,
-    tasteProfile: buildTasteProfile(rankedSnapshot),
+    tasteProfile: buildHostedTasteProfile(rankedSnapshot, publicFeedbackSummary(feedbackRecords)),
+    feedbackLearning: {
+      applied: musicLearning.audit.appliedCandidateCount + sportsLearning.audit.appliedCandidateCount > 0,
+      policyVersion: 3,
+      music: musicLearning.audit,
+      sports: sportsLearning.audit,
+    },
     eventEnhancement: {
       mode: musicAdvisory.mode,
       model: musicAdvisory.model,
@@ -643,6 +659,19 @@ function validateProjection(projection: Record<string, unknown>, health: SourceH
     blockers.push("Projection exceeds the D1 publication size limit.");
   }
   return blockers;
+}
+
+function publicFeedbackSummary(records: Array<Record<string, unknown>>) {
+  const statuses = ["attended-worth-it", "attended-not-worth-it", "wanted-to-attend", "lost-interest", "did-not-attend-logistical"];
+  const statusCounts = Object.fromEntries(statuses.map((status) => [status, 0]));
+  for (const entry of records) {
+    const status = String(entry.status ?? "");
+    if (Object.hasOwn(statusCounts, status)) statusCounts[status] += 1;
+  }
+  return {
+    statusCounts,
+    attendedCount: statusCounts["attended-worth-it"] + statusCounts["attended-not-worth-it"],
+  };
 }
 
 function advisoryHealth(source: string, result: {

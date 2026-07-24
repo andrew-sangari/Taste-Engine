@@ -40,8 +40,9 @@ test('missing and empty journals produce empty deterministic state', async () =>
   assert.deepEqual(state.outcomesByStatus, {
     'attended-worth-it': 0,
     'attended-not-worth-it': 0,
-    'skipped-still-interested': 0,
-    'skipped-no-longer-interested': 0
+    'wanted-to-attend': 0,
+    'lost-interest': 0,
+    'did-not-attend-logistical': 0
   });
 });
 
@@ -140,7 +141,7 @@ test('artist, venue, promoter, and event-shape effects are capped in shadow mode
     eventDateLocal: `2026-07-0${index + 1}`,
     evidenceSnapshot: evidence({ artist: 'artist-1', venue: 'venue-1', promoter: 'series-1', shape: 'festival' })
   }));
-  const state = deriveFeedbackState(records);
+  const state = deriveFeedbackState(records, { now: new Date(BASE_DATE) });
   assert.equal(state.signals.artist[0].eligible, true);
   assert.equal(state.signals.venue[0].eligible, true);
   assert.equal(state.signals.promoterOrSeries[0].eligible, true);
@@ -162,7 +163,7 @@ test('changed titles are reported without replacing canonical identity', () => {
   const state = deriveFeedbackState([
     record({ canonicalEventId: 'event-1', eventDateLocal: '2026-07-20', eventTitleSnapshot: 'Old title', evidenceSnapshot: evidence({ artist: 'artist-1' }) }),
     record({ feedbackId: 'second', canonicalEventId: 'event-2', eventDateLocal: '2026-07-20', eventTitleSnapshot: 'Artist One', evidenceSnapshot: evidence({ artist: 'artist-1' }) })
-  ]);
+  ], { now: new Date(BASE_DATE) });
   const result = simulateFeedback({
     projection: projection([musicEvent('event-1', 50, 'New title'), musicEvent('event-2', 40, 'Artist One')]),
     state,

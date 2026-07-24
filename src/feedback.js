@@ -7,8 +7,17 @@ export const FEEDBACK_ACTIONS = ['record', 'revoke', 'replace'];
 export const FEEDBACK_STATUSES = [
   'attended-worth-it',
   'attended-not-worth-it',
-  'skipped-still-interested',
-  'skipped-no-longer-interested'
+  'wanted-to-attend',
+  'lost-interest',
+  'did-not-attend-logistical'
+];
+export const LEGACY_FEEDBACK_STATUSES = Object.freeze({
+  'skipped-still-interested': 'wanted-to-attend',
+  'skipped-no-longer-interested': 'lost-interest'
+});
+export const FEEDBACK_REASON_CODES = [
+  'artist', 'lineup', 'production', 'crowd', 'venue', 'timing', 'hassle',
+  'price', 'distance', 'availability', 'calendar', 'other', 'legacy-unknown'
 ];
 export const FEEDBACK_SIGNAL_TAGS = [
   'artist',
@@ -25,15 +34,17 @@ export const FEEDBACK_SIGNAL_CATEGORIES = ['artist', 'venue', 'promoterOrSeries'
 const DEFAULT_FEEDBACK_CONFIG = {
   enabled: true,
   applyToPublishedRanking: false,
-  policyVersion: 1,
+  policyVersion: 3,
+  decayHalfLifeDays: 180,
   journalPath: 'data/taste/feedback.jsonl',
   statePath: 'data/taste/feedback-state.json',
   reportPath: 'data/taste/feedback-report.json',
   weights: {
     'attended-worth-it': 1,
     'attended-not-worth-it': 1,
-    'skipped-still-interested': 0.5,
-    'skipped-no-longer-interested': 0.5
+    'wanted-to-attend': 0.25,
+    'lost-interest': 0.5,
+    'did-not-attend-logistical': 0
   },
   adjustments: {
     artist: 4,
@@ -92,6 +103,7 @@ export function normalizeFeedbackConfig(input = {}) {
     enabled: booleanValue(value.enabled, DEFAULT_FEEDBACK_CONFIG.enabled, 'enabled'),
     applyToPublishedRanking: booleanValue(value.applyToPublishedRanking, DEFAULT_FEEDBACK_CONFIG.applyToPublishedRanking, 'applyToPublishedRanking'),
     policyVersion: positiveInteger(value.policyVersion ?? DEFAULT_FEEDBACK_CONFIG.policyVersion, 'policyVersion'),
+    decayHalfLifeDays: positiveNumber(value.decayHalfLifeDays ?? DEFAULT_FEEDBACK_CONFIG.decayHalfLifeDays, 'decayHalfLifeDays'),
     journalPath: pathValue(value.journalPath ?? DEFAULT_FEEDBACK_CONFIG.journalPath, 'journalPath'),
     statePath: pathValue(value.statePath ?? DEFAULT_FEEDBACK_CONFIG.statePath, 'statePath'),
     reportPath: pathValue(value.reportPath ?? DEFAULT_FEEDBACK_CONFIG.reportPath, 'reportPath'),
@@ -103,7 +115,7 @@ export function normalizeFeedbackConfig(input = {}) {
 
   const weights = value.weights && typeof value.weights === 'object' ? value.weights : {};
   for (const status of FEEDBACK_STATUSES) {
-    config.weights[status] = positiveNumber(weights[status] ?? DEFAULT_FEEDBACK_CONFIG.weights[status], `weights.${status}`);
+    config.weights[status] = nonNegativeNumber(weights[status] ?? DEFAULT_FEEDBACK_CONFIG.weights[status], `weights.${status}`);
   }
 
   const adjustments = value.adjustments && typeof value.adjustments === 'object' ? value.adjustments : {};
@@ -141,6 +153,12 @@ export function validateFeedbackRecord(record) {
   if (!isLocalDate(record.eventDateLocal)) errors.push('eventDateLocal must be YYYY-MM-DD');
   if (!safeText(record.eventTitleSnapshot, 500)) errors.push('eventTitleSnapshot must be a non-empty safe string');
   if (!FEEDBACK_STATUSES.includes(record.status)) errors.push('status is unsupported');
+  if (!Array.isArray(record.reasonCodes) || record.reasonCodes.some((reason) => !FEEDBACK_REASON_CODES.includes(reason)) || new Set(record.reasonCodes).size !== record.reasonCodes.length) {
+    errors.push('reasonCodes must contain unique supported reasons');
+  }
+  if (['wanted-to-attend', 'lost-interest', 'did-not-attend-logistical'].includes(record.status) && !record.reasonCodes.length) {
+    errors.push('this outcome requires one classified reason');
+  }
   if (record.rating != null && (!Number.isInteger(record.rating) || record.rating < 1 || record.rating > 5)) errors.push('rating must be an integer from 1 to 5');
   if (!Array.isArray(record.signalTags) || record.signalTags.some((tag) => !FEEDBACK_SIGNAL_TAGS.includes(tag)) || new Set(record.signalTags).size !== record.signalTags.length) {
     errors.push('signalTags must contain unique supported tags');
@@ -161,9 +179,10 @@ export function normalizeFeedbackRecord(input) {
     canonicalEventId: input?.canonicalEventId,
     eventDateLocal: input?.eventDateLocal,
     eventTitleSnapshot: input?.eventTitleSnapshot,
-    status: input?.status,
+    status: LEGACY_FEEDBACK_STATUSES[input?.status] ?? input?.status,
     rating: input?.rating == null ? null : Number(input.rating),
     signalTags: Array.isArray(input?.signalTags) ? [...input.signalTags] : input?.signalTags,
+    reasonCodes: Array.isArray(input?.reasonCodes) ? [...input.reasonCodes] : legacyReasons(input),
     notes: input?.notes == null ? null : input.notes,
     evidenceSnapshot: rawEvidenceSnapshot && typeof rawEvidenceSnapshot === 'object' && !Array.isArray(rawEvidenceSnapshot)
       ? normalizeEvidenceSnapshot(rawEvidenceSnapshot)
@@ -178,6 +197,7 @@ export function normalizeFeedbackRecord(input) {
   if (typeof record.eventTitleSnapshot === 'string') record.eventTitleSnapshot = record.eventTitleSnapshot.trim();
   if (typeof record.recordedAt === 'string' && Number.isFinite(Date.parse(record.recordedAt))) record.recordedAt = new Date(record.recordedAt).toISOString();
   if (Array.isArray(record.signalTags)) record.signalTags = sortByKnownOrder(record.signalTags, FEEDBACK_SIGNAL_TAGS);
+  if (Array.isArray(record.reasonCodes)) record.reasonCodes = sortByKnownOrder(record.reasonCodes, FEEDBACK_REASON_CODES);
   if (record.evidenceSnapshot && typeof record.evidenceSnapshot === 'object') {
     record.evidenceSnapshot.canonicalArtistIds = sortStrings(record.evidenceSnapshot.canonicalArtistIds);
     record.evidenceSnapshot.promoterOrSeriesIds = sortStrings(record.evidenceSnapshot.promoterOrSeriesIds);
@@ -394,7 +414,7 @@ export function replayFeedbackRecords(records = []) {
   };
 }
 
-export function deriveFeedbackState(records = [], { journalIssues = [], config = normalizeFeedbackConfig({}) } = {}) {
+export function deriveFeedbackState(records = [], { journalIssues = [], config = normalizeFeedbackConfig({}), now = new Date() } = {}) {
   const normalizedConfig = normalizeFeedbackConfig(config);
   const replay = replayFeedbackRecords(records);
   const activeRecords = replay.activeRecords;
@@ -409,7 +429,7 @@ export function deriveFeedbackState(records = [], { journalIssues = [], config =
     }
   }
   const signals = Object.fromEntries(FEEDBACK_SIGNAL_CATEGORIES.map((category) => [category, [...signalBuckets[category].entries()]
-    .map(([id, signalRecords]) => summarizeSignal(category, id, signalRecords, normalizedConfig))
+    .map(([id, signalRecords]) => summarizeSignal(category, id, signalRecords, normalizedConfig, now))
     .sort((left, right) => left.id.localeCompare(right.id))]));
   const ignored = [
     ...journalIssues.map((issue) => ({ source: 'journal', line: issue.line, code: issue.code, reason: issue.reason })),
@@ -522,7 +542,7 @@ export function buildFeedbackReport({ state, simulation, config = normalizeFeedb
     feedback: {
       enabled: normalizedConfig.enabled,
       applyToPublishedRanking: normalizedConfig.applyToPublishedRanking,
-      publicationApplication: 'not wired in this branch'
+      publicationApplication: normalizedConfig.applyToPublishedRanking ? 'validated deterministic adjustment' : 'shadow only'
     },
     validRecordCount: state?.validRecordCount ?? 0,
     activeFeedbackCount: state?.activeFeedbackCount ?? 0,
@@ -550,11 +570,19 @@ export function applyFeedbackAdjustmentsToCandidates(candidates, simulation, con
   return candidates.map((candidate) => {
     const evaluation = evaluations.get(candidate.id);
     if (!evaluation?.thresholdMet || evaluation.blockedByHardExclusion || evaluation.proposedAdjustment === 0 || !candidate.ranking || !Number.isFinite(evaluation.proposedFinalScore)) return candidate;
+    const safeAdjustment = {
+      applied: true,
+      scoreDelta: evaluation.proposedAdjustment,
+      categories: evaluation.evidenceCategories,
+      supportingOutcomeCount: evaluation.supportingActiveFeedbackIds.length,
+      policyVersion: normalizedConfig.policyVersion
+    };
     return {
       ...candidate,
       ranking: {
         ...candidate.ranking,
-        utility: evaluation.proposedFinalScore
+        utility: evaluation.proposedFinalScore,
+        feedbackAdjustment: safeAdjustment
       }
     };
   });
@@ -599,8 +627,8 @@ function evidenceEntries(record) {
   return entries;
 }
 
-function summarizeSignal(category, id, records, config) {
-  const positiveStatuses = new Set(['attended-worth-it', 'skipped-still-interested']);
+function summarizeSignal(category, id, records, config, now) {
+  const positiveStatuses = new Set(['attended-worth-it', 'wanted-to-attend']);
   const attendedStatuses = new Set(['attended-worth-it', 'attended-not-worth-it']);
   let positiveWeight = 0;
   let negativeWeight = 0;
@@ -610,8 +638,11 @@ function summarizeSignal(category, id, records, config) {
   for (const record of records) {
     eventIds.add(record.canonicalEventId);
     statusCounts[record.status] += 1;
-    if (positiveStatuses.has(record.status)) positiveWeight += config.weights[record.status];
-    else negativeWeight += config.weights[record.status];
+    const weight = (config.weights[record.status] ?? 0) * feedbackDecay(record.recordedAt, now, config.decayHalfLifeDays);
+    if (contributesTaste(record)) {
+      if (positiveStatuses.has(record.status)) positiveWeight += weight;
+      else negativeWeight += weight;
+    }
     if (attendedStatuses.has(record.status)) attendedEventIds.add(record.canonicalEventId);
   }
   const totalWeight = positiveWeight + negativeWeight;
@@ -663,8 +694,8 @@ function summarizeEvents(records) {
   return [...byEvent.entries()].map(([canonicalEventId, eventRecords]) => {
     const statuses = Object.fromEntries(FEEDBACK_STATUSES.map((status) => [status, 0]));
     for (const record of eventRecords) statuses[record.status] += 1;
-    const positive = eventRecords.filter((record) => ['attended-worth-it', 'skipped-still-interested'].includes(record.status)).length;
-    const negative = eventRecords.length - positive;
+    const positive = eventRecords.filter((record) => ['attended-worth-it', 'wanted-to-attend'].includes(record.status) && contributesTaste(record)).length;
+    const negative = eventRecords.filter((record) => !['attended-worth-it', 'wanted-to-attend'].includes(record.status) && contributesTaste(record)).length;
     const first = eventRecords[0];
     return {
       canonicalEventId,
@@ -884,6 +915,26 @@ function redactRecord(record) {
   return safe;
 }
 
+function legacyReasons(input) {
+  return Object.hasOwn(LEGACY_FEEDBACK_STATUSES, String(input?.status ?? '')) ? ['legacy-unknown'] : [];
+}
+
+function contributesTaste(record) {
+  if (['attended-worth-it', 'attended-not-worth-it', 'wanted-to-attend'].includes(record.status)) return true;
+  if (record.status !== 'lost-interest') return false;
+  // A legacy “not for me” entry had no reason. Preserve it as history, but do
+  // not guess whether it was taste, price, timing, or a one-off constraint.
+  return record.reasonCodes.some((reason) => ['artist', 'lineup', 'production', 'crowd', 'venue'].includes(reason));
+}
+
+function feedbackDecay(recordedAt, now, halfLifeDays) {
+  const recorded = new Date(recordedAt).getTime();
+  const reference = new Date(now).getTime();
+  if (!Number.isFinite(recorded) || !Number.isFinite(reference)) return 1;
+  const ageDays = Math.max(0, (reference - recorded) / 86_400_000);
+  return 2 ** (-ageDays / halfLifeDays);
+}
+
 function safeFeedbackIds(ids) {
   return ids.filter((id) => safeText(id, 200));
 }
@@ -988,6 +1039,12 @@ function pathValue(value, name) {
 function positiveNumber(value, name) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) throw new Error(`${name} must be greater than zero`);
+  return number;
+}
+
+function nonNegativeNumber(value, name) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) throw new Error(`${name} must be zero or greater`);
   return number;
 }
 

@@ -39,8 +39,8 @@ test("server-renders the Taste Engine product surface", async () => {
   assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
   assert.match(html, /recommendationVisual/);
   assert.match(html, /ghostRank/);
-  assert.match(html, /hassleTicks/);
-  assert.match(html, /aria-label="Hassle \d+ of 10"/);
+  assert.match(html, /recommendationSignals/);
+  assert.match(html, /Friction/);
   assert.match(html, /sourceHealthList board/);
   assert.match(html, /methodSteps methodRail/);
   assert.match(html, /data-count=/);

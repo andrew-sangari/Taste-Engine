@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isGroundedAdvisory } from "./advisories";
 import { CardActions, calendarInputFrom, planningInputFrom } from "./card-actions";
 import type { PublicFeedbackSnapshot } from "./feedback-store";
 import { FilterDisclosure } from "./filter-disclosure";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
-import { HassleDial, UrgencyChip } from "./signal-texture";
+import { RecommendationSignals } from "./signal-texture";
+import { eventAnchor } from "./event-anchor";
+import { daysFromLocalDate, formatLocalDate, formatLocalTime } from "./local-date";
 
 type SportsGame = {
   id: string;
@@ -21,7 +23,7 @@ type SportsGame = {
   tags: string[];
   ticketObservations: Array<{ source: string; url: string; lowestPriceUsd: number | null; status: string }>;
   sourceLinks: Array<{ source: string; url: string }>;
-  ranking: { interestScore: number; utility: number; hassleScore: number; urgency: string; confidence: string; whyYou: string };
+  ranking: { interestScore: number; utility: number; hassleScore: number; hassleReasons?: string[]; urgency: string; confidence: string; whyYou: string };
   localEnhancement?: { personalFit?: { score: number; explanation: string }; recommendation?: { verdict: string; explanation: string }; urgency?: { label: string; explanation: string }; hassle?: { score: number; explanation: string } } | null;
   visual?: RecommendationVisualType;
   feedbackSnapshot?: PublicFeedbackSnapshot | null;
@@ -31,23 +33,22 @@ type WindowFilter = "all" | "soon" | "later";
 type SortMode = "interest" | "date" | "hassle" | "urgency";
 type TicketFilter = "all" | "ticketed" | "unknown";
 
-export function SportsExplorer({ games, generatedAt, featuredThreshold = 70 }: { games: SportsGame[]; generatedAt: string; featuredThreshold?: number }) {
+export function SportsExplorer({ games, generatedAt, featuredThreshold = 70, targetEventId = null }: { games: SportsGame[]; generatedAt: string; featuredThreshold?: number; targetEventId?: string | null }) {
   const [windowFilter, setWindowFilter] = useState<WindowFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("interest");
   const [ticketFilter, setTicketFilter] = useState<TicketFilter>("all");
   const [rivalryOnly, setRivalryOnly] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const generated = useMemo(() => new Date(generatedAt), [generatedAt]);
+  useEffect(() => { if (targetEventId) { setWindowFilter("all"); setShowAll(true); } }, [targetEventId]);
   const filtered = useMemo(() => games.filter((game) => {
-    const date = game.startLocal ? new Date(game.startLocal) : null;
-    const daysAway = date ? (date.getTime() - generated.getTime()) / 86_400_000 : Number.POSITIVE_INFINITY;
+    const daysAway = daysFromLocalDate(game.startLocal, generatedAt) ?? Number.POSITIVE_INFINITY;
     if (windowFilter === "soon" && daysAway > 30) return false;
     if (windowFilter === "later" && daysAway <= 30) return false;
     if (ticketFilter === "ticketed" && !game.ticketObservations.length) return false;
     if (ticketFilter === "unknown" && game.ticketObservations.length) return false;
     if (rivalryOnly && game.sportsContext.rivalryTier === "none") return false;
     return true;
-  }).sort(gameComparator(sortMode)), [games, generated, rivalryOnly, sortMode, ticketFilter, windowFilter]);
+  }).sort(gameComparator(sortMode)), [games, generatedAt, rivalryOnly, sortMode, ticketFilter, windowFilter]);
   const series = useMemo(() => groupSeries(filtered), [filtered]);
   const visibleSeries = showAll ? series : series.slice(0, 3);
   return (
@@ -74,24 +75,24 @@ export function SportsExplorer({ games, generatedAt, featuredThreshold = 70 }: {
 }
 
 function SeriesCard({ games, featuredThreshold, isFeatured }: { games: SportsGame[]; featuredThreshold: number; isFeatured: boolean }) {
-  const featured = games.filter((game) => game.ranking.interestScore >= featuredThreshold);
-  const shown = featured.length ? featured : games.slice(0, 1);
+  const best = [...games].sort(gameComparator("interest"))[0];
+  const shown = best && best.ranking.interestScore >= featuredThreshold ? [best] : games.slice(0, 1);
   const opponent = friendlyOpponentName(games[0].awayTeam);
   return <article className={`seriesCard rv ${isFeatured ? "seriesFeatured" : "seriesCompact"}`}>
     <RecommendationVisual className="seriesVisual" visual={games[0].visual} />
     <div className="seriesHeader"><div><p className="eyebrow">{games[0].series.gameCount ? `${games[0].series.gameCount}-game series` : "Dodgers home series"}</p><h3>{opponent}</h3><p>{games[0].tags.slice(0, 3).join(" · ") || "Regular-season home games"}</p></div><strong>{Math.max(...games.map((game) => game.ranking.interestScore))}</strong></div>
     <div className="seriesGames">{shown.map((game) => <GameRow game={game} key={game.id} />)}</div>
-    {games.length > shown.length ? <details className="seriesDetails"><summary>View all {games.length} games</summary><div className="seriesGames">{games.filter((game) => !shown.some((shownGame) => shownGame.id === game.id)).map((game) => <GameRow game={game} key={game.id} />)}</div></details> : null}
+    {games.length > shown.length ? <details className="seriesDetails"><summary>View series · all {games.length} games</summary><div className="seriesGames">{games.filter((game) => !shown.some((shownGame) => shownGame.id === game.id)).map((game) => <GameRow game={game} key={game.id} />)}</div></details> : null}
   </article>;
 }
 
 function GameRow({ game }: { game: SportsGame }) {
-  const date = game.startLocal ? new Date(game.startLocal) : null;
   const pitchers = game.sportsContext.probablePitchers;
-  return <div className="gameRow">
-    <div className="gameDate"><span>{date ? date.toLocaleDateString("en-US", { weekday: "short", month: "short" }) : "TBD"}</span><strong>{date ? date.getDate() : "—"}</strong></div>
-    <div className="gameMatchup"><strong>{game.awayTeam.abbreviation} at {game.homeTeam.abbreviation}</strong><span>{date && !game.timeTbd ? date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "Time TBD"}{pitchers.confirmed ? ` · ${pitchers.away?.name ?? "TBD"} / ${pitchers.home?.name ?? "TBD"}` : ""}</span></div>
-    <div className="gameSignals"><span>{game.ranking.interestScore} interest</span><HassleDial score={game.ranking.hassleScore} />{game.ticketObservations.length ? <UrgencyChip urgency={game.ranking.urgency} /> : <span className="signalAbsent">tickets unknown</span>}</div>
+  return <div className="gameRow" id={eventAnchor(game.id)}>
+    <div className="gameDate"><span>{formatLocalDate(game.startLocal, { weekday: "short", month: "short" }) ?? "TBD"}</span><strong>{formatLocalDate(game.startLocal, { day: "numeric" }) ?? "—"}</strong></div>
+    <div className="gameMatchup"><strong>{game.awayTeam.abbreviation} at {game.homeTeam.abbreviation}</strong><span>{!game.timeTbd && formatLocalTime(game.startLocal) ? formatLocalTime(game.startLocal) : "Time TBD"}{pitchers.confirmed ? ` · ${pitchers.away?.name ?? "TBD"} / ${pitchers.home?.name ?? "TBD"}` : ""}</span></div>
+    <div className="gameSignals"><RecommendationSignals confidence={game.ranking.confidence} fit={game.ranking.interestScore} friction={game.ranking.hassleScore} status={game.ranking.interestScore >= 55 ? "Recommended" : "Watch"} urgency={game.ticketObservations.length ? game.ranking.urgency : "ticket coverage unknown"} /></div>
+    {game.ranking.interestScore >= 55 && game.ranking.hassleScore >= 6 ? <p className="planningObstacle">Strong matchup · planning obstacle: {(game.ranking.hassleReasons ?? []).join(" · ") || "check logistics before committing"}.</p> : null}
     <div className="gameLinks">{game.sourceLinks.map((link) => <a href={link.url} key={`${link.source}|${link.url}`} rel="noreferrer" target="_blank">{providerLabel(link.source)} ↗</a>)}</div>
     <CardActions
       calendarEvent={calendarInputFrom({ ...game, title: gameTitle(game), description: game.ranking.whyYou })}
@@ -112,7 +113,9 @@ function groupSeries(games: SportsGame[]) {
     const key = game.series.id ?? game.id;
     groups.set(key, [...(groups.get(key) ?? []), game]);
   }
-  return [...groups.values()];
+  return [...groups.values()]
+    .map((series) => [...series].sort(gameComparator("interest")))
+    .sort((left, right) => gameComparator("interest")(left[0], right[0]));
 }
 
 function gameComparator(mode: SortMode) {

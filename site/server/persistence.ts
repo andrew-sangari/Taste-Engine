@@ -10,7 +10,13 @@ export async function readFeedbackState(ownerEmail: string): Promise<unknown | n
     .first<{ state_json: string }>();
   if (!row?.state_json) return null;
   try {
-    return JSON.parse(row.state_json);
+    const state = JSON.parse(row.state_json) as Record<string, unknown>;
+    const records = await readFeedbackRecords(ownerEmail);
+    if (!records.length || !state || typeof state !== "object") return state;
+    return {
+      ...state,
+      records: Object.fromEntries(records.map((record) => [String(record.feedbackId), { record, firstExportTriggeredAt: null, exportBatchId: null }])),
+    };
   } catch {
     return null;
   }
@@ -23,6 +29,7 @@ export async function writeFeedbackState(ownerEmail: string, state: unknown): Pr
     throw new PersistenceInputError("Feedback state is too large.");
   }
   const updatedAt = new Date().toISOString();
+  await writeFeedbackRecords(ownerEmail, feedbackRecordsFromState(state), updatedAt);
   await getD1()
     .prepare(`
       INSERT INTO feedback_state (owner_email, state_json, updated_at)
@@ -35,6 +42,69 @@ export async function writeFeedbackState(ownerEmail: string, state: unknown): Pr
     .run();
   return updatedAt;
 }
+
+export async function readFeedbackRecords(ownerEmail: string): Promise<Array<Record<string, unknown>>> {
+  const result = await getD1().prepare(`
+    SELECT record_json FROM feedback_records WHERE owner_email = ?1 ORDER BY recorded_at ASC, feedback_id ASC
+  `).bind(ownerEmail).all<{ record_json: string }>();
+  return (result.results ?? []).flatMap((row) => {
+    try {
+      const parsed = JSON.parse(row.record_json);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? [parsed as Record<string, unknown>] : [];
+    } catch { return []; }
+  });
+}
+
+export async function writeFeedbackRecords(ownerEmail: string, records: Array<Record<string, unknown>>, receivedAt = new Date().toISOString()): Promise<void> {
+  if (!records.length) return;
+  const projection = await readActiveProjection();
+  const statements = records.map((record) => enrichFeedbackEvidence(record, projection))
+    .filter((record) => safeText(record.feedbackId) && safeText(record.canonicalEventId) && safeText(record.eventDateLocal) && safeText(record.status) && safeText(record.recordedAt))
+    .map((record) => getD1().prepare(`
+      INSERT INTO feedback_records (owner_email, feedback_id, canonical_event_id, event_date_local, status, recorded_at, record_json, evidence_json, received_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+      ON CONFLICT(owner_email, feedback_id) DO NOTHING
+    `).bind(
+      ownerEmail,
+      String(record.feedbackId),
+      String(record.canonicalEventId),
+      String(record.eventDateLocal),
+      String(record.status),
+      String(record.recordedAt),
+      JSON.stringify(record),
+      record.evidenceSnapshot ? JSON.stringify(record.evidenceSnapshot) : null,
+      receivedAt,
+    ));
+  if (statements.length) await getD1().batch(statements);
+}
+
+function enrichFeedbackEvidence(record: Record<string, unknown>, projection: unknown): Record<string, unknown> {
+  if (record.evidenceSnapshot && typeof record.evidenceSnapshot === "object" && !Array.isArray(record.evidenceSnapshot)) return record;
+  const input = projection && typeof projection === "object" && !Array.isArray(projection) ? projection as Record<string, unknown> : {};
+  const candidates = [...array(input.events), ...array(input.sports)];
+  const candidate = candidates.find((item) => {
+    const value = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+    const snapshot = value.feedbackSnapshot && typeof value.feedbackSnapshot === "object" ? value.feedbackSnapshot as Record<string, unknown> : {};
+    return String(snapshot.feedbackSnapshotId ?? "") === String(record.feedbackSnapshotId ?? "")
+      || (String(value.id ?? "") === String(record.canonicalEventId ?? "") && String(value.startLocal ?? "").slice(0, 10) === String(record.eventDateLocal ?? ""));
+  }) as Record<string, unknown> | undefined;
+  if (!candidate) return record;
+  const venue = candidate.venue && typeof candidate.venue === "object" ? candidate.venue as Record<string, unknown> : {};
+  const series = candidate.series && typeof candidate.series === "object" ? candidate.series as Record<string, unknown> : {};
+  const artists = array(candidate.matchedArtists).map((artist) => artist && typeof artist === "object" ? artist as Record<string, unknown> : {})
+    .map((artist) => artist.spotifyArtistId ?? artist.canonicalArtistId).filter((id): id is string => typeof id === "string" && Boolean(id));
+  return {
+    ...record,
+    evidenceSnapshot: {
+      canonicalArtistIds: [...new Set(artists)].sort(),
+      canonicalVenueId: typeof venue.sourceId === "string" ? venue.sourceId : null,
+      promoterOrSeriesIds: typeof series.id === "string" ? [series.id] : [],
+      eventShape: typeof candidate.eventType === "string" ? candidate.eventType : candidate.source === "mlb" ? "baseball" : null,
+    },
+  };
+}
+
+function array(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 
 export async function readActiveProjection(): Promise<unknown | null> {
   const row = await getD1()
@@ -92,17 +162,32 @@ export function hasRefreshAuthorization(request: Request): boolean {
   return configured.length >= 24 && constantTimeEqual(configured, supplied);
 }
 
-function assertFeedbackState(value: unknown): asserts value is { version: 2 } {
+function assertFeedbackState(value: unknown): asserts value is { version: 2 | 3 } {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new PersistenceInputError("Feedback state must be an object.");
   }
   const input = value as Record<string, unknown>;
-  if (input.version !== 2) throw new PersistenceInputError("Unsupported feedback state version.");
+  if (input.version !== 2 && input.version !== 3) throw new PersistenceInputError("Unsupported feedback state version.");
   for (const key of ["planning", "historyResponses", "records", "exportBatches"]) {
     if (!input[key] || typeof input[key] !== "object" || Array.isArray(input[key])) {
       throw new PersistenceInputError(`Feedback state field ${key} must be an object.`);
     }
   }
+}
+
+function feedbackRecordsFromState(value: unknown): Array<Record<string, unknown>> {
+  const state = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const entries = state.records && typeof state.records === "object" && !Array.isArray(state.records)
+    ? Object.values(state.records as Record<string, unknown>) : [];
+  return entries.flatMap((entry) => {
+    const wrapped = entry && typeof entry === "object" && !Array.isArray(entry) ? entry as Record<string, unknown> : {};
+    const record = wrapped.record;
+    return record && typeof record === "object" && !Array.isArray(record) ? [record as Record<string, unknown>] : [];
+  });
+}
+
+function safeText(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 4_000;
 }
 
 function assertProjection(value: unknown): asserts value is { generatedAt: string } {

@@ -617,6 +617,23 @@ button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visib
 .urgency::before { background: var(--text-muted); border-radius: 50%; content: ""; height: 6px; width: 6px; }
 .urgency.watch { color: var(--accent-bright); }
 .urgency.watch::before { animation: pulse 2.2s ease-out infinite; background: var(--accent); }
+.recommendationSignals { align-items: center; display: flex; flex-wrap: wrap; gap: 7px 12px; }
+.signalMetric { color: var(--text-secondary); font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .045em; text-transform: uppercase; }
+.signalMetric b { color: var(--accent-bright); font-weight: 600; margin-right: 3px; }
+.eventAnchorHighlight { animation: event-anchor-flash 1.8s ease-out; outline: 2px solid var(--accent-bright); outline-offset: 5px; }
+.eventCard, .gameRow, .occurrenceRow { scroll-margin-top: 92px; }
+@keyframes event-anchor-flash { 0% { background: rgba(98, 223, 195, .22); } 100% { background: transparent; } }
+
+/* One renderer, distinct vertical palettes. */
+.verticalPanel-music { --accent: #76d5ff; --accent-bright: #b8ebff; --accent-dark: #12374a; --accent-wash: rgba(118, 213, 255, .12); }
+.verticalPanel-sports { --accent: #f0ad55; --accent-bright: #ffd596; --accent-dark: #4b2a12; --accent-wash: rgba(240, 173, 85, .12); }
+.verticalPanel-movies { --accent: #b99cff; --accent-bright: #dacbff; --accent-dark: #2d1f54; --accent-wash: rgba(185, 156, 255, .12); }
+.verticalPanel-taste { --accent: #ef8dbc; --accent-bright: #ffc2de; --accent-dark: #512039; --accent-wash: rgba(239, 141, 188, .12); }
+.missingRecommendation form { display: grid; gap: 12px; margin-top: 16px; }
+.missingRecommendation label { color: var(--text-secondary); display: grid; font-size: 13px; gap: 6px; }
+.missingRecommendation input, .missingRecommendation textarea { background: var(--surface-raised); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font: inherit; padding: 10px; }
+.missingRecommendation textarea { min-height: 76px; resize: vertical; }
+.planningObstacle { border-left: 2px solid var(--orange); color: var(--text-secondary); font-size: 13px; line-height: 1.45; margin: 14px 0 0; padding-left: 10px; }
 .overviewUtilitySignals > span + span { border-left: 1px solid rgba(202, 218, 211, .16); margin-left: 10px; padding-left: 10px; }
 .overviewUtilitySignals > span + span::before { content: none !important; margin: 0 !important; }
 
@@ -699,6 +716,8 @@ html.motion-ready .srcBar:not(.on) i { width: 0; }
   .overviewUtilitySignals > span + span { border-left: 0; margin-left: 0; padding-left: 0; }
   .ghostRank { bottom: 0; font-size: 150px; }
   .overviewFeatured .ghostRank { bottom: 0; font-size: 170px; }
+  .recommendationSignals { gap: 5px 9px; }
+  .signalMetric { font-size: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -43,6 +43,14 @@ import { buildFeedbackSnapshot, mergeSnapshotIndex } from '../src/feedbackSnapsh
 import { buildTasteProfile } from '../src/tasteProfile.js';
 import { DEFAULT_CHANGES_TOP_N, buildChangesSinceRefresh } from '../src/projectionChanges.js';
 import { updateProjectionHistory } from '../src/recommendationHistory.js';
+import {
+  applyFeedbackAdjustmentsToCandidates,
+  buildFeedbackReport,
+  deriveFeedbackState,
+  loadFeedbackConfig,
+  readFeedbackJournal,
+  simulateFeedback
+} from '../src/feedback.js';
 
 loadEnv();
 
@@ -204,7 +212,7 @@ const sportsTicketmaster = await optionalSource('sports-ticketmaster', Boolean(p
   });
   return { items: raw.map((event) => normalizeTicketmasterSportsEvent(event, generatedAt)), warnings: [] };
 });
-const sports = joinSportsTickets(
+let sports = joinSportsTickets(
   mlb.items,
   [...sportsSeatGeek.items, ...sportsTicketmaster.items],
   sportsSourceConfig,
@@ -261,7 +269,19 @@ if (edmtrainHealth) {
   };
 }
 const rankedAll = rankCandidates(allConcerts, rankedSnapshot, config, generatedAt);
-const ranked = rankedAll
+const feedbackConfig = await loadFeedbackConfig(resolve('config/feedback.json'));
+const feedbackJournal = await readFeedbackJournal(resolve(feedbackConfig.journalPath));
+const feedbackState = deriveFeedbackState(feedbackJournal.records, { journalIssues: feedbackJournal.issues, config: feedbackConfig, now: generatedAt });
+const feedbackSimulation = simulateFeedback({
+  projection: { generatedAt: generatedAt.toISOString(), horizon: { days: config.upcomingHorizonDays }, events: rankedAll, sports, movies: [] },
+  state: feedbackState,
+  config: feedbackConfig,
+  now: generatedAt,
+  planAheadMinScore: config.overviewPlanAheadMinScore
+});
+const feedbackRankedAll = applyFeedbackAdjustmentsToCandidates(rankedAll, feedbackSimulation, feedbackConfig);
+sports = applyFeedbackAdjustmentsToCandidates(sports, feedbackSimulation, feedbackConfig);
+const ranked = feedbackRankedAll
   .filter((candidate) => !candidate.ranking.excluded && candidate.matchedArtists.length > 0)
   .slice(0, 120);
 const deterministicOverviewBuckets = buildOverviewBuckets(
@@ -428,8 +448,16 @@ exportData.overviewPlanAhead = overviewBuckets.planAhead;
 exportData.overviewAdvisory = overviewAdvisory;
 
 exportData.tasteProfile = buildTasteProfile(artistSnapshot, {
-  feedbackState: await readJsonIfPresent(resolve('data/taste/feedback-state.json'))
+  feedbackState
 });
+exportData.feedbackLearning = {
+  applied: feedbackConfig.enabled && feedbackConfig.applyToPublishedRanking,
+  policyVersion: feedbackConfig.policyVersion,
+  eligibleSignalCount: feedbackState.signalSummary.eligibleCount,
+  capUsage: feedbackSimulation.capUsage,
+  adjustedCandidateCount: feedbackSimulation.evaluations.filter((evaluation) => evaluation.thresholdMet && evaluation.proposedAdjustment !== 0 && !evaluation.blockedByHardExclusion).length
+};
+await writePrivateJson(resolve(feedbackConfig.reportPath), buildFeedbackReport({ state: feedbackState, simulation: feedbackSimulation, config: feedbackConfig }));
 
 const acceptedProjectionPath = valueAfterFlag('--accepted-projection') ?? process.env.ACCEPTED_PROJECTION_PATH ?? null;
 if (acceptedProjectionPath) {

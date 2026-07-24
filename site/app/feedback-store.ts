@@ -52,10 +52,13 @@ export type PlanningItem = {
 export const FEEDBACK_STATUSES = [
   "attended-worth-it",
   "attended-not-worth-it",
-  "skipped-still-interested",
-  "skipped-no-longer-interested",
+  "wanted-to-attend",
+  "lost-interest",
+  "did-not-attend-logistical",
 ] as const;
 export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
+export const FEEDBACK_REASON_CODES = ["artist", "lineup", "production", "crowd", "venue", "timing", "hassle", "price", "distance", "availability", "calendar", "other", "legacy-unknown"] as const;
+export type FeedbackReasonCode = (typeof FEEDBACK_REASON_CODES)[number];
 
 export type SiteFeedbackImportRecord = {
   schemaVersion: 1;
@@ -66,6 +69,7 @@ export type SiteFeedbackImportRecord = {
   eventDateLocal: string;
   eventTitleSnapshot: string;
   status: FeedbackStatus;
+  reasonCodes: FeedbackReasonCode[];
   rating: number | null;
   signalTags: string[];
   notes: null;
@@ -93,7 +97,7 @@ export type HistoryResponse = {
 };
 
 export type LocalFeedbackStore = {
-  version: 2;
+  version: 3;
   planning: Record<string, PlanningItem>;
   historyResponses: Record<string, HistoryResponse>;
   records: Record<string, BrowserFeedbackRecord>;
@@ -106,7 +110,7 @@ export const LEGACY_STORAGE_KEY = "taste-engine.feedback.v1";
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export function emptyStore(): LocalFeedbackStore {
-  return { version: 2, planning: {}, historyResponses: {}, records: {}, exportBatches: {} };
+  return { version: 3, planning: {}, historyResponses: {}, records: {}, exportBatches: {} };
 }
 
 export function loadStore(storage: StorageLike | null | undefined): LocalFeedbackStore {
@@ -114,9 +118,10 @@ export function loadStore(storage: StorageLike | null | undefined): LocalFeedbac
     const current = storage?.getItem(STORAGE_KEY);
     if (current) {
       const parsed = JSON.parse(current);
-      if (parsed?.version !== 2) return emptyStore();
+      if (parsed?.version === 2) return migrateV2Store(parsed);
+      if (parsed?.version !== 3) return emptyStore();
       return {
-        version: 2,
+        version: 3,
         planning: asRecord(parsed.planning),
         historyResponses: asRecord(parsed.historyResponses),
         records: asRecord(parsed.records),
@@ -218,7 +223,7 @@ export function recentRecommendationQueue(
   todayKey: string,
 ): HistoryQueueEntry[] {
   return history
-    .filter((item) => item.dateLocal < todayKey && !store.historyResponses[item.historyId] && !feedbackForHistory(store, item))
+    .filter((item) => item.dateLocal < todayKey && daysSince(item.dateLocal, todayKey) <= 30 && !store.historyResponses[item.historyId] && !feedbackForHistory(store, item))
     .map((item) => ({
       history: item,
       eligible: (item.vertical === "music" || item.vertical === "sports") && Boolean(item.feedbackSnapshotId),
@@ -252,7 +257,8 @@ export function dismissHistory(store: LocalFeedbackStore, historyId: string, now
 export function confirmHistoryFeedback(
   store: LocalFeedbackStore,
   history: RecommendationHistoryItem,
-  status: "attended-worth-it" | "attended-not-worth-it" | "skipped-no-longer-interested",
+  status: FeedbackStatus,
+  reasonCodes: FeedbackReasonCode[],
   { now, uuid }: { now: string; uuid: string },
 ): LocalFeedbackStore {
   if (store.historyResponses[history.historyId] || !history.feedbackSnapshotId || history.vertical === "movies") return store;
@@ -262,7 +268,7 @@ export function confirmHistoryFeedback(
     eventDateLocal: history.dateLocal,
     eventTitleSnapshot: history.title,
     vertical: history.vertical,
-  }, status, { now, uuid });
+  }, status, reasonCodes, { now, uuid });
   const feedbackId = feedbackForHistory(result, history)?.record.feedbackId ?? null;
   return {
     ...result,
@@ -276,9 +282,10 @@ export function confirmHistoryFeedback(
 export function recordNotForMe(
   store: LocalFeedbackStore,
   snapshot: PublicFeedbackSnapshot,
+  reasonCodes: FeedbackReasonCode[],
   options: { now: string; uuid: string },
 ): LocalFeedbackStore {
-  return createFeedbackRecord(store, snapshot, "skipped-no-longer-interested", options);
+  return createFeedbackRecord(store, snapshot, "lost-interest", reasonCodes, options);
 }
 
 export function hasFeedbackForSnapshot(store: LocalFeedbackStore, snapshot: PublicFeedbackSnapshot | null): boolean {
@@ -291,9 +298,16 @@ function createFeedbackRecord(
   store: LocalFeedbackStore,
   snapshot: PublicFeedbackSnapshot,
   status: FeedbackStatus,
+  reasonCodes: FeedbackReasonCode[],
   { now, uuid }: { now: string; uuid: string },
 ): LocalFeedbackStore {
   if (hasFeedbackForSnapshot(store, snapshot)) return store;
+  const classifiedReasons = [...new Set(reasonCodes)].filter((reason): reason is FeedbackReasonCode => (FEEDBACK_REASON_CODES as readonly string[]).includes(reason));
+  // Attendance can stand on its own. Every non-attendance or loss-of-interest
+  // outcome must say what happened so that the durable replay never has to
+  // mistake timing or logistics for a taste rejection.
+  if (["wanted-to-attend", "lost-interest", "did-not-attend-logistical"].includes(status)
+    && !classifiedReasons.some((reason) => reason !== "legacy-unknown")) return store;
   const feedbackId = `site-${uuid}`;
   const record: SiteFeedbackImportRecord = {
     schemaVersion: 1,
@@ -304,12 +318,49 @@ function createFeedbackRecord(
     eventDateLocal: snapshot.eventDateLocal,
     eventTitleSnapshot: snapshot.eventTitleSnapshot,
     status,
+    reasonCodes: classifiedReasons,
     rating: null,
     signalTags: [],
     notes: null,
     recordedAt: now,
   };
   return { ...store, records: { ...store.records, [feedbackId]: { record, firstExportTriggeredAt: null, exportBatchId: null } } };
+}
+
+function migrateV2Store(value: Record<string, unknown>): LocalFeedbackStore {
+  const records = asRecord(value.records);
+  return {
+    version: 3,
+    planning: asRecord(value.planning),
+    historyResponses: asRecord(value.historyResponses),
+    records: Object.fromEntries(Object.entries(records).flatMap(([id, entry]) => {
+      const wrapped = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+      const raw = wrapped.record && typeof wrapped.record === "object" ? wrapped.record as Record<string, unknown> : null;
+      if (!raw) return [];
+      const status = legacyStatus(raw.status);
+      const reasonCodes = Array.isArray(raw.reasonCodes)
+        ? raw.reasonCodes.filter((reason): reason is FeedbackReasonCode => (FEEDBACK_REASON_CODES as readonly string[]).includes(String(reason)))
+        : legacyReason(raw.status);
+      return [[id, { ...wrapped, record: { ...raw, status, reasonCodes } }]];
+    })),
+    exportBatches: asRecord(value.exportBatches),
+  } as LocalFeedbackStore;
+}
+
+function legacyStatus(value: unknown): FeedbackStatus {
+  if (value === "skipped-still-interested") return "wanted-to-attend";
+  if (value === "skipped-no-longer-interested") return "lost-interest";
+  return (FEEDBACK_STATUSES as readonly string[]).includes(String(value)) ? value as FeedbackStatus : "lost-interest";
+}
+
+function legacyReason(value: unknown): FeedbackReasonCode[] {
+  return ["skipped-still-interested", "skipped-no-longer-interested"].includes(String(value)) ? ["legacy-unknown"] : [];
+}
+
+function daysSince(dateLocal: string, todayKey: string): number {
+  const start = Date.parse(`${dateLocal}T12:00:00Z`);
+  const end = Date.parse(`${todayKey}T12:00:00Z`);
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.round((end - start) / 86_400_000)) : Number.POSITIVE_INFINITY;
 }
 
 function feedbackForHistory(store: LocalFeedbackStore, item: RecommendationHistoryItem): BrowserFeedbackRecord | null {
@@ -413,13 +464,13 @@ function migrateLegacyStore(input: any): LocalFeedbackStore {
       lastReconciledAt: item.lastReconciledAt ?? null,
     };
   }
-  return {
+  return migrateV2Store({
     version: 2,
     planning,
     historyResponses: {},
     records: asRecord(input.records),
     exportBatches: asRecord(input.exportBatches),
-  };
+  });
 }
 
 function sortRecords(entries: BrowserFeedbackRecord[]): BrowserFeedbackRecord[] {

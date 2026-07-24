@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { loadBriefConfig } from '../briefConfig.js';
 import {
   FEEDBACK_SIGNAL_TAGS,
+  FEEDBACK_REASON_CODES,
   FEEDBACK_STATUSES,
   appendFeedbackRecord,
   buildFeedbackReport,
@@ -100,6 +101,7 @@ async function addFeedback(options, { replace = false } = {}) {
     eventDateLocal: snapshot.eventDateLocal,
     eventTitleSnapshot: snapshot.eventTitleSnapshot,
     status: options.status,
+    reasonCodes: parseList(options.reasonCodes),
     rating: options.rating == null ? null : Number(options.rating),
     signalTags: parseList(options.signalTags),
     notes: options.notes ?? null,
@@ -131,6 +133,7 @@ async function revokeFeedback(options) {
     eventDateLocal: target.eventDateLocal,
     eventTitleSnapshot: target.eventTitleSnapshot,
     status: target.status,
+    reasonCodes: target.reasonCodes ?? [],
     rating: target.rating,
     signalTags: target.signalTags,
     notes: null,
@@ -251,6 +254,7 @@ function parseArgs(args) {
     ['canonical-artist-ids', 'canonicalArtistIds'],
     ['canonical-venue-id', 'canonicalVenueId'],
     ['promoter-or-series-ids', 'promoterOrSeriesIds'],
+    ['reason-codes', 'reasonCodes'],
     ['event-shape', 'eventShape'],
     ['signal-tags', 'signalTags'],
     ['recorded-at', 'recordedAt'],
@@ -401,5 +405,6 @@ function printHelp() {
   console.log('  simulate [--projection PATH]');
   console.log('  import --file PATH [--snapshot-index PATH]');
   console.log(`  statuses: ${FEEDBACK_STATUSES.join(', ')}`);
+  console.log(`  reasons: ${FEEDBACK_REASON_CODES.join(', ')} (required for wanted-to-attend, lost-interest, and did-not-attend-logistical)`);
   console.log(`  tags: ${FEEDBACK_SIGNAL_TAGS.join(', ')}`);
 }

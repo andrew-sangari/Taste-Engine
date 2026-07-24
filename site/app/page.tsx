@@ -44,6 +44,7 @@ export default async function Home() {
   const sports = projection.sports ?? [];
   const overview = projection.overview ?? [];
   const sourceHealth = projection.sourceHealth ?? [];
+  const healthSummary = summarizeSourceHealth(sourceHealth);
   const tmdbStatus = sourceHealth.find((source) => source.source === "tmdb")?.status ?? "not configured";
   return (
     <main>
@@ -94,12 +95,12 @@ export default async function Home() {
       <section className="sourceHealth" id="source-health">
         <p className="eyebrow"><span className="lit">Source health</span></p>
         <div className="sourceHealthIntro">
-          <h2>Partial data stays visible.</h2>
-          <p className="sourceHealthHint">Open a lane to see which providers and local passes are carrying it.</p>
+          <h2>{healthSummary}</h2>
+          <p className="sourceHealthHint">The full provenance ledger stays available. Degraded lanes open first so a healthy refresh does not consume the Overview.</p>
         </div>
         <div className="sourceHealthList board rv">
-          {groupSourceHealth(sourceHealth).map((group, index) => (
-            <details className="sourceHealthGroup boardGroup" key={group.label} open={index === 0}>
+          {groupSourceHealth(sourceHealth).map((group) => (
+            <details className="sourceHealthGroup boardGroup" key={group.label} open={group.sources.some((source) => source.status !== "active")}>
               <summary className="boardGroupHead"><strong>{group.label}</strong><span>{group.sources.length} source{group.sources.length === 1 ? "" : "s"}</span></summary>
               <div className="sourceHealthGroupBody">
                 {group.sources.map((source) => {
@@ -125,7 +126,7 @@ export default async function Home() {
         <p className="eyebrow"><span className="lit">How it thinks</span></p>
         <div className="methodIntro">
           <h2>Preference first.<br />Friction second.</h2>
-          <p>Deterministic scores make the call. Local prose can clarify it, but never becomes the source of truth.</p>
+          <p>Deterministic scores make the call. Model-generated editorial enrichment can clarify it, but never becomes the source of truth.</p>
         </div>
         <ol className="methodSteps methodRail">
           <li className="methodStep">
@@ -142,7 +143,7 @@ export default async function Home() {
           </li>
           <li className="methodStep">
             <span className="methodNode">04</span>
-            <strong>Explain</strong><p>Deterministic scores make the call. Local Gemma may add concise personal prose and advisories from explicitly allowed non-Spotify fields, but it cannot add candidates, change rankings, or make unsupported scarcity claims.</p>
+            <strong>Explain</strong><p>Deterministic scores make the call. Ollama editorial enrichment may add concise prose and advisories from explicitly allowed non-Spotify fields, but it cannot add candidates, change rankings, or make unsupported scarcity claims.</p>
           </li>
         </ol>
       </section>
@@ -201,7 +202,17 @@ function groupSourceHealth(sources: SourceHealth[]) {
     const category = sourceCategory(source.source);
     groups.get(category)?.push(source);
   }
-  return order.map((label) => ({ label, sources: groups.get(label) ?? [] })).filter((group) => group.sources.length);
+  return order.map((label) => ({
+    label,
+    sources: (groups.get(label) ?? []).sort((left, right) => Number(left.status === "active") - Number(right.status === "active") || left.source.localeCompare(right.source))
+  })).filter((group) => group.sources.length);
+}
+
+function summarizeSourceHealth(sources: SourceHealth[]) {
+  const healthy = sources.filter((source) => source.status === "active").length;
+  const degraded = sources.filter((source) => source.status !== "active" && source.status !== "unavailable").length;
+  const blockers = sources.filter((source) => source.status === "unavailable").length;
+  return `${healthy} healthy · ${degraded + blockers} degraded · ${blockers ? `${blockers} blocker${blockers === 1 ? "" : "s"}` : "no blockers"}`;
 }
 
 function sourceCategory(source: string) {

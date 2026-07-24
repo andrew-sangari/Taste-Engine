@@ -1,4 +1,35 @@
-// Generated from the deterministic Taste Engine source modules for the Sites Worker runtime.
+// Generated from deterministic Taste Engine modules. Do not edit directly.
+
+
+// ../src/localDate.js
+function localDateKey(value) {
+  const key = String(value ?? "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : null;
+}
+function localDateAtNoon(value) {
+  const key = localDateKey(value);
+  return key ? /* @__PURE__ */ new Date(`${key}T12:00:00Z`) : null;
+}
+function weekdayForLocalDate(value, locale = "en-US") {
+  const date = localDateAtNoon(value);
+  return date ? date.toLocaleDateString(locale, { timeZone: "UTC", weekday: "long" }) : null;
+}
+function localWeekdayIndex(value) {
+  const date = localDateAtNoon(value);
+  return date ? date.getUTCDay() : null;
+}
+function localDateDifference(value, now = /* @__PURE__ */ new Date(), timeZone = "America/Los_Angeles") {
+  const event = localDateAtNoon(value);
+  if (!event || Number.isNaN(new Date(now).getTime())) return null;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date(now)).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  const reference = /* @__PURE__ */ new Date(`${parts.year}-${parts.month}-${parts.day}T12:00:00Z`);
+  return Math.round((event.getTime() - reference.getTime()) / 864e5);
+}
 
 // ../src/ranking.js
 var URGENCY_PRIORITY = Object.freeze({ "safe to wait": 0, watch: 1, "buy now": 2 });
@@ -37,7 +68,8 @@ function rankCandidates(candidates, artistSnapshot, config, now = /* @__PURE__ *
     const artistFit = strongestMatch?.directAffinity ?? 0;
     const pinnedBonus = candidate.performers.some((performer) => pinned.has(normalizeArtistName(performer.name))) ? 15 : 0;
     const distanceMiles4 = distanceBetween(config.home, candidate.venue);
-    const hassleScore = calculateHassle(candidate, config, distanceMiles4);
+    const hassle = calculateHassle(candidate, config, distanceMiles4);
+    const hassleScore = hassle.score;
     const urgency = ticketUrgency(candidate.ticketObservation, candidate.startLocal, now);
     const utility = excluded ? -100 : artistFit + pinnedBonus - hassleScore * 2;
     const confidence = strongestMatch ? ["similar", "tag", "promoter"].includes(strongestMatch.artist.origin) ? "medium" : "high" : "low";
@@ -60,7 +92,8 @@ function rankCandidates(candidates, artistSnapshot, config, now = /* @__PURE__ *
         directAffinity: artistFit,
         pinnedBonus,
         hassleScore,
-        hassleReasons: hassleReasons(candidate, config, distanceMiles4),
+        hassleBreakdown: hassle,
+        hassleReasons: hassle.reasons,
         utility,
         confidence,
         urgency,
@@ -157,19 +190,36 @@ function normalizeArtistName(value) {
   return String(value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(live|dj set|live set)\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
 function calculateHassle(candidate, config, distanceMiles4) {
-  let score = distanceMiles4 == null ? 5 : Math.min(7, Math.round(distanceMiles4 / 10));
-  const lowestPrice = candidate.ticketObservation.lowestPriceUsd;
-  if (lowestPrice != null && lowestPrice > config.maxTicketPriceUsd) score += 2;
-  if (candidate.timeTbd || candidate.dateTbd) score += 2;
-  return Math.min(10, score);
-}
-function hassleReasons(candidate, config, distanceMiles4) {
-  const reasons = [];
-  if (distanceMiles4 != null) reasons.push(`${Math.round(distanceMiles4)} mi from ${config.home.label}`);
-  if (candidate.ticketObservation.lowestPriceUsd != null) reasons.push(`from $${candidate.ticketObservation.lowestPriceUsd}`);
-  if (candidate.ticketObservation.lowestPriceUsd != null && candidate.ticketObservation.lowestPriceUsd > config.maxTicketPriceUsd) reasons.push("above ticket budget");
-  if (candidate.timeTbd || candidate.dateTbd) reasons.push("time or date is TBD");
-  return reasons;
+  const logisticalReasons = [];
+  const commercialReasons = [];
+  let logistical = 0;
+  let commercial = 0;
+  if (distanceMiles4 != null) {
+    logistical = Math.min(6, Math.round(distanceMiles4 / 12));
+    if (distanceMiles4 >= 12) logisticalReasons.push(`${Math.round(distanceMiles4)} mi from ${config.home.label}`);
+  }
+  if (candidate.timeTbd || candidate.dateTbd) {
+    logistical += 2;
+    logisticalReasons.push("time or date is TBD");
+  }
+  const lowestPrice = candidate.ticketObservation?.lowestPriceUsd;
+  if (lowestPrice != null) {
+    commercialReasons.push(`from $${lowestPrice}`);
+    if (lowestPrice > config.maxTicketPriceUsd) {
+      commercial += 2;
+      commercialReasons.push("above ticket budget");
+    }
+  }
+  const personalContext = Math.max(-2, Math.min(2, Number(candidate.personalContextFriction ?? 0) || 0));
+  const score = Math.max(0, Math.min(10, logistical + commercial + personalContext));
+  return {
+    score,
+    logistical,
+    commercial,
+    personalContext,
+    commercialUncertain: lowestPrice == null,
+    reasons: [...logisticalReasons, ...commercialReasons]
+  };
 }
 function ticketUrgency(ticketObservation, startLocal, now) {
   const listingCount = ticketObservation.listingCount;
@@ -180,10 +230,7 @@ function ticketUrgency(ticketObservation, startLocal, now) {
   return "safe to wait";
 }
 function daysUntilEvent(startLocal, now) {
-  if (!startLocal) return null;
-  const start = new Date(startLocal);
-  if (Number.isNaN(start.getTime())) return null;
-  return Math.ceil((start.getTime() - now.getTime()) / 864e5);
+  return localDateDifference(startLocal, now);
 }
 function distanceBetween(home, venue) {
   if (!Number.isFinite(venue.lat) || !Number.isFinite(venue.lon)) return null;
@@ -192,6 +239,851 @@ function distanceBetween(home, venue) {
   const dLon = (venue.lon - home.lon) * radians;
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(home.lat * radians) * Math.cos(venue.lat * radians) * Math.sin(dLon / 2) ** 2;
   return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ../src/candidates.js
+var SOURCE_PRIORITY = { seatgeek: 3, ticketmaster: 2, framework: 1, insomniac: 1 };
+function deduplicateCandidates(candidates, diagnostics = null) {
+  const merged = [];
+  if (diagnostics) {
+    diagnostics.inputCount = candidates.length;
+    diagnostics.mergedCount = 0;
+    diagnostics.venueAliasUse = 0;
+  }
+  for (const candidate of candidates) {
+    const match = merged.find((existing) => sameOccurrence(existing, candidate));
+    if (!match) {
+      merged.push({
+        ...candidate,
+        sourceOccurrences: sourceOccurrencesFor(candidate)
+      });
+      continue;
+    }
+    if (diagnostics) {
+      diagnostics.mergedCount += 1;
+      if (normalizeArtistName(match.venue?.name) !== normalizeArtistName(candidate.venue?.name)) {
+        diagnostics.venueAliasUse += 1;
+      }
+    }
+    mergeInto(match, candidate);
+  }
+  if (diagnostics) {
+    diagnostics.canonicalCount = merged.length;
+    diagnostics.sourceOccurrenceCount = merged.reduce((sum, candidate) => sum + (candidate.sourceOccurrences?.length ?? 0), 0);
+  }
+  return merged;
+}
+function sameOccurrence(left, right) {
+  if (occurrenceClass(left.type) !== occurrenceClass(right.type) || localDate(left.startLocal) !== localDate(right.startLocal)) return false;
+  const leftPerformers = new Set(left.performers.map((performer) => normalizeArtistName(performer.name)).filter(Boolean));
+  const performerOverlap = right.performers.some((performer) => leftPerformers.has(normalizeArtistName(performer.name)));
+  const titleLeft = canonicalEventTitle(left.title);
+  const titleRight = canonicalEventTitle(right.title);
+  const titleMatch = titleLeft === titleRight || titleLeft.length > 8 && titleRight.length > 8 && (titleLeft.includes(titleRight) || titleRight.includes(titleLeft));
+  if (!performerOverlap && !titleMatch) return false;
+  const venueMatch = sameVenue(left.venue, right.venue);
+  const sameCity = normalizeArtistName(left.venue.city) && normalizeArtistName(left.venue.city) === normalizeArtistName(right.venue.city);
+  const sameCityFestival = sameCity && titleMatch && titleLeft.includes("festival");
+  if (!venueMatch && !(sameCity && performerOverlap) && !sameCityFestival) return false;
+  const timeDelta = Math.abs(new Date(left.startLocal).getTime() - new Date(right.startLocal).getTime());
+  return Number.isNaN(timeDelta) || timeDelta <= 4 * 60 * 60 * 1e3;
+}
+function occurrenceClass(type) {
+  const normalized = normalizeArtistName(type);
+  if (normalized.includes("concert") || normalized.includes("music") || normalized.includes("festival")) return "music";
+  return normalized;
+}
+function canonicalEventTitle(value) {
+  return normalizeArtistName(value).replace(/\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*$/g, "").replace(/\bwith\b.*$/g, "").replace(/\bpresents?\b/g, "").replace(/\s+/g, " ").trim();
+}
+function sameVenue(left, right) {
+  if (Number.isFinite(left.lat) && Number.isFinite(left.lon) && Number.isFinite(right.lat) && Number.isFinite(right.lon)) {
+    return distanceMiles(left.lat, left.lon, right.lat, right.lon) <= 1.5;
+  }
+  const leftName = normalizeArtistName(left.name);
+  const rightName = normalizeArtistName(right.name);
+  return Boolean(leftName && rightName && (leftName === rightName || leftName.includes(rightName) || rightName.includes(leftName)));
+}
+function mergeInto(target, incoming) {
+  target.sourceOccurrences.push(...sourceOccurrencesFor(incoming));
+  const performerKeys = new Set(target.performers.map((performer) => normalizeArtistName(performer.name)));
+  for (const performer of incoming.performers) {
+    if (!performerKeys.has(normalizeArtistName(performer.name))) target.performers.push(performer);
+  }
+  if ((SOURCE_PRIORITY[incoming.source] ?? 0) > (SOURCE_PRIORITY[target.source] ?? 0)) {
+    for (const field of ["id", "source", "sourceEventId", "sourceUrl", "title", "startLocal", "startUtc", "timeTbd", "dateTbd", "status", "venue"]) {
+      target[field] = incoming[field];
+    }
+  }
+  if (target.ticketObservation.lowestPriceUsd == null) target.ticketObservation.lowestPriceUsd = incoming.ticketObservation.lowestPriceUsd;
+}
+function sourceOccurrencesFor(candidate) {
+  const existing = Array.isArray(candidate.sourceOccurrences) && candidate.sourceOccurrences.length ? candidate.sourceOccurrences : [{ source: candidate.source, sourceEventId: candidate.sourceEventId, sourceUrl: candidate.sourceUrl }];
+  return existing.map((occurrence) => ({
+    ...occurrence,
+    title: occurrence.title ?? candidate.title,
+    startLocal: occurrence.startLocal ?? candidate.startLocal,
+    venue: occurrence.venue ?? candidate.venue,
+    performerNames: occurrence.performerNames ?? (candidate.performers ?? []).map((performer) => performer.name)
+  }));
+}
+function localDate(value) {
+  return String(value ?? "").slice(0, 10);
+}
+function distanceMiles(lat1, lon1, lat2, lon2) {
+  const radians = Math.PI / 180;
+  const dLat = (lat2 - lat1) * radians;
+  const dLon = (lon2 - lon1) * radians;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * radians) * Math.cos(lat2 * radians) * Math.sin(dLon / 2) ** 2;
+  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ../src/edmtrain.js
+var EDMTRAIN_API_BASE_URL = "https://edmtrain.com/api/";
+function buildEdmtrainUrl(path, params = {}) {
+  const url = new URL(String(path).replace(/^\/+/, ""), EDMTRAIN_API_BASE_URL);
+  for (const [key, value] of Object.entries(params)) if (value != null && value !== "") url.searchParams.set(key, String(value));
+  return url;
+}
+async function fetchEdmtrainEvents({ clientKey, startDate, endDate, city = "Los Angeles", state = "California", fetchImpl = fetch }) {
+  if (!clientKey) throw new Error("EDMTRAIN_CLIENT_KEY is not configured");
+  const locationsUrl = buildEdmtrainUrl("locations", { state, city, client: clientKey });
+  const locations = await requestJson(locationsUrl, fetchImpl);
+  const location = unwrap(locations, ["locations", "data"]).find((item) => normalizeArtistName(item.city) === normalizeArtistName(city) && normalizeArtistName(item.state ?? item.stateName) === normalizeArtistName(state) && (!item.country || normalizeArtistName(item.country).includes("united states")));
+  if (!location?.id) throw new Error(`EDMTrain location not found for ${city}, ${state}`);
+  const eventsUrl = buildEdmtrainUrl("events", {
+    locationIds: location.id,
+    startDate,
+    endDate,
+    livestreamInd: false,
+    includeElectronicGenreInd: true,
+    includeOtherGenreInd: false,
+    client: clientKey
+  });
+  const body = await requestJson(eventsUrl, fetchImpl);
+  return unwrap(body, ["events", "data"]).map(normalizeEdmtrainEvent).filter((event) => event.id && event.date);
+}
+function normalizeEdmtrainEvent(raw) {
+  const artists = Array.isArray(raw.artistList) ? raw.artistList : [];
+  let group = 0;
+  const orderedArtists = artists.map((artist, index) => {
+    const b2bWithNext = Boolean(artist.b2bInd);
+    const entry = {
+      lineupEntryId: `${raw.id ?? "event"}:${index}`,
+      displayName: String(artist.name ?? artist.artistName ?? "").trim(),
+      billingGroupIndex: group,
+      b2bWithNext
+    };
+    if (!b2bWithNext) group += 1;
+    return entry;
+  }).filter((artist) => artist.displayName);
+  return {
+    id: String(raw.id ?? ""),
+    sourceUrl: raw.link ? String(raw.link) : null,
+    name: String(raw.name ?? raw.eventName ?? "").trim(),
+    date: String(raw.date ?? raw.eventDate ?? "").slice(0, 10),
+    ages: raw.ages ? String(raw.ages) : null,
+    festival: Boolean(raw.festivalInd),
+    venue: {
+      name: String(raw.venue?.name ?? raw.venueName ?? "").trim(),
+      city: String(raw.venue?.location?.city ?? raw.venue?.city ?? "").trim(),
+      lat: finite(raw.venue?.latitude ?? raw.venue?.lat),
+      lon: finite(raw.venue?.longitude ?? raw.venue?.lon)
+    },
+    orderedArtists
+  };
+}
+function enrichEventsWithEdmtrain(events, edmEvents, artistSnapshot) {
+  const audit = [];
+  let matchedCount = 0;
+  let ambiguousCount = 0;
+  let lineupArtistCount = 0;
+  for (const edm of edmEvents) {
+    const candidates = events.filter((event2) => localDate2(event2.startLocal) === edm.date).map((event2) => ({ event: event2, rule: matchRule(event2, edm) })).filter((item) => item.rule);
+    if (candidates.length !== 1) {
+      if (candidates.length > 1) ambiguousCount += 1;
+      audit.push({ edmtrainEventId: edm.id, status: candidates.length ? "ambiguous" : "unmatched", candidateCount: candidates.length });
+      continue;
+    }
+    const { event, rule } = candidates[0];
+    const resolved = resolveLineup(edm.orderedArtists, artistSnapshot);
+    const existing = new Set(event.performers.map((performer) => normalizeArtistName(performer.name)));
+    for (const artist of resolved.filter((item) => item.relation !== "unknown")) {
+      const key = normalizeArtistName(artist.displayName);
+      if (key && !existing.has(key)) {
+        event.performers.push({ sourceId: null, name: artist.displayName, primary: false });
+        existing.add(key);
+      }
+    }
+    event.lineupDisplay = {
+      displayTitle: edm.name || event.title,
+      displayShape: displayShape(edm, event),
+      orderedArtists: resolved,
+      totalArtists: resolved.length,
+      directCount: resolved.filter((item) => item.relation === "direct").length,
+      adjacentCount: resolved.filter((item) => item.relation === "adjacent").length,
+      ages: edm.ages,
+      sourceUrl: edm.sourceUrl
+    };
+    matchedCount += 1;
+    lineupArtistCount += resolved.length;
+    audit.push({ edmtrainEventId: edm.id, canonicalEventId: event.id, status: "matched", rule, lineupCount: resolved.length });
+  }
+  return { events, audit, matchedCount, ambiguousCount, unmatchedCount: audit.filter((item) => item.status === "unmatched").length, lineupArtistCount };
+}
+function matchRule(event, edm) {
+  const venue = sameVenue2(event.venue, edm.venue);
+  const title = exactUsefulTitle(event.title, edm.name);
+  const eventArtists = new Set(event.performers.map((performer) => normalizeArtistName(performer.name)).filter(Boolean));
+  const overlap = edm.orderedArtists.some((artist) => eventArtists.has(normalizeArtistName(artist.displayName)));
+  const primary = edm.orderedArtists[0] && eventArtists.has(normalizeArtistName(edm.orderedArtists[0].displayName));
+  const coordinates = coordinateDistanceMeters(event.venue, edm.venue) <= 500;
+  if (venue && overlap) return "A";
+  if (venue && title) return "B";
+  if (coordinates && primary) return "C";
+  if (edm.festival && title && (venue || coordinates)) return "D";
+  return null;
+}
+function resolveLineup(entries, snapshot) {
+  const artists = snapshot.artists ?? [];
+  return entries.map((entry) => {
+    const key = normalizeArtistName(entry.displayName);
+    const matches = artists.filter((artist2) => [artist2.name, ...artist2.aliases ?? []].some((name) => normalizeArtistName(name) === key));
+    const artist = matches.length === 1 ? matches[0] : null;
+    const relation = !artist ? "unknown" : ["source", "top-items"].includes(artist.origin ?? "source") ? "direct" : "adjacent";
+    return { ...entry, relation };
+  });
+}
+function displayShape(edm, event) {
+  if (edm.festival) return "festival";
+  if (edm.orderedArtists.some((artist) => artist.b2bWithNext)) return "b2b";
+  if (edm.name && !edm.orderedArtists.length) return "named-event";
+  const venue = normalizeArtistName(event.venue?.name);
+  if (/arena|hall|theatre|theater|dome/.test(venue)) return "arena-hall";
+  if (/club|lounge/.test(venue) || edm.ages) return "club-show";
+  return "general-show";
+}
+function exactUsefulTitle(left, right) {
+  const a = canonicalEventTitle(left);
+  const b = canonicalEventTitle(right);
+  return Boolean(a && b && a.length >= 5 && a === b);
+}
+function sameVenue2(left = {}, right = {}) {
+  const a = normalizeArtistName(left.name);
+  const b = normalizeArtistName(right.name);
+  return Boolean(a && b && (a === b || a.length > 8 && b.length > 8 && (a.includes(b) || b.includes(a))));
+}
+function coordinateDistanceMeters(left = {}, right = {}) {
+  if (![left.lat, left.lon, right.lat, right.lon].every(Number.isFinite)) return Infinity;
+  const radians = Math.PI / 180;
+  const dLat = (right.lat - left.lat) * radians;
+  const dLon = (right.lon - left.lon) * radians;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(left.lat * radians) * Math.cos(right.lat * radians) * Math.sin(dLon / 2) ** 2;
+  return 6371e3 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+async function requestJson(url, fetchImpl) {
+  const response = await fetchImpl(url);
+  if (!response.ok) throw new Error(`EDMTrain request failed (${response.status})`);
+  return response.json();
+}
+function unwrap(body, keys) {
+  if (Array.isArray(body)) return body;
+  for (const key of keys) if (Array.isArray(body?.[key])) return body[key];
+  return [];
+}
+function finite(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+function localDate2(value) {
+  return String(value ?? "").slice(0, 10);
+}
+
+// ../src/mlb.js
+var MLB_GAMEDAY_ROOT = "https://www.mlb.com/gameday";
+async function fetchDodgersHomeGames({
+  teamId = 119,
+  startDate,
+  endDate,
+  homeVenueIds = [],
+  season = null,
+  timezone = "America/Los_Angeles",
+  fetchImpl = fetch
+} = {}) {
+  if (!startDate || !endDate) throw new Error("MLB schedule requires startDate and endDate.");
+  const url = new URL("/api/v1/schedule", "https://statsapi.mlb.com");
+  url.searchParams.set("sportId", "1");
+  url.searchParams.set("teamId", String(teamId));
+  url.searchParams.set("startDate", startDate);
+  url.searchParams.set("endDate", endDate);
+  url.searchParams.set("hydrate", "team,venue,seriesStatus,probablePitcher");
+  url.searchParams.set("includeSeriesNumber", "true");
+  if (season != null) url.searchParams.set("season", String(season));
+  const body = await requestJson2(url, fetchImpl, "schedule");
+  const games = (body.dates ?? []).flatMap((date) => date.games ?? []);
+  return games.filter((game) => isHomeGame(game, teamId, homeVenueIds)).map((game) => normalizeMlbGame(game, { timezone, teamId }));
+}
+async function fetchMlbStandings({
+  season,
+  leagueIds = ["103", "104"],
+  fetchImpl = fetch
+} = {}) {
+  const url = new URL("/api/v1/standings", "https://statsapi.mlb.com");
+  url.searchParams.set("leagueId", leagueIds.join(","));
+  url.searchParams.set("standingsTypes", "regularSeason");
+  url.searchParams.set("hydrate", "team");
+  if (season != null) url.searchParams.set("season", String(season));
+  const body = await requestJson2(url, fetchImpl, "standings");
+  return normalizeStandings(body);
+}
+async function fetchMlbPitcherStats(pitcherIds, {
+  season,
+  maxPitchers = 48,
+  fetchImpl = fetch,
+  concurrency = 4
+} = {}) {
+  const ids = [...new Set((pitcherIds ?? []).map(String).filter(Boolean))].slice(0, maxPitchers);
+  const result = /* @__PURE__ */ new Map();
+  let next = 0;
+  async function worker() {
+    while (next < ids.length) {
+      const id = ids[next++];
+      try {
+        const url = new URL(`/api/v1/people/${encodeURIComponent(id)}`, "https://statsapi.mlb.com");
+        url.searchParams.set("hydrate", `stats(group=pitching,type=season${season != null ? `,season=${season}` : ""})`);
+        const body = await requestJson2(url, fetchImpl, `pitcher stats ${id}`);
+        const person = body.people?.[0];
+        const split = person?.stats?.flatMap((item) => item.splits ?? [])?.[0];
+        const stat = split?.stat;
+        if (person && stat) result.set(id, {
+          id,
+          name: person.fullName ?? null,
+          era: numberOrNull(stat.era),
+          whip: numberOrNull(stat.whip),
+          strikeoutsPer9: numberOrNull(stat.strikeoutsPer9Inn),
+          inningsPitched: numberOrNull(String(stat.inningsPitched ?? "").replace(/[^0-9.]/g, "")),
+          wins: numberOrNull(stat.wins),
+          losses: numberOrNull(stat.losses),
+          season: split.season ?? season ?? null
+        });
+      } catch {
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, worker));
+  return result;
+}
+function normalizeMlbGame(game, { timezone = "America/Los_Angeles", teamId = 119, retrievedAt = /* @__PURE__ */ new Date() } = {}) {
+  const home = game.teams?.home ?? {};
+  const away = game.teams?.away ?? {};
+  const homeTeam = normalizeTeam(home.team);
+  const awayTeam = normalizeTeam(away.team);
+  const venue = game.venue ?? home.team?.venue ?? {};
+  const season = game.season ?? game.seasonDisplay ?? null;
+  const seriesNumber = game.seriesNumber ?? home.seriesNumber ?? away.seriesNumber ?? null;
+  const seriesId = season != null && seriesNumber != null ? `mlb:${season}:${seriesNumber}:${Math.min(Number(homeTeam.id ?? teamId), Number(awayTeam.id ?? 0))}:${Math.max(Number(homeTeam.id ?? teamId), Number(awayTeam.id ?? 0))}` : null;
+  return {
+    schemaVersion: 1,
+    id: `mlb:${game.gamePk}`,
+    source: "mlb",
+    sourceEventId: String(game.gamePk),
+    sourceUrl: `${MLB_GAMEDAY_ROOT}/${game.gamePk}`,
+    retrievedAt: new Date(retrievedAt).toISOString(),
+    title: `${awayTeam.name ?? "Away"} at ${homeTeam.name ?? "Home"}`,
+    type: "baseball",
+    startLocal: game.gameDate ? toLocalIso(game.gameDate, timezone) : null,
+    startUtc: game.gameDate ?? null,
+    timeTbd: Boolean(game.status?.startTimeTBD),
+    dateTbd: !game.officialDate,
+    status: game.status?.detailedState ?? "Scheduled",
+    venue: {
+      sourceId: venue.id == null ? null : String(venue.id),
+      name: String(venue.name ?? "Dodger Stadium").trim(),
+      city: "Los Angeles",
+      state: "CA",
+      lat: numberOrNull(venue.location?.latitude ?? venue.geoLocation?.latitude),
+      lon: numberOrNull(venue.location?.longitude ?? venue.geoLocation?.longitude)
+    },
+    homeTeam,
+    awayTeam,
+    series: {
+      id: seriesId,
+      gameNumber: numberOrNull(game.seriesStatus?.gameNumber ?? game.seriesGameNumber ?? game.gameNumber),
+      gameCount: numberOrNull(game.seriesStatus?.totalGames ?? game.gamesInSeries)
+    },
+    probablePitchers: {
+      home: normalizePitcher(home.probablePitcher),
+      away: normalizePitcher(away.probablePitcher),
+      confirmed: Boolean(home.probablePitcher?.id && away.probablePitcher?.id)
+    },
+    ticketObservations: [],
+    sourceOccurrences: [{
+      source: "mlb",
+      sourceEventId: String(game.gamePk),
+      sourceUrl: `${MLB_GAMEDAY_ROOT}/${game.gamePk}`,
+      title: `${awayTeam.name ?? "Away"} at ${homeTeam.name ?? "Home"}`,
+      startLocal: game.gameDate ? toLocalIso(game.gameDate, timezone) : null,
+      venue: {
+        name: String(venue.name ?? "Dodger Stadium").trim(),
+        city: "Los Angeles",
+        state: "CA"
+      },
+      performerNames: [awayTeam.name, homeTeam.name].filter(Boolean)
+    }]
+  };
+}
+function normalizeStandings(body) {
+  const standings = /* @__PURE__ */ new Map();
+  for (const record of body.records ?? []) {
+    for (const teamRecord of record.teamRecords ?? []) {
+      const team = normalizeTeam(teamRecord.team);
+      const lastTen = (teamRecord.records?.splitRecords ?? []).find((split) => split.type === "lastTen");
+      standings.set(String(team.id), {
+        team,
+        leagueRank: numberOrNull(teamRecord.leagueRank),
+        divisionRank: numberOrNull(teamRecord.divisionRank),
+        wins: numberOrNull(teamRecord.wins ?? teamRecord.leagueRecord?.wins),
+        losses: numberOrNull(teamRecord.losses ?? teamRecord.leagueRecord?.losses),
+        winPct: numberOrNull(teamRecord.winningPercentage ?? teamRecord.leagueRecord?.pct),
+        lastTen: lastTen ? `${lastTen.wins}-${lastTen.losses}` : null,
+        streak: teamRecord.streak?.streakCode ?? null,
+        gamesBack: numberOrNull(teamRecord.gamesBack),
+        division: team.division,
+        league: team.league
+      });
+    }
+  }
+  return standings;
+}
+function normalizeTeam(team = {}) {
+  return {
+    id: team.id == null ? null : String(team.id),
+    name: String(team.name ?? "").trim(),
+    shortName: String(team.shortName ?? team.teamName ?? "").trim(),
+    abbreviation: String(team.abbreviation ?? "").trim(),
+    league: team.league ? { id: String(team.league.id), name: String(team.league.name ?? "") } : null,
+    division: team.division ? { id: String(team.division.id), name: String(team.division.name ?? "") } : null
+  };
+}
+function normalizePitcher(pitcher) {
+  if (!pitcher?.id && !pitcher?.fullName) return null;
+  return {
+    id: pitcher.id == null ? null : String(pitcher.id),
+    name: String(pitcher.fullName ?? "").trim(),
+    era: null,
+    whip: null,
+    strikeoutsPer9: null,
+    inningsPitched: null
+  };
+}
+function applyPitcherStats(games, stats) {
+  return games.map((game) => {
+    const pitcherStats = (pitcher) => pitcher ? { ...pitcher, ...stats.get(String(pitcher.id)) ?? {} } : null;
+    return {
+      ...game,
+      probablePitchers: {
+        home: pitcherStats(game.probablePitchers?.home),
+        away: pitcherStats(game.probablePitchers?.away),
+        confirmed: game.probablePitchers?.confirmed ?? false
+      }
+    };
+  });
+}
+function isHomeGame(game, teamId, homeVenueIds) {
+  if (String(game.teams?.home?.team?.id ?? "") !== String(teamId)) return false;
+  if (!homeVenueIds?.length) return true;
+  return homeVenueIds.map(String).includes(String(game.venue?.id ?? game.teams?.home?.team?.venue?.id ?? ""));
+}
+function toLocalIso(value, timezone) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "longOffset"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const offset = String(values.timeZoneName ?? "GMT").replace(/^GMT/, "") || "+00:00";
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}:${values.second}${offset}`;
+}
+async function requestJson2(url, fetchImpl, context) {
+  const response = await fetchImpl(url);
+  if (!response.ok) throw new Error(`MLB ${context} request failed (${response.status}).`);
+  return response.json();
+}
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+// ../src/sports.js
+var SEATGEEK_EVENTS_URL = "https://api.seatgeek.com/2/events";
+var TICKETMASTER_EVENTS_URL = "https://app.ticketmaster.com/discovery/v2/events.json";
+async function fetchSeatGeekSportsEvents({
+  clientId,
+  startDate,
+  endDate,
+  config,
+  maxPages = 3,
+  fetchImpl = fetch
+} = {}) {
+  if (!clientId) throw new Error("SEATGEEK_CLIENT_ID is not configured.");
+  const events = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const url = new URL(SEATGEEK_EVENTS_URL);
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("q", config.teamName ?? "Los Angeles Dodgers");
+    url.searchParams.set("taxonomies.name", "baseball");
+    url.searchParams.set("lat", String(config.home?.lat ?? 34.0522));
+    url.searchParams.set("lon", String(config.home?.lon ?? -118.2437));
+    url.searchParams.set("range", `${config.searchRadiusMiles ?? 60}mi`);
+    url.searchParams.set("datetime_local.gte", startDate);
+    url.searchParams.set("datetime_local.lte", `${endDate}T23:59:59`);
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("sort", "datetime_local.asc");
+    const body = await requestJson3(url, fetchImpl, "SeatGeek sports");
+    const pageEvents = Array.isArray(body.events) ? body.events : [];
+    events.push(...pageEvents);
+    if (!pageEvents.length || pageEvents.length < 100 || events.length >= Number(body.meta?.total ?? 0)) break;
+  }
+  return events;
+}
+async function fetchTicketmasterSportsEvents({
+  apiKey,
+  startDate,
+  endDate,
+  config,
+  maxPages = 3,
+  fetchImpl = fetch
+} = {}) {
+  if (!apiKey) throw new Error("TICKETMASTER_API_KEY is not configured.");
+  const events = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const url = new URL(TICKETMASTER_EVENTS_URL);
+    url.searchParams.set("apikey", apiKey);
+    url.searchParams.set("classificationName", "Sports");
+    url.searchParams.set("keyword", config.teamName ?? "Los Angeles Dodgers");
+    url.searchParams.set("latlong", `${config.home?.lat ?? 34.0522},${config.home?.lon ?? -118.2437}`);
+    url.searchParams.set("radius", String(config.searchRadiusMiles ?? 60));
+    url.searchParams.set("unit", "miles");
+    url.searchParams.set("startDateTime", `${startDate}T00:00:00Z`);
+    url.searchParams.set("endDateTime", `${endDate}T23:59:59Z`);
+    url.searchParams.set("includeTBA", "yes");
+    url.searchParams.set("includeTBD", "yes");
+    url.searchParams.set("size", "200");
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("sort", "date,asc");
+    const body = await requestJson3(url, fetchImpl, "Ticketmaster sports");
+    const pageEvents = body._embedded?.events ?? [];
+    events.push(...pageEvents);
+    if (!pageEvents.length || page + 1 >= Number(body.page?.totalPages ?? 0)) break;
+  }
+  return events;
+}
+function normalizeSeatGeekSportsEvent(event, retrievedAt = /* @__PURE__ */ new Date()) {
+  const venue = event.venue ?? {};
+  const names = (event.performers ?? []).map((performer) => performer.name ?? performer.short_name).filter(Boolean);
+  return {
+    source: "seatgeek",
+    sourceEventId: String(event.id),
+    sourceUrl: String(event.url ?? ""),
+    title: String(event.title ?? event.short_title ?? "").trim(),
+    startLocal: event.datetime_local ?? null,
+    venue: normalizeTicketVenue(venue),
+    teamNames: [...names, event.title ?? ""].filter(Boolean),
+    ticketObservation: {
+      source: "seatgeek",
+      sourceEventId: String(event.id),
+      url: String(event.url ?? ""),
+      lowestPriceUsd: numberOrNull2(event.stats?.lowest_price),
+      averagePriceUsd: numberOrNull2(event.stats?.average_price),
+      listingCount: numberOrNull2(event.stats?.listing_count),
+      status: event.status ?? "scheduled",
+      observedAt: new Date(retrievedAt).toISOString()
+    }
+  };
+}
+function normalizeTicketmasterSportsEvent(event, retrievedAt = /* @__PURE__ */ new Date()) {
+  const venue = event._embedded?.venues?.[0] ?? {};
+  const attractions = event._embedded?.attractions ?? [];
+  const localDate3 = event.dates?.start?.localDate ?? null;
+  const localTime = event.dates?.start?.localTime ?? "00:00:00";
+  const names = attractions.map((attraction) => attraction.name).filter(Boolean);
+  return {
+    source: "ticketmaster",
+    sourceEventId: String(event.id),
+    sourceUrl: String(event.url ?? ""),
+    title: String(event.name ?? "").trim(),
+    startLocal: localDate3 ? `${localDate3}T${localTime}` : null,
+    venue: normalizeTicketVenue(venue),
+    teamNames: [...names, event.name ?? ""].filter(Boolean),
+    ticketObservation: {
+      source: "ticketmaster",
+      sourceEventId: String(event.id),
+      url: String(event.url ?? ""),
+      lowestPriceUsd: numberOrNull2(event.priceRanges?.[0]?.min),
+      averagePriceUsd: null,
+      listingCount: null,
+      status: event.dates?.status?.code ?? "scheduled",
+      observedAt: new Date(retrievedAt).toISOString()
+    }
+  };
+}
+function enrichSportsGames(games, standings, config, {
+  now = /* @__PURE__ */ new Date(),
+  pitcherStats = /* @__PURE__ */ new Map()
+} = {}) {
+  return games.map((game) => {
+    const opponent = standings.get(String(game.awayTeam?.id));
+    const rivalry = config.rivalries?.[String(game.awayTeam?.id)] ?? { tier: "none", label: null };
+    const sportsContext = {
+      opponentWinPct: opponent?.winPct ?? null,
+      opponentLeagueRank: opponent?.leagueRank ?? null,
+      opponentDivisionRank: opponent?.divisionRank ?? null,
+      opponentLast10: opponent?.lastTen ?? null,
+      opponentStreak: opponent?.streak ?? null,
+      opponentLeagueName: opponent?.league?.name ?? null,
+      opponentDivisionName: opponent?.division?.name ?? null,
+      rivalryTier: rivalry.tier,
+      probablePitchers: {
+        home: mergePitcherStats(game.probablePitchers?.home, pitcherStats),
+        away: mergePitcherStats(game.probablePitchers?.away, pitcherStats),
+        confirmed: game.probablePitchers?.confirmed ?? false
+      },
+      playoffLeverage: playoffLeverage(game.startLocal, opponent)
+    };
+    const tags = sportsTags(game, opponent, rivalry, sportsContext);
+    const ranking = scoreSportsGame({ ...game, sportsContext, tags }, config, now);
+    return { ...game, sportsContext, tags, ranking };
+  });
+}
+function scoreSportsGame(game, config, now = /* @__PURE__ */ new Date()) {
+  const opponentQuality = opponentQualityScore(game.sportsContext);
+  const rivalryScore = { high: 15, medium: 8, low: 3, none: 0 }[game.sportsContext?.rivalryTier] ?? 0;
+  const pitchingScore = pitchingMatchupScore(game.sportsContext?.probablePitchers);
+  const leverageScore = { high: 10, medium: 6, low: 2, unknown: 0 }[game.sportsContext?.playoffLeverage] ?? 0;
+  const leagueRelevanceScore = leagueRelevance(game.sportsContext);
+  const convenienceScore = dateConvenience(game.startLocal);
+  const hassle = sportsHassle(game, config);
+  const hassleScore = hassle.score;
+  const interestScore = Math.min(100, 35 + opponentQuality + rivalryScore + pitchingScore + leverageScore + leagueRelevanceScore + convenienceScore);
+  const urgency = sportsTicketUrgency(game.ticketObservations ?? [], game.startLocal, now);
+  const confidence = game.sportsContext?.opponentWinPct == null ? "medium" : game.sportsContext.probablePitchers.confirmed ? "high" : "medium";
+  const whyYou = sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, leagueRelevanceScore, convenienceScore, hassleScore });
+  return {
+    excluded: false,
+    interestScore,
+    utility: interestScore - hassleScore * 2,
+    opponentQuality,
+    rivalryScore,
+    pitchingScore,
+    leverageScore,
+    leagueRelevanceScore,
+    convenienceScore,
+    hassleScore,
+    hassleBreakdown: hassle,
+    hassleReasons: hassle.reasons,
+    urgency,
+    confidence,
+    whyYou
+  };
+}
+function sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, leagueRelevanceScore, convenienceScore, hassleScore }) {
+  const day = weekdayForLocalDate(game.startLocal);
+  const friction = hassleScore <= 4 ? "Low-hassle" : hassleScore <= 6 ? "Manageable" : "Higher-hassle";
+  const reasons = [];
+  if (rivalryScore >= 15) reasons.push(`${game.awayTeam.shortName || game.awayTeam.name} rivalry`);
+  else if (opponentQuality >= 8) reasons.push("a stronger-than-usual matchup");
+  if (pitchingScore >= 7) reasons.push("a strong pitching matchup");
+  if (leverageScore >= 6) reasons.push("useful late-season leverage");
+  if (leagueRelevanceScore >= 4) reasons.push("an AL East measuring-stick matchup");
+  if (!reasons.length && convenienceScore >= 8) reasons.push("a good weekend timing window");
+  if (!reasons.length) reasons.push("a worthwhile Dodgers home-game setup");
+  return `${friction} ${day ? `${day} ` : ""}game with ${joinReasons(reasons)}.`;
+}
+function joinReasons(reasons) {
+  if (reasons.length === 1) return reasons[0];
+  if (reasons.length === 2) return `${reasons[0]} and ${reasons[1]}`;
+  return `${reasons.slice(0, -1).join(", ")}, and ${reasons.at(-1)}`;
+}
+function joinSportsTickets(games, ticketEvents, config, now = /* @__PURE__ */ new Date()) {
+  return games.map((game) => {
+    const matches = ticketEvents.filter((ticket) => ticketMatchesGame(ticket, game));
+    const observations = dedupeObservations(matches.map((ticket) => ticket.ticketObservation));
+    const sourceOccurrences = [
+      ...game.sourceOccurrences ?? [],
+      ...observations.map((observation) => ({
+        source: observation.source,
+        sourceEventId: observation.sourceEventId,
+        sourceUrl: observation.url
+      }))
+    ];
+    const next = { ...game, ticketObservations: observations, sourceOccurrences };
+    return { ...next, ranking: scoreSportsGame(next, config, now) };
+  });
+}
+function sportsTicketUrgency(observations, startLocal, now = /* @__PURE__ */ new Date()) {
+  if (!observations?.length) return "unknown";
+  if (observations.some((observation) => /sold|cancel/i.test(String(observation.status)))) return "likely unavailable";
+  const listingCount = observations.map((observation) => observation.listingCount).filter(Number.isFinite).sort((a, b) => a - b)[0] ?? null;
+  const days = daysUntil(startLocal, now);
+  if (listingCount != null && listingCount <= 10) return "buy now";
+  if (days != null && days <= 7) return "watch";
+  return "safe to wait";
+}
+function ticketMatchesGame(ticket, game) {
+  if (!ticket.startLocal || !game.startLocal || ticket.startLocal.slice(0, 10) !== game.startLocal.slice(0, 10)) return false;
+  if (!venueMatches(ticket.venue, game.venue)) return false;
+  const haystack = normalizeTeamText([ticket.title, ...ticket.teamNames ?? []].join(" "));
+  if (!teamMatches(haystack, game.homeTeam)) return false;
+  const opponentKnown = teamMatches(haystack, game.awayTeam);
+  const anyOpponentMentioned = game.awayTeam?.name && normalizeTeamText(haystack).includes(normalizeTeamText(game.awayTeam.name).split(" ")[0]);
+  return opponentKnown || !anyOpponentMentioned;
+}
+function sportsTags(game, opponent, rivalry, context) {
+  const tags = [];
+  if (rivalry.label) tags.push(`${game.awayTeam.shortName || game.awayTeam.name} rivalry`);
+  if (opponent?.divisionRank === 1) tags.push(`${opponent.division?.name ?? "Division"} leader`);
+  if (opponent?.leagueRank != null && opponent.leagueRank <= 5) tags.push("Contending opponent");
+  if (/american league/i.test(String(opponent?.league?.name ?? ""))) tags.push("AL matchup");
+  if (/american league east|al east/i.test(String(opponent?.division?.name ?? ""))) tags.push("AL East matchup");
+  if (context.probablePitchers.confirmed && pitchingMatchupScore(context.probablePitchers) >= 7) tags.push("Strong pitching matchup");
+  if (context.playoffLeverage === "high") tags.push("Late-season leverage");
+  if ([0, 6].includes(localWeekdayIndex(game.startLocal))) tags.push("Weekend game");
+  return tags;
+}
+function opponentQualityScore(context = {}) {
+  if (Number.isFinite(context.opponentLeagueRank)) return Math.max(0, Math.min(20, Math.round(20 - (context.opponentLeagueRank - 1) * 1.25)));
+  if (Number.isFinite(context.opponentWinPct)) return Math.max(0, Math.min(20, Math.round((context.opponentWinPct - 0.35) * 66.67)));
+  return 0;
+}
+function leagueRelevance(context = {}) {
+  const league = String(context.opponentLeagueName ?? "");
+  const division = String(context.opponentDivisionName ?? "");
+  if (/american league east|al east/i.test(division)) return 5;
+  if (/american league/i.test(league)) return 2;
+  return 0;
+}
+function pitchingMatchupScore(pitchers = {}) {
+  const quality = (pitcher) => {
+    if (!pitcher) return 0;
+    if (pitcher.era == null && pitcher.whip == null) return 1;
+    let score = 0;
+    if (pitcher.era != null) score += pitcher.era <= 3 ? 3 : pitcher.era <= 4 ? 2 : 1;
+    if (pitcher.whip != null) score += pitcher.whip <= 1.1 ? 2 : pitcher.whip <= 1.3 ? 1 : 0;
+    return Math.min(5, score);
+  };
+  return Math.min(10, quality(pitchers.home) + quality(pitchers.away));
+}
+function playoffLeverage(startLocal, opponent) {
+  if (!opponent) return "unknown";
+  const month = Number(String(startLocal ?? "").slice(5, 7));
+  if (month >= 9 && (opponent.divisionRank <= 2 || opponent.gamesBack != null && opponent.gamesBack <= 5)) return "high";
+  if (opponent.divisionRank <= 2 || opponent.gamesBack != null && opponent.gamesBack <= 5) return "medium";
+  return "low";
+}
+function dateConvenience(startLocal) {
+  const day = localWeekdayIndex(startLocal);
+  if (day == null) return 0;
+  if (day === 0 || day === 6) return 10;
+  if (day === 5) return 8;
+  return 4;
+}
+function sportsHassle(game, config) {
+  const logisticalReasons = ["Dodger Stadium logistics"];
+  const commercialReasons = [];
+  let logistical = 2;
+  let commercial = 0;
+  if (game.timeTbd || game.dateTbd) {
+    logistical += 2;
+    logisticalReasons.push("time or date is TBD");
+  }
+  if (config.homeVenueNames?.length && !config.homeVenueNames.some((name) => normalizeTeamText(game.venue.name).includes(normalizeTeamText(name)))) {
+    logistical += 1;
+    logisticalReasons.push("venue confirmation pending");
+  }
+  const lowest = (game.ticketObservations ?? []).map((item) => Number(item.lowestPriceUsd)).filter(Number.isFinite).sort((a, b) => a - b)[0];
+  if (lowest != null) {
+    commercialReasons.push(`from $${lowest}`);
+    if (Number.isFinite(config.maxTicketPriceUsd) && lowest > config.maxTicketPriceUsd) {
+      commercial += 2;
+      commercialReasons.push("above ticket budget");
+    }
+  }
+  const personalContext = Math.max(-2, Math.min(2, Number(game.personalContextFriction ?? 0) || 0));
+  return {
+    score: Math.max(0, Math.min(10, logistical + commercial + personalContext)),
+    logistical,
+    commercial,
+    personalContext,
+    commercialUncertain: lowest == null,
+    reasons: [...logisticalReasons, ...commercialReasons]
+  };
+}
+function mergePitcherStats(pitcher, stats) {
+  return pitcher ? { ...pitcher, ...stats.get(String(pitcher.id)) ?? {} } : null;
+}
+function ticketObservationKey(observation) {
+  return `${observation.source}|${observation.sourceEventId}|${observation.url}`;
+}
+function dedupeObservations(observations) {
+  return [...new Map(observations.filter(Boolean).map((observation) => [ticketObservationKey(observation), observation])).values()];
+}
+function venueMatches(left = {}, right = {}) {
+  if (Number.isFinite(left.lat) && Number.isFinite(left.lon) && Number.isFinite(right.lat) && Number.isFinite(right.lon)) {
+    return distanceMiles2(left.lat, left.lon, right.lat, right.lon) <= 3;
+  }
+  const leftName = normalizeTeamText(left.name);
+  const rightName = normalizeTeamText(right.name);
+  return Boolean(leftName && rightName && (leftName.includes(rightName) || rightName.includes(leftName) || leftName.includes("dodger") && rightName.includes("dodger")));
+}
+function teamMatches(haystack, team = {}) {
+  const aliases = new Set([
+    normalizeTeamText(team.name),
+    normalizeTeamText(team.shortName),
+    normalizeTeamText(team.abbreviation),
+    ...(team.name ?? "").toLowerCase().split(/\s+/).slice(-1)
+  ].filter(Boolean));
+  return [...aliases].some((alias) => alias.length >= 3 && haystack.includes(alias));
+}
+function normalizeTeamText(value) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|los|la)\b/g, " ").replace(/\s+/g, " ").trim();
+}
+function normalizeTicketVenue(venue = {}) {
+  return {
+    sourceId: venue.id == null ? null : String(venue.id),
+    name: String(venue.name ?? "").trim(),
+    city: String(venue.city?.name ?? venue.city ?? "").trim(),
+    state: String(venue.state?.stateCode ?? venue.state ?? "").trim(),
+    lat: numberOrNull2(venue.location?.latitude ?? venue.location?.lat),
+    lon: numberOrNull2(venue.location?.longitude ?? venue.location?.lon)
+  };
+}
+function distanceMiles2(lat1, lon1, lat2, lon2) {
+  const radians = Math.PI / 180;
+  const dLat = (lat2 - lat1) * radians;
+  const dLon = (lon2 - lon1) * radians;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * radians) * Math.cos(lat2 * radians) * Math.sin(dLon / 2) ** 2;
+  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function daysUntil(startLocal, now) {
+  return localDateDifference(startLocal, now);
+}
+async function requestJson3(url, fetchImpl, label) {
+  const response = await fetchImpl(url);
+  if (!response.ok) throw new Error(`${label} request failed (${response.status}).`);
+  return response.json();
+}
+function numberOrNull2(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 // ../src/seatgeek.js
@@ -399,9 +1291,9 @@ function eventWithinRadius(event, home, radiusMiles) {
   const lat = Number(event.venue?.location?.lat);
   const lon = Number(event.venue?.location?.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
-  return distanceMiles(home.lat, home.lon, lat, lon) <= radiusMiles;
+  return distanceMiles3(home.lat, home.lon, lat, lon) <= radiusMiles;
 }
-function distanceMiles(lat1, lon1, lat2, lon2) {
+function distanceMiles3(lat1, lon1, lat2, lon2) {
   const radians = Math.PI / 180;
   const dLat = (lat2 - lat1) * radians;
   const dLon = (lon2 - lon1) * radians;
@@ -435,14 +1327,14 @@ function normalizeSeatGeekEvent(event, retrievedAt = /* @__PURE__ */ new Date())
       name: String(venue.name ?? "").trim(),
       city: String(venue.city ?? "").trim(),
       state: String(venue.state ?? "").trim(),
-      lat: numberOrNull(venue.location?.lat),
-      lon: numberOrNull(venue.location?.lon)
+      lat: numberOrNull3(venue.location?.lat),
+      lon: numberOrNull3(venue.location?.lon)
     },
     performers,
     ticketObservation: {
-      listingCount: numberOrNull(event.stats?.listing_count),
-      lowestPriceUsd: numberOrNull(event.stats?.lowest_price),
-      averagePriceUsd: numberOrNull(event.stats?.average_price),
+      listingCount: numberOrNull3(event.stats?.listing_count),
+      lowestPriceUsd: numberOrNull3(event.stats?.lowest_price),
+      averagePriceUsd: numberOrNull3(event.stats?.average_price),
       observedAt: new Date(retrievedAt).toISOString()
     }
   };
@@ -459,7 +1351,7 @@ function spotifyIdFromLinks(links) {
   const match = url.match(/artist\/([A-Za-z0-9]+)/);
   return match?.[1] ?? null;
 }
-function numberOrNull(value) {
+function numberOrNull3(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -519,7 +1411,7 @@ async function fetchTicketmasterEvents({
     url.searchParams.set("size", "200");
     url.searchParams.set("page", String(page));
     url.searchParams.set("sort", "date,asc");
-    const body = await requestJson(url, fetchImpl);
+    const body = await requestJson4(url, fetchImpl);
     const pageEvents = body._embedded?.events ?? [];
     events.push(...pageEvents);
     const totalPages = Number(body.page?.totalPages ?? 0);
@@ -603,8 +1495,8 @@ function normalizeTicketmasterEvent(event, retrievedAt = /* @__PURE__ */ new Dat
       name: String(venue.name ?? "").trim(),
       city: String(venue.city?.name ?? "").trim(),
       state: String(venue.state?.stateCode ?? venue.state?.name ?? "").trim(),
-      lat: numberOrNull2(venue.location?.latitude),
-      lon: numberOrNull2(venue.location?.longitude)
+      lat: numberOrNull4(venue.location?.latitude),
+      lon: numberOrNull4(venue.location?.longitude)
     },
     performers: attractions.map((attraction, index) => ({
       sourceId: attraction.id ? String(attraction.id) : null,
@@ -614,18 +1506,18 @@ function normalizeTicketmasterEvent(event, retrievedAt = /* @__PURE__ */ new Dat
     })).filter((performer) => performer.name),
     ticketObservation: {
       listingCount: null,
-      lowestPriceUsd: numberOrNull2(event.priceRanges?.[0]?.min),
+      lowestPriceUsd: numberOrNull4(event.priceRanges?.[0]?.min),
       averagePriceUsd: null,
       observedAt: new Date(retrievedAt).toISOString()
     }
   };
 }
-async function requestJson(url, fetchImpl) {
+async function requestJson4(url, fetchImpl) {
   const response = await fetchImpl(url);
   if (!response.ok) throw new Error(`Ticketmaster request failed (${response.status}).`);
   return response.json();
 }
-function numberOrNull2(value) {
+function numberOrNull4(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -705,8 +1597,8 @@ function normalizeFrameworkEvent(event, retrievedAt = /* @__PURE__ */ new Date()
       name: decodeText(venue.venue),
       city: decodeText(venue.city),
       state: decodeText(venue.stateprovince ?? ""),
-      lat: numberOrNull3(venue.geo_lat),
-      lon: numberOrNull3(venue.geo_lng)
+      lat: numberOrNull5(venue.geo_lat),
+      lon: numberOrNull5(venue.geo_lng)
     },
     performers: frameworkPerformers(title),
     ticketObservation: {
@@ -772,7 +1664,7 @@ function canonicalArtistUrl(value) {
     return null;
   }
 }
-function numberOrNull3(value) {
+function numberOrNull5(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -859,8 +1751,8 @@ function normalizeInsomniacEvent(event, retrievedAt = /* @__PURE__ */ new Date()
       name: cleanText(venue.name ?? venue.venue ?? event.venueName ?? "Los Angeles"),
       city: cleanText(venue.city ?? event.city ?? "Los Angeles"),
       state: cleanText(venue.state ?? venue.stateCode ?? event.state ?? "CA"),
-      lat: numberOrNull4(venue.lat ?? venue.latitude),
-      lon: numberOrNull4(venue.lon ?? venue.longitude)
+      lat: numberOrNull6(venue.lat ?? venue.latitude),
+      lon: numberOrNull6(venue.lon ?? venue.longitude)
     },
     performers,
     ticketObservation: {
@@ -952,7 +1844,7 @@ function cleanText(value) {
 function decodeHtml(value) {
   return String(value ?? "").replace(/&amp;/g, "&").replace(/&#0?39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&nbsp;/g, " ").replace(/&#x2F;|&#47;/gi, "/").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 }
-function numberOrNull4(value) {
+function numberOrNull6(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -960,821 +1852,6 @@ function stableId(value) {
   let hash = 2166136261;
   for (const character of String(value)) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
   return `generated-${(hash >>> 0).toString(16)}`;
-}
-
-// ../src/candidates.js
-var SOURCE_PRIORITY = { seatgeek: 3, ticketmaster: 2, framework: 1, insomniac: 1 };
-function deduplicateCandidates(candidates, diagnostics = null) {
-  const merged = [];
-  if (diagnostics) {
-    diagnostics.inputCount = candidates.length;
-    diagnostics.mergedCount = 0;
-    diagnostics.venueAliasUse = 0;
-  }
-  for (const candidate of candidates) {
-    const match = merged.find((existing) => sameOccurrence(existing, candidate));
-    if (!match) {
-      merged.push({
-        ...candidate,
-        sourceOccurrences: sourceOccurrencesFor(candidate)
-      });
-      continue;
-    }
-    if (diagnostics) {
-      diagnostics.mergedCount += 1;
-      if (normalizeArtistName(match.venue?.name) !== normalizeArtistName(candidate.venue?.name)) {
-        diagnostics.venueAliasUse += 1;
-      }
-    }
-    mergeInto(match, candidate);
-  }
-  if (diagnostics) {
-    diagnostics.canonicalCount = merged.length;
-    diagnostics.sourceOccurrenceCount = merged.reduce((sum, candidate) => sum + (candidate.sourceOccurrences?.length ?? 0), 0);
-  }
-  return merged;
-}
-function sameOccurrence(left, right) {
-  if (occurrenceClass(left.type) !== occurrenceClass(right.type) || localDate(left.startLocal) !== localDate(right.startLocal)) return false;
-  const leftPerformers = new Set(left.performers.map((performer) => normalizeArtistName(performer.name)).filter(Boolean));
-  const performerOverlap = right.performers.some((performer) => leftPerformers.has(normalizeArtistName(performer.name)));
-  const titleLeft = canonicalEventTitle(left.title);
-  const titleRight = canonicalEventTitle(right.title);
-  const titleMatch = titleLeft === titleRight || titleLeft.length > 8 && titleRight.length > 8 && (titleLeft.includes(titleRight) || titleRight.includes(titleLeft));
-  if (!performerOverlap && !titleMatch) return false;
-  const venueMatch = sameVenue(left.venue, right.venue);
-  const sameCity = normalizeArtistName(left.venue.city) && normalizeArtistName(left.venue.city) === normalizeArtistName(right.venue.city);
-  const sameCityFestival = sameCity && titleMatch && titleLeft.includes("festival");
-  if (!venueMatch && !(sameCity && performerOverlap) && !sameCityFestival) return false;
-  const timeDelta = Math.abs(new Date(left.startLocal).getTime() - new Date(right.startLocal).getTime());
-  return Number.isNaN(timeDelta) || timeDelta <= 4 * 60 * 60 * 1e3;
-}
-function occurrenceClass(type) {
-  const normalized = normalizeArtistName(type);
-  if (normalized.includes("concert") || normalized.includes("music") || normalized.includes("festival")) return "music";
-  return normalized;
-}
-function canonicalEventTitle(value) {
-  return normalizeArtistName(value).replace(/\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*$/g, "").replace(/\bwith\b.*$/g, "").replace(/\bpresents?\b/g, "").replace(/\s+/g, " ").trim();
-}
-function sameVenue(left, right) {
-  if (Number.isFinite(left.lat) && Number.isFinite(left.lon) && Number.isFinite(right.lat) && Number.isFinite(right.lon)) {
-    return distanceMiles2(left.lat, left.lon, right.lat, right.lon) <= 1.5;
-  }
-  const leftName = normalizeArtistName(left.name);
-  const rightName = normalizeArtistName(right.name);
-  return Boolean(leftName && rightName && (leftName === rightName || leftName.includes(rightName) || rightName.includes(leftName)));
-}
-function mergeInto(target, incoming) {
-  target.sourceOccurrences.push(...sourceOccurrencesFor(incoming));
-  const performerKeys = new Set(target.performers.map((performer) => normalizeArtistName(performer.name)));
-  for (const performer of incoming.performers) {
-    if (!performerKeys.has(normalizeArtistName(performer.name))) target.performers.push(performer);
-  }
-  if ((SOURCE_PRIORITY[incoming.source] ?? 0) > (SOURCE_PRIORITY[target.source] ?? 0)) {
-    for (const field of ["id", "source", "sourceEventId", "sourceUrl", "title", "startLocal", "startUtc", "timeTbd", "dateTbd", "status", "venue"]) {
-      target[field] = incoming[field];
-    }
-  }
-  if (target.ticketObservation.lowestPriceUsd == null) target.ticketObservation.lowestPriceUsd = incoming.ticketObservation.lowestPriceUsd;
-}
-function sourceOccurrencesFor(candidate) {
-  const existing = Array.isArray(candidate.sourceOccurrences) && candidate.sourceOccurrences.length ? candidate.sourceOccurrences : [{ source: candidate.source, sourceEventId: candidate.sourceEventId, sourceUrl: candidate.sourceUrl }];
-  return existing.map((occurrence) => ({
-    ...occurrence,
-    title: occurrence.title ?? candidate.title,
-    startLocal: occurrence.startLocal ?? candidate.startLocal,
-    venue: occurrence.venue ?? candidate.venue,
-    performerNames: occurrence.performerNames ?? (candidate.performers ?? []).map((performer) => performer.name)
-  }));
-}
-function localDate(value) {
-  return String(value ?? "").slice(0, 10);
-}
-function distanceMiles2(lat1, lon1, lat2, lon2) {
-  const radians = Math.PI / 180;
-  const dLat = (lat2 - lat1) * radians;
-  const dLon = (lon2 - lon1) * radians;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * radians) * Math.cos(lat2 * radians) * Math.sin(dLon / 2) ** 2;
-  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// ../src/edmtrain.js
-var EDMTRAIN_API_BASE_URL = "https://edmtrain.com/api/";
-function buildEdmtrainUrl(path, params = {}) {
-  const url = new URL(String(path).replace(/^\/+/, ""), EDMTRAIN_API_BASE_URL);
-  for (const [key, value] of Object.entries(params)) if (value != null && value !== "") url.searchParams.set(key, String(value));
-  return url;
-}
-async function fetchEdmtrainEvents({ clientKey, startDate, endDate, city = "Los Angeles", state = "California", fetchImpl = fetch }) {
-  if (!clientKey) throw new Error("EDMTRAIN_CLIENT_KEY is not configured");
-  const locationsUrl = buildEdmtrainUrl("locations", { state, city, client: clientKey });
-  const locations = await requestJson2(locationsUrl, fetchImpl);
-  const location = unwrap(locations, ["locations", "data"]).find((item) => normalizeArtistName(item.city) === normalizeArtistName(city) && normalizeArtistName(item.state ?? item.stateName) === normalizeArtistName(state) && (!item.country || normalizeArtistName(item.country).includes("united states")));
-  if (!location?.id) throw new Error(`EDMTrain location not found for ${city}, ${state}`);
-  const eventsUrl = buildEdmtrainUrl("events", {
-    locationIds: location.id,
-    startDate,
-    endDate,
-    livestreamInd: false,
-    includeElectronicGenreInd: true,
-    includeOtherGenreInd: false,
-    client: clientKey
-  });
-  const body = await requestJson2(eventsUrl, fetchImpl);
-  return unwrap(body, ["events", "data"]).map(normalizeEdmtrainEvent).filter((event) => event.id && event.date);
-}
-function normalizeEdmtrainEvent(raw) {
-  const artists = Array.isArray(raw.artistList) ? raw.artistList : [];
-  let group = 0;
-  const orderedArtists = artists.map((artist, index) => {
-    const b2bWithNext = Boolean(artist.b2bInd);
-    const entry = {
-      lineupEntryId: `${raw.id ?? "event"}:${index}`,
-      displayName: String(artist.name ?? artist.artistName ?? "").trim(),
-      billingGroupIndex: group,
-      b2bWithNext
-    };
-    if (!b2bWithNext) group += 1;
-    return entry;
-  }).filter((artist) => artist.displayName);
-  return {
-    id: String(raw.id ?? ""),
-    sourceUrl: raw.link ? String(raw.link) : null,
-    name: String(raw.name ?? raw.eventName ?? "").trim(),
-    date: String(raw.date ?? raw.eventDate ?? "").slice(0, 10),
-    ages: raw.ages ? String(raw.ages) : null,
-    festival: Boolean(raw.festivalInd),
-    venue: {
-      name: String(raw.venue?.name ?? raw.venueName ?? "").trim(),
-      city: String(raw.venue?.location?.city ?? raw.venue?.city ?? "").trim(),
-      lat: finite(raw.venue?.latitude ?? raw.venue?.lat),
-      lon: finite(raw.venue?.longitude ?? raw.venue?.lon)
-    },
-    orderedArtists
-  };
-}
-function enrichEventsWithEdmtrain(events, edmEvents, artistSnapshot) {
-  const audit = [];
-  let matchedCount = 0;
-  let ambiguousCount = 0;
-  let lineupArtistCount = 0;
-  for (const edm of edmEvents) {
-    const candidates = events.filter((event2) => localDate2(event2.startLocal) === edm.date).map((event2) => ({ event: event2, rule: matchRule(event2, edm) })).filter((item) => item.rule);
-    if (candidates.length !== 1) {
-      if (candidates.length > 1) ambiguousCount += 1;
-      audit.push({ edmtrainEventId: edm.id, status: candidates.length ? "ambiguous" : "unmatched", candidateCount: candidates.length });
-      continue;
-    }
-    const { event, rule } = candidates[0];
-    const resolved = resolveLineup(edm.orderedArtists, artistSnapshot);
-    const existing = new Set(event.performers.map((performer) => normalizeArtistName(performer.name)));
-    for (const artist of resolved.filter((item) => item.relation !== "unknown")) {
-      const key = normalizeArtistName(artist.displayName);
-      if (key && !existing.has(key)) {
-        event.performers.push({ sourceId: null, name: artist.displayName, primary: false });
-        existing.add(key);
-      }
-    }
-    event.lineupDisplay = {
-      displayTitle: edm.name || event.title,
-      displayShape: displayShape(edm, event),
-      orderedArtists: resolved,
-      totalArtists: resolved.length,
-      directCount: resolved.filter((item) => item.relation === "direct").length,
-      adjacentCount: resolved.filter((item) => item.relation === "adjacent").length,
-      ages: edm.ages,
-      sourceUrl: edm.sourceUrl
-    };
-    matchedCount += 1;
-    lineupArtistCount += resolved.length;
-    audit.push({ edmtrainEventId: edm.id, canonicalEventId: event.id, status: "matched", rule, lineupCount: resolved.length });
-  }
-  return { events, audit, matchedCount, ambiguousCount, unmatchedCount: audit.filter((item) => item.status === "unmatched").length, lineupArtistCount };
-}
-function matchRule(event, edm) {
-  const venue = sameVenue2(event.venue, edm.venue);
-  const title = exactUsefulTitle(event.title, edm.name);
-  const eventArtists = new Set(event.performers.map((performer) => normalizeArtistName(performer.name)).filter(Boolean));
-  const overlap = edm.orderedArtists.some((artist) => eventArtists.has(normalizeArtistName(artist.displayName)));
-  const primary = edm.orderedArtists[0] && eventArtists.has(normalizeArtistName(edm.orderedArtists[0].displayName));
-  const coordinates = coordinateDistanceMeters(event.venue, edm.venue) <= 500;
-  if (venue && overlap) return "A";
-  if (venue && title) return "B";
-  if (coordinates && primary) return "C";
-  if (edm.festival && title && (venue || coordinates)) return "D";
-  return null;
-}
-function resolveLineup(entries, snapshot) {
-  const artists = snapshot.artists ?? [];
-  return entries.map((entry) => {
-    const key = normalizeArtistName(entry.displayName);
-    const matches = artists.filter((artist2) => [artist2.name, ...artist2.aliases ?? []].some((name) => normalizeArtistName(name) === key));
-    const artist = matches.length === 1 ? matches[0] : null;
-    const relation = !artist ? "unknown" : ["source", "top-items"].includes(artist.origin ?? "source") ? "direct" : "adjacent";
-    return { ...entry, relation };
-  });
-}
-function displayShape(edm, event) {
-  if (edm.festival) return "festival";
-  if (edm.orderedArtists.some((artist) => artist.b2bWithNext)) return "b2b";
-  if (edm.name && !edm.orderedArtists.length) return "named-event";
-  const venue = normalizeArtistName(event.venue?.name);
-  if (/arena|hall|theatre|theater|dome/.test(venue)) return "arena-hall";
-  if (/club|lounge/.test(venue) || edm.ages) return "club-show";
-  return "general-show";
-}
-function exactUsefulTitle(left, right) {
-  const a = canonicalEventTitle(left);
-  const b = canonicalEventTitle(right);
-  return Boolean(a && b && a.length >= 5 && a === b);
-}
-function sameVenue2(left = {}, right = {}) {
-  const a = normalizeArtistName(left.name);
-  const b = normalizeArtistName(right.name);
-  return Boolean(a && b && (a === b || a.length > 8 && b.length > 8 && (a.includes(b) || b.includes(a))));
-}
-function coordinateDistanceMeters(left = {}, right = {}) {
-  if (![left.lat, left.lon, right.lat, right.lon].every(Number.isFinite)) return Infinity;
-  const radians = Math.PI / 180;
-  const dLat = (right.lat - left.lat) * radians;
-  const dLon = (right.lon - left.lon) * radians;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(left.lat * radians) * Math.cos(right.lat * radians) * Math.sin(dLon / 2) ** 2;
-  return 6371e3 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-async function requestJson2(url, fetchImpl) {
-  const response = await fetchImpl(url);
-  if (!response.ok) throw new Error(`EDMTrain request failed (${response.status})`);
-  return response.json();
-}
-function unwrap(body, keys) {
-  if (Array.isArray(body)) return body;
-  for (const key of keys) if (Array.isArray(body?.[key])) return body[key];
-  return [];
-}
-function finite(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-function localDate2(value) {
-  return String(value ?? "").slice(0, 10);
-}
-
-// ../src/mlb.js
-var MLB_GAMEDAY_ROOT = "https://www.mlb.com/gameday";
-async function fetchDodgersHomeGames({
-  teamId = 119,
-  startDate,
-  endDate,
-  homeVenueIds = [],
-  season = null,
-  timezone = "America/Los_Angeles",
-  fetchImpl = fetch
-} = {}) {
-  if (!startDate || !endDate) throw new Error("MLB schedule requires startDate and endDate.");
-  const url = new URL("/api/v1/schedule", "https://statsapi.mlb.com");
-  url.searchParams.set("sportId", "1");
-  url.searchParams.set("teamId", String(teamId));
-  url.searchParams.set("startDate", startDate);
-  url.searchParams.set("endDate", endDate);
-  url.searchParams.set("hydrate", "team,venue,seriesStatus,probablePitcher");
-  url.searchParams.set("includeSeriesNumber", "true");
-  if (season != null) url.searchParams.set("season", String(season));
-  const body = await requestJson3(url, fetchImpl, "schedule");
-  const games = (body.dates ?? []).flatMap((date) => date.games ?? []);
-  return games.filter((game) => isHomeGame(game, teamId, homeVenueIds)).map((game) => normalizeMlbGame(game, { timezone, teamId }));
-}
-async function fetchMlbStandings({
-  season,
-  leagueIds = ["103", "104"],
-  fetchImpl = fetch
-} = {}) {
-  const url = new URL("/api/v1/standings", "https://statsapi.mlb.com");
-  url.searchParams.set("leagueId", leagueIds.join(","));
-  url.searchParams.set("standingsTypes", "regularSeason");
-  url.searchParams.set("hydrate", "team");
-  if (season != null) url.searchParams.set("season", String(season));
-  const body = await requestJson3(url, fetchImpl, "standings");
-  return normalizeStandings(body);
-}
-async function fetchMlbPitcherStats(pitcherIds, {
-  season,
-  maxPitchers = 48,
-  fetchImpl = fetch,
-  concurrency = 4
-} = {}) {
-  const ids = [...new Set((pitcherIds ?? []).map(String).filter(Boolean))].slice(0, maxPitchers);
-  const result = /* @__PURE__ */ new Map();
-  let next = 0;
-  async function worker() {
-    while (next < ids.length) {
-      const id = ids[next++];
-      try {
-        const url = new URL(`/api/v1/people/${encodeURIComponent(id)}`, "https://statsapi.mlb.com");
-        url.searchParams.set("hydrate", `stats(group=pitching,type=season${season != null ? `,season=${season}` : ""})`);
-        const body = await requestJson3(url, fetchImpl, `pitcher stats ${id}`);
-        const person = body.people?.[0];
-        const split = person?.stats?.flatMap((item) => item.splits ?? [])?.[0];
-        const stat = split?.stat;
-        if (person && stat) result.set(id, {
-          id,
-          name: person.fullName ?? null,
-          era: numberOrNull5(stat.era),
-          whip: numberOrNull5(stat.whip),
-          strikeoutsPer9: numberOrNull5(stat.strikeoutsPer9Inn),
-          inningsPitched: numberOrNull5(String(stat.inningsPitched ?? "").replace(/[^0-9.]/g, "")),
-          wins: numberOrNull5(stat.wins),
-          losses: numberOrNull5(stat.losses),
-          season: split.season ?? season ?? null
-        });
-      } catch {
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, ids.length) }, worker));
-  return result;
-}
-function normalizeMlbGame(game, { timezone = "America/Los_Angeles", teamId = 119, retrievedAt = /* @__PURE__ */ new Date() } = {}) {
-  const home = game.teams?.home ?? {};
-  const away = game.teams?.away ?? {};
-  const homeTeam = normalizeTeam(home.team);
-  const awayTeam = normalizeTeam(away.team);
-  const venue = game.venue ?? home.team?.venue ?? {};
-  const season = game.season ?? game.seasonDisplay ?? null;
-  const seriesNumber = game.seriesNumber ?? home.seriesNumber ?? away.seriesNumber ?? null;
-  const seriesId = season != null && seriesNumber != null ? `mlb:${season}:${seriesNumber}:${Math.min(Number(homeTeam.id ?? teamId), Number(awayTeam.id ?? 0))}:${Math.max(Number(homeTeam.id ?? teamId), Number(awayTeam.id ?? 0))}` : null;
-  return {
-    schemaVersion: 1,
-    id: `mlb:${game.gamePk}`,
-    source: "mlb",
-    sourceEventId: String(game.gamePk),
-    sourceUrl: `${MLB_GAMEDAY_ROOT}/${game.gamePk}`,
-    retrievedAt: new Date(retrievedAt).toISOString(),
-    title: `${awayTeam.name ?? "Away"} at ${homeTeam.name ?? "Home"}`,
-    type: "baseball",
-    startLocal: game.gameDate ? toLocalIso(game.gameDate, timezone) : null,
-    startUtc: game.gameDate ?? null,
-    timeTbd: Boolean(game.status?.startTimeTBD),
-    dateTbd: !game.officialDate,
-    status: game.status?.detailedState ?? "Scheduled",
-    venue: {
-      sourceId: venue.id == null ? null : String(venue.id),
-      name: String(venue.name ?? "Dodger Stadium").trim(),
-      city: "Los Angeles",
-      state: "CA",
-      lat: numberOrNull5(venue.location?.latitude ?? venue.geoLocation?.latitude),
-      lon: numberOrNull5(venue.location?.longitude ?? venue.geoLocation?.longitude)
-    },
-    homeTeam,
-    awayTeam,
-    series: {
-      id: seriesId,
-      gameNumber: numberOrNull5(game.seriesStatus?.gameNumber ?? game.seriesGameNumber ?? game.gameNumber),
-      gameCount: numberOrNull5(game.seriesStatus?.totalGames ?? game.gamesInSeries)
-    },
-    probablePitchers: {
-      home: normalizePitcher(home.probablePitcher),
-      away: normalizePitcher(away.probablePitcher),
-      confirmed: Boolean(home.probablePitcher?.id && away.probablePitcher?.id)
-    },
-    ticketObservations: [],
-    sourceOccurrences: [{
-      source: "mlb",
-      sourceEventId: String(game.gamePk),
-      sourceUrl: `${MLB_GAMEDAY_ROOT}/${game.gamePk}`,
-      title: `${awayTeam.name ?? "Away"} at ${homeTeam.name ?? "Home"}`,
-      startLocal: game.gameDate ? toLocalIso(game.gameDate, timezone) : null,
-      venue: {
-        name: String(venue.name ?? "Dodger Stadium").trim(),
-        city: "Los Angeles",
-        state: "CA"
-      },
-      performerNames: [awayTeam.name, homeTeam.name].filter(Boolean)
-    }]
-  };
-}
-function normalizeStandings(body) {
-  const standings = /* @__PURE__ */ new Map();
-  for (const record of body.records ?? []) {
-    for (const teamRecord of record.teamRecords ?? []) {
-      const team = normalizeTeam(teamRecord.team);
-      const lastTen = (teamRecord.records?.splitRecords ?? []).find((split) => split.type === "lastTen");
-      standings.set(String(team.id), {
-        team,
-        leagueRank: numberOrNull5(teamRecord.leagueRank),
-        divisionRank: numberOrNull5(teamRecord.divisionRank),
-        wins: numberOrNull5(teamRecord.wins ?? teamRecord.leagueRecord?.wins),
-        losses: numberOrNull5(teamRecord.losses ?? teamRecord.leagueRecord?.losses),
-        winPct: numberOrNull5(teamRecord.winningPercentage ?? teamRecord.leagueRecord?.pct),
-        lastTen: lastTen ? `${lastTen.wins}-${lastTen.losses}` : null,
-        streak: teamRecord.streak?.streakCode ?? null,
-        gamesBack: numberOrNull5(teamRecord.gamesBack),
-        division: team.division,
-        league: team.league
-      });
-    }
-  }
-  return standings;
-}
-function normalizeTeam(team = {}) {
-  return {
-    id: team.id == null ? null : String(team.id),
-    name: String(team.name ?? "").trim(),
-    shortName: String(team.shortName ?? team.teamName ?? "").trim(),
-    abbreviation: String(team.abbreviation ?? "").trim(),
-    league: team.league ? { id: String(team.league.id), name: String(team.league.name ?? "") } : null,
-    division: team.division ? { id: String(team.division.id), name: String(team.division.name ?? "") } : null
-  };
-}
-function normalizePitcher(pitcher) {
-  if (!pitcher?.id && !pitcher?.fullName) return null;
-  return {
-    id: pitcher.id == null ? null : String(pitcher.id),
-    name: String(pitcher.fullName ?? "").trim(),
-    era: null,
-    whip: null,
-    strikeoutsPer9: null,
-    inningsPitched: null
-  };
-}
-function applyPitcherStats(games, stats) {
-  return games.map((game) => {
-    const pitcherStats = (pitcher) => pitcher ? { ...pitcher, ...stats.get(String(pitcher.id)) ?? {} } : null;
-    return {
-      ...game,
-      probablePitchers: {
-        home: pitcherStats(game.probablePitchers?.home),
-        away: pitcherStats(game.probablePitchers?.away),
-        confirmed: game.probablePitchers?.confirmed ?? false
-      }
-    };
-  });
-}
-function isHomeGame(game, teamId, homeVenueIds) {
-  if (String(game.teams?.home?.team?.id ?? "") !== String(teamId)) return false;
-  if (!homeVenueIds?.length) return true;
-  return homeVenueIds.map(String).includes(String(game.venue?.id ?? game.teams?.home?.team?.venue?.id ?? ""));
-}
-function toLocalIso(value, timezone) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-    timeZoneName: "longOffset"
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const offset = String(values.timeZoneName ?? "GMT").replace(/^GMT/, "") || "+00:00";
-  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}:${values.second}${offset}`;
-}
-async function requestJson3(url, fetchImpl, context) {
-  const response = await fetchImpl(url);
-  if (!response.ok) throw new Error(`MLB ${context} request failed (${response.status}).`);
-  return response.json();
-}
-function numberOrNull5(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-// ../src/sports.js
-var SEATGEEK_EVENTS_URL = "https://api.seatgeek.com/2/events";
-var TICKETMASTER_EVENTS_URL = "https://app.ticketmaster.com/discovery/v2/events.json";
-async function fetchSeatGeekSportsEvents({
-  clientId,
-  startDate,
-  endDate,
-  config,
-  maxPages = 3,
-  fetchImpl = fetch
-} = {}) {
-  if (!clientId) throw new Error("SEATGEEK_CLIENT_ID is not configured.");
-  const events = [];
-  for (let page = 1; page <= maxPages; page += 1) {
-    const url = new URL(SEATGEEK_EVENTS_URL);
-    url.searchParams.set("client_id", clientId);
-    url.searchParams.set("q", config.teamName ?? "Los Angeles Dodgers");
-    url.searchParams.set("taxonomies.name", "baseball");
-    url.searchParams.set("lat", String(config.home?.lat ?? 34.0522));
-    url.searchParams.set("lon", String(config.home?.lon ?? -118.2437));
-    url.searchParams.set("range", `${config.searchRadiusMiles ?? 60}mi`);
-    url.searchParams.set("datetime_local.gte", startDate);
-    url.searchParams.set("datetime_local.lte", `${endDate}T23:59:59`);
-    url.searchParams.set("per_page", "100");
-    url.searchParams.set("page", String(page));
-    url.searchParams.set("sort", "datetime_local.asc");
-    const body = await requestJson4(url, fetchImpl, "SeatGeek sports");
-    const pageEvents = Array.isArray(body.events) ? body.events : [];
-    events.push(...pageEvents);
-    if (!pageEvents.length || pageEvents.length < 100 || events.length >= Number(body.meta?.total ?? 0)) break;
-  }
-  return events;
-}
-async function fetchTicketmasterSportsEvents({
-  apiKey,
-  startDate,
-  endDate,
-  config,
-  maxPages = 3,
-  fetchImpl = fetch
-} = {}) {
-  if (!apiKey) throw new Error("TICKETMASTER_API_KEY is not configured.");
-  const events = [];
-  for (let page = 0; page < maxPages; page += 1) {
-    const url = new URL(TICKETMASTER_EVENTS_URL);
-    url.searchParams.set("apikey", apiKey);
-    url.searchParams.set("classificationName", "Sports");
-    url.searchParams.set("keyword", config.teamName ?? "Los Angeles Dodgers");
-    url.searchParams.set("latlong", `${config.home?.lat ?? 34.0522},${config.home?.lon ?? -118.2437}`);
-    url.searchParams.set("radius", String(config.searchRadiusMiles ?? 60));
-    url.searchParams.set("unit", "miles");
-    url.searchParams.set("startDateTime", `${startDate}T00:00:00Z`);
-    url.searchParams.set("endDateTime", `${endDate}T23:59:59Z`);
-    url.searchParams.set("includeTBA", "yes");
-    url.searchParams.set("includeTBD", "yes");
-    url.searchParams.set("size", "200");
-    url.searchParams.set("page", String(page));
-    url.searchParams.set("sort", "date,asc");
-    const body = await requestJson4(url, fetchImpl, "Ticketmaster sports");
-    const pageEvents = body._embedded?.events ?? [];
-    events.push(...pageEvents);
-    if (!pageEvents.length || page + 1 >= Number(body.page?.totalPages ?? 0)) break;
-  }
-  return events;
-}
-function normalizeSeatGeekSportsEvent(event, retrievedAt = /* @__PURE__ */ new Date()) {
-  const venue = event.venue ?? {};
-  const names = (event.performers ?? []).map((performer) => performer.name ?? performer.short_name).filter(Boolean);
-  return {
-    source: "seatgeek",
-    sourceEventId: String(event.id),
-    sourceUrl: String(event.url ?? ""),
-    title: String(event.title ?? event.short_title ?? "").trim(),
-    startLocal: event.datetime_local ?? null,
-    venue: normalizeTicketVenue(venue),
-    teamNames: [...names, event.title ?? ""].filter(Boolean),
-    ticketObservation: {
-      source: "seatgeek",
-      sourceEventId: String(event.id),
-      url: String(event.url ?? ""),
-      lowestPriceUsd: numberOrNull6(event.stats?.lowest_price),
-      averagePriceUsd: numberOrNull6(event.stats?.average_price),
-      listingCount: numberOrNull6(event.stats?.listing_count),
-      status: event.status ?? "scheduled",
-      observedAt: new Date(retrievedAt).toISOString()
-    }
-  };
-}
-function normalizeTicketmasterSportsEvent(event, retrievedAt = /* @__PURE__ */ new Date()) {
-  const venue = event._embedded?.venues?.[0] ?? {};
-  const attractions = event._embedded?.attractions ?? [];
-  const localDate3 = event.dates?.start?.localDate ?? null;
-  const localTime = event.dates?.start?.localTime ?? "00:00:00";
-  const names = attractions.map((attraction) => attraction.name).filter(Boolean);
-  return {
-    source: "ticketmaster",
-    sourceEventId: String(event.id),
-    sourceUrl: String(event.url ?? ""),
-    title: String(event.name ?? "").trim(),
-    startLocal: localDate3 ? `${localDate3}T${localTime}` : null,
-    venue: normalizeTicketVenue(venue),
-    teamNames: [...names, event.name ?? ""].filter(Boolean),
-    ticketObservation: {
-      source: "ticketmaster",
-      sourceEventId: String(event.id),
-      url: String(event.url ?? ""),
-      lowestPriceUsd: numberOrNull6(event.priceRanges?.[0]?.min),
-      averagePriceUsd: null,
-      listingCount: null,
-      status: event.dates?.status?.code ?? "scheduled",
-      observedAt: new Date(retrievedAt).toISOString()
-    }
-  };
-}
-function enrichSportsGames(games, standings, config, {
-  now = /* @__PURE__ */ new Date(),
-  pitcherStats = /* @__PURE__ */ new Map()
-} = {}) {
-  return games.map((game) => {
-    const opponent = standings.get(String(game.awayTeam?.id));
-    const rivalry = config.rivalries?.[String(game.awayTeam?.id)] ?? { tier: "none", label: null };
-    const sportsContext = {
-      opponentWinPct: opponent?.winPct ?? null,
-      opponentLeagueRank: opponent?.leagueRank ?? null,
-      opponentDivisionRank: opponent?.divisionRank ?? null,
-      opponentLast10: opponent?.lastTen ?? null,
-      opponentStreak: opponent?.streak ?? null,
-      rivalryTier: rivalry.tier,
-      probablePitchers: {
-        home: mergePitcherStats(game.probablePitchers?.home, pitcherStats),
-        away: mergePitcherStats(game.probablePitchers?.away, pitcherStats),
-        confirmed: game.probablePitchers?.confirmed ?? false
-      },
-      playoffLeverage: playoffLeverage(game.startLocal, opponent)
-    };
-    const tags = sportsTags(game, opponent, rivalry, sportsContext);
-    const ranking = scoreSportsGame({ ...game, sportsContext, tags }, config, now);
-    return { ...game, sportsContext, tags, ranking };
-  });
-}
-function scoreSportsGame(game, config, now = /* @__PURE__ */ new Date()) {
-  const opponentQuality = opponentQualityScore(game.sportsContext);
-  const rivalryScore = { high: 15, medium: 8, low: 3, none: 0 }[game.sportsContext?.rivalryTier] ?? 0;
-  const pitchingScore = pitchingMatchupScore(game.sportsContext?.probablePitchers);
-  const leverageScore = { high: 10, medium: 6, low: 2, unknown: 0 }[game.sportsContext?.playoffLeverage] ?? 0;
-  const convenienceScore = dateConvenience(game.startLocal);
-  const hassleScore = sportsHassle(game, config);
-  const interestScore = Math.min(100, 35 + opponentQuality + rivalryScore + pitchingScore + leverageScore + convenienceScore);
-  const urgency = sportsTicketUrgency(game.ticketObservations ?? [], game.startLocal, now);
-  const confidence = game.sportsContext?.opponentWinPct == null ? "medium" : game.sportsContext.probablePitchers.confirmed ? "high" : "medium";
-  const whyYou = sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, convenienceScore, hassleScore });
-  return {
-    excluded: false,
-    interestScore,
-    utility: interestScore - hassleScore * 2,
-    opponentQuality,
-    rivalryScore,
-    pitchingScore,
-    leverageScore,
-    convenienceScore,
-    hassleScore,
-    hassleReasons: sportsHassleReasons(game, config),
-    urgency,
-    confidence,
-    whyYou
-  };
-}
-function sportsWhyYou(game, { opponentQuality, rivalryScore, pitchingScore, leverageScore, convenienceScore, hassleScore }) {
-  const date = game.startLocal ? new Date(game.startLocal) : null;
-  const day = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString("en-US", { weekday: "long" }) : null;
-  const friction = hassleScore <= 4 ? "Low-hassle" : hassleScore <= 6 ? "Manageable" : "Higher-hassle";
-  const reasons = [];
-  if (rivalryScore >= 15) reasons.push(`${game.awayTeam.shortName || game.awayTeam.name} rivalry`);
-  else if (opponentQuality >= 8) reasons.push("a stronger-than-usual matchup");
-  if (pitchingScore >= 7) reasons.push("a strong pitching matchup");
-  if (leverageScore >= 6) reasons.push("useful late-season leverage");
-  if (!reasons.length && convenienceScore >= 8) reasons.push("a good weekend timing window");
-  if (!reasons.length) reasons.push("a worthwhile Dodgers home-game setup");
-  return `${friction} ${day ? `${day} ` : ""}game with ${joinReasons(reasons)}.`;
-}
-function joinReasons(reasons) {
-  if (reasons.length === 1) return reasons[0];
-  if (reasons.length === 2) return `${reasons[0]} and ${reasons[1]}`;
-  return `${reasons.slice(0, -1).join(", ")}, and ${reasons.at(-1)}`;
-}
-function joinSportsTickets(games, ticketEvents, config, now = /* @__PURE__ */ new Date()) {
-  return games.map((game) => {
-    const matches = ticketEvents.filter((ticket) => ticketMatchesGame(ticket, game));
-    const observations = dedupeObservations(matches.map((ticket) => ticket.ticketObservation));
-    const sourceOccurrences = [
-      ...game.sourceOccurrences ?? [],
-      ...observations.map((observation) => ({
-        source: observation.source,
-        sourceEventId: observation.sourceEventId,
-        sourceUrl: observation.url
-      }))
-    ];
-    const next = { ...game, ticketObservations: observations, sourceOccurrences };
-    return { ...next, ranking: scoreSportsGame(next, config, now) };
-  });
-}
-function sportsTicketUrgency(observations, startLocal, now = /* @__PURE__ */ new Date()) {
-  if (!observations?.length) return "unknown";
-  if (observations.some((observation) => /sold|cancel/i.test(String(observation.status)))) return "likely unavailable";
-  const listingCount = observations.map((observation) => observation.listingCount).filter(Number.isFinite).sort((a, b) => a - b)[0] ?? null;
-  const days = daysUntil(startLocal, now);
-  if (listingCount != null && listingCount <= 10) return "buy now";
-  if (days != null && days <= 7) return "watch";
-  return "safe to wait";
-}
-function ticketMatchesGame(ticket, game) {
-  if (!ticket.startLocal || !game.startLocal || ticket.startLocal.slice(0, 10) !== game.startLocal.slice(0, 10)) return false;
-  if (!venueMatches(ticket.venue, game.venue)) return false;
-  const haystack = normalizeTeamText([ticket.title, ...ticket.teamNames ?? []].join(" "));
-  if (!teamMatches(haystack, game.homeTeam)) return false;
-  const opponentKnown = teamMatches(haystack, game.awayTeam);
-  const anyOpponentMentioned = game.awayTeam?.name && normalizeTeamText(haystack).includes(normalizeTeamText(game.awayTeam.name).split(" ")[0]);
-  return opponentKnown || !anyOpponentMentioned;
-}
-function sportsTags(game, opponent, rivalry, context) {
-  const tags = [];
-  if (rivalry.label) tags.push(`${game.awayTeam.shortName || game.awayTeam.name} rivalry`);
-  if (opponent?.divisionRank === 1) tags.push(`${opponent.division?.name ?? "Division"} leader`);
-  if (opponent?.leagueRank != null && opponent.leagueRank <= 5) tags.push("Contending opponent");
-  if (context.probablePitchers.confirmed && pitchingMatchupScore(context.probablePitchers) >= 7) tags.push("Strong pitching matchup");
-  if (context.playoffLeverage === "high") tags.push("Late-season leverage");
-  if ([0, 6].includes(new Date(game.startLocal).getDay())) tags.push("Weekend game");
-  return tags;
-}
-function opponentQualityScore(context = {}) {
-  if (Number.isFinite(context.opponentLeagueRank)) return Math.max(0, Math.min(20, Math.round(20 - (context.opponentLeagueRank - 1) * 1.25)));
-  if (Number.isFinite(context.opponentWinPct)) return Math.max(0, Math.min(20, Math.round((context.opponentWinPct - 0.35) * 66.67)));
-  return 0;
-}
-function pitchingMatchupScore(pitchers = {}) {
-  const quality = (pitcher) => {
-    if (!pitcher) return 0;
-    if (pitcher.era == null && pitcher.whip == null) return 1;
-    let score = 0;
-    if (pitcher.era != null) score += pitcher.era <= 3 ? 3 : pitcher.era <= 4 ? 2 : 1;
-    if (pitcher.whip != null) score += pitcher.whip <= 1.1 ? 2 : pitcher.whip <= 1.3 ? 1 : 0;
-    return Math.min(5, score);
-  };
-  return Math.min(10, quality(pitchers.home) + quality(pitchers.away));
-}
-function playoffLeverage(startLocal, opponent) {
-  if (!opponent) return "unknown";
-  const month = Number(String(startLocal ?? "").slice(5, 7));
-  if (month >= 9 && (opponent.divisionRank <= 2 || opponent.gamesBack != null && opponent.gamesBack <= 5)) return "high";
-  if (opponent.divisionRank <= 2 || opponent.gamesBack != null && opponent.gamesBack <= 5) return "medium";
-  return "low";
-}
-function dateConvenience(startLocal) {
-  const date = new Date(startLocal);
-  if (Number.isNaN(date.getTime())) return 0;
-  const day = date.getDay();
-  if (day === 0 || day === 6) return 10;
-  if (day === 5) return 8;
-  return 4;
-}
-function sportsHassle(game, config) {
-  let score = 4;
-  if (!game.ticketObservations?.length) score += 1;
-  if (game.timeTbd || game.dateTbd) score += 2;
-  if (config.homeVenueNames?.length && !config.homeVenueNames.some((name) => normalizeTeamText(game.venue.name).includes(normalizeTeamText(name)))) score += 1;
-  return Math.min(10, score);
-}
-function sportsHassleReasons(game, config) {
-  const reasons = ["Dodger Stadium logistics"];
-  if (!game.ticketObservations?.length) reasons.push("ticket coverage unknown");
-  if (game.timeTbd || game.dateTbd) reasons.push("time or date is TBD");
-  if (config.homeVenueNames?.length && !config.homeVenueNames.some((name) => normalizeTeamText(game.venue.name).includes(normalizeTeamText(name)))) reasons.push("venue confirmation pending");
-  return reasons;
-}
-function mergePitcherStats(pitcher, stats) {
-  return pitcher ? { ...pitcher, ...stats.get(String(pitcher.id)) ?? {} } : null;
-}
-function ticketObservationKey(observation) {
-  return `${observation.source}|${observation.sourceEventId}|${observation.url}`;
-}
-function dedupeObservations(observations) {
-  return [...new Map(observations.filter(Boolean).map((observation) => [ticketObservationKey(observation), observation])).values()];
-}
-function venueMatches(left = {}, right = {}) {
-  if (Number.isFinite(left.lat) && Number.isFinite(left.lon) && Number.isFinite(right.lat) && Number.isFinite(right.lon)) {
-    return distanceMiles3(left.lat, left.lon, right.lat, right.lon) <= 3;
-  }
-  const leftName = normalizeTeamText(left.name);
-  const rightName = normalizeTeamText(right.name);
-  return Boolean(leftName && rightName && (leftName.includes(rightName) || rightName.includes(leftName) || leftName.includes("dodger") && rightName.includes("dodger")));
-}
-function teamMatches(haystack, team = {}) {
-  const aliases = new Set([
-    normalizeTeamText(team.name),
-    normalizeTeamText(team.shortName),
-    normalizeTeamText(team.abbreviation),
-    ...(team.name ?? "").toLowerCase().split(/\s+/).slice(-1)
-  ].filter(Boolean));
-  return [...aliases].some((alias) => alias.length >= 3 && haystack.includes(alias));
-}
-function normalizeTeamText(value) {
-  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|los|la)\b/g, " ").replace(/\s+/g, " ").trim();
-}
-function normalizeTicketVenue(venue = {}) {
-  return {
-    sourceId: venue.id == null ? null : String(venue.id),
-    name: String(venue.name ?? "").trim(),
-    city: String(venue.city?.name ?? venue.city ?? "").trim(),
-    state: String(venue.state?.stateCode ?? venue.state ?? "").trim(),
-    lat: numberOrNull6(venue.location?.latitude ?? venue.location?.lat),
-    lon: numberOrNull6(venue.location?.longitude ?? venue.location?.lon)
-  };
-}
-function distanceMiles3(lat1, lon1, lat2, lon2) {
-  const radians = Math.PI / 180;
-  const dLat = (lat2 - lat1) * radians;
-  const dLon = (lon2 - lon1) * radians;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * radians) * Math.cos(lat2 * radians) * Math.sin(dLon / 2) ** 2;
-  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-function daysUntil(startLocal, now) {
-  const date = new Date(startLocal);
-  return Number.isNaN(date.getTime()) ? null : Math.ceil((date.getTime() - now.getTime()) / 864e5);
-}
-async function requestJson4(url, fetchImpl, label) {
-  const response = await fetchImpl(url);
-  if (!response.ok) throw new Error(`${label} request failed (${response.status}).`);
-  return response.json();
-}
-function numberOrNull6(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
 }
 
 // ../src/tmdb.js
@@ -2141,11 +2218,7 @@ function callLabel(score) {
   return "Watch";
 }
 function daysFrom(value, now) {
-  if (!value) return null;
-  const date = new Date(value);
-  const reference = new Date(now);
-  if (Number.isNaN(date.getTime()) || Number.isNaN(reference.getTime())) return null;
-  return Math.ceil((date.getTime() - reference.getTime()) / 864e5);
+  return localDateDifference(value, now);
 }
 
 // ../src/lastfm.js
@@ -2354,67 +2427,6 @@ function round(value, places) {
   const factor = 10 ** places;
   return Math.round(value * factor) / factor;
 }
-
-// ../src/tasteProfile.js
-function buildTasteProfile(expandedSnapshot, { feedbackState = null, topArtistLimit = 12 } = {}) {
-  if (!expandedSnapshot || !Array.isArray(expandedSnapshot.artists)) return null;
-  const artists = expandedSnapshot.artists;
-  const maxSeedStrength = artists.reduce((max, artist) => Math.max(max, Number(artist.seedStrength) || 0), 0);
-  const topArtists = [...artists].filter((artist) => (Number(artist.seedStrength) || 0) > 0).sort((left, right) => (Number(right.seedStrength) || 0) - (Number(left.seedStrength) || 0) || normalizeArtistName(left.name ?? "").localeCompare(normalizeArtistName(right.name ?? ""))).slice(0, topArtistLimit).map((artist) => ({
-    name: String(artist.name ?? ""),
-    relativeSignal: maxSeedStrength > 0 ? Math.round((Number(artist.seedStrength) || 0) / maxSeedStrength * 100) : 0,
-    playlistDiversity: safeCount(artist.playlistDiversity),
-    seedTrackCount: safeCount(artist.trackCount),
-    origin: publicOrigin(artist.origin),
-    evidenceLabels: coarseEvidenceLabels(artist)
-  }));
-  const expansionByOrigin = {};
-  for (const artist of artists) {
-    const origin = publicOrigin(artist.origin);
-    expansionByOrigin[origin] = (expansionByOrigin[origin] ?? 0) + 1;
-  }
-  return {
-    generatedAt: String(expandedSnapshot.generatedAt ?? ""),
-    seedSummary: {
-      playlistCount: safeCount(expandedSnapshot.playlistCount),
-      sourceArtistCount: safeCount(expandedSnapshot.sourceArtistCount),
-      topArtistCount: safeCount(expandedSnapshot.topArtistCount),
-      artistCount: safeCount(expandedSnapshot.artistCount)
-    },
-    topArtists,
-    topTags: Array.isArray(expandedSnapshot.topTags) ? expandedSnapshot.topTags.slice(0, 8).map(String) : [],
-    expansionByOrigin,
-    feedback: publicFeedbackAggregates(feedbackState)
-  };
-}
-function coarseEvidenceLabels(artist) {
-  const labels = [];
-  const top = artist.topEvidence ?? null;
-  if (top?.shortTermRank != null && top.shortTermRank <= 10) labels.push("Current top artist");
-  if (top?.mediumTermRank != null && top.mediumTermRank <= 25 && top?.longTermRank != null && top.longTermRank <= 25) labels.push("Sustained favorite");
-  if (safeCount(artist.playlistDiversity) >= 2) labels.push("Playlist anchor");
-  if (["similar", "tag", "promoter"].includes(artist.origin)) labels.push("Adjacent discovery");
-  return labels;
-}
-function publicOrigin(origin) {
-  return ["source", "similar", "tag", "promoter", "top-items"].includes(origin) ? origin : "source";
-}
-function publicFeedbackAggregates(feedbackState) {
-  if (!feedbackState || typeof feedbackState !== "object") return null;
-  const outcomes = feedbackState.outcomesByStatus;
-  if (!outcomes || typeof outcomes !== "object") return null;
-  const statusCounts = {};
-  let attendedCount = 0;
-  for (const [status, count] of Object.entries(outcomes)) {
-    statusCounts[status] = safeCount(count);
-    if (status.startsWith("attended-")) attendedCount += safeCount(count);
-  }
-  return { statusCounts, attendedCount };
-}
-function safeCount(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? Math.round(number) : 0;
-}
 export {
   DEFAULT_FOCAL_POINT,
   EDMTRAIN_API_BASE_URL,
@@ -2425,7 +2437,7 @@ export {
   buildExpandedArtistSnapshot,
   buildOverview,
   buildOverviewBuckets,
-  buildTasteProfile,
+  calculateHassle,
   canonicalEventTitle,
   deduplicateCandidates,
   enrichEventsWithEdmtrain,

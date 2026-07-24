@@ -38,10 +38,11 @@ test('builds an allowlisted profile with relative signal and coarse evidence lab
   assert.equal(profile.topArtists[0].name, 'Prospa');
   assert.equal(profile.topArtists[0].relativeSignal, 100);
   assert.deepEqual(profile.topArtists[0].evidenceLabels, ['Current top artist', 'Sustained favorite', 'Playlist anchor']);
-  // Equal seedStrength ties break on normalized name: Biscits before Zed Artist.
-  assert.deepEqual(profile.topArtists.slice(1).map((artist) => artist.name), ['Biscits', 'Zed Artist']);
+  // Direct playlist contribution outranks bounded inferred discovery.
+  assert.deepEqual(profile.topArtists.slice(1).map((artist) => artist.name), ['Zed Artist', 'Biscits']);
   assert.equal(profile.topArtists[1].relativeSignal, 93);
-  assert.deepEqual(profile.topArtists[1].evidenceLabels, ['Adjacent discovery']);
+  assert.deepEqual(profile.topArtists[1].evidenceLabels, []);
+  assert.deepEqual(profile.topArtists[2].evidenceLabels, ['Adjacent discovery']);
   assert.deepEqual(profile.topTags, ['electronic', 'house', 'pop']);
   assert.equal(profile.expansionByOrigin.source, 3);
   assert.equal(profile.expansionByOrigin.similar, 1);

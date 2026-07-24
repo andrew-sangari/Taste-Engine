@@ -11,10 +11,10 @@ import {
   validatePreview
 } from '../src/refreshWorkflow.js';
 
-test('enabled feedback capture schedules a private shadow report without activating publication', () => {
+test('feedback simulation runs for shadow and validated publication modes', () => {
   assert.deepEqual(feedbackSimulationArgs({ feedback: { enabled: true, applyToPublishedRanking: false } }), ['src/cli/taste-feedback.js', 'simulate']);
   assert.equal(feedbackSimulationArgs({ feedback: { enabled: false, applyToPublishedRanking: false } }), null);
-  assert.throws(() => feedbackSimulationArgs({ feedback: { enabled: true, applyToPublishedRanking: true } }), /must remain disabled/);
+  assert.deepEqual(feedbackSimulationArgs({ feedback: { enabled: true, applyToPublishedRanking: true } }), ['src/cli/taste-feedback.js', 'simulate']);
 });
 
 function projection(overrides = {}) {
@@ -46,7 +46,7 @@ async function fixture() {
   return { root, preview, accepted };
 }
 
-test('validation fails closed on duplicate IDs, private artifacts, active feedback, and collapse', async () => {
+test('validation fails closed on duplicate IDs, private artifacts, missing feedback audit, and collapse', async () => {
   const { preview, accepted } = await fixture();
   const duplicate = projection({ events: [{ id: 'same' }, { id: 'same' }], overview: [{ id: 'same' }] });
   await writeFile(join(preview, 'site', 'app', 'data', 'upcoming.json'), JSON.stringify(duplicate));
@@ -54,7 +54,7 @@ test('validation fails closed on duplicate IDs, private artifacts, active feedba
   const result = await validatePreview({ previewDir: preview, acceptedDir: accepted, feedbackApplicationEnabled: true });
   assert.equal(result.ok, false);
   const codes = result.errors.map((item) => item.code);
-  for (const code of ['duplicate-published-id', 'feedback-application-active', 'private-artifact-public']) assert.ok(codes.includes(code));
+  for (const code of ['duplicate-published-id', 'feedback-learning-audit-missing', 'private-artifact-public']) assert.ok(codes.includes(code));
 
   await writeFile(join(preview, 'site', 'app', 'data', 'upcoming.json'), JSON.stringify(projection({ events: [], overview: [] })));
   const collapsed = await validatePreview({ previewDir: preview, acceptedDir: accepted });

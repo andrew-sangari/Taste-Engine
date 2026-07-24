@@ -1,4 +1,5 @@
 import { sanitizeErrorMessage, sanitizePromptContext } from './diagnostics.js';
+import { localDateDifference, weekdayForLocalDate } from './localDate.js';
 
 const VERDICTS = new Set(['go out', 'maybe', 'do not waste your time']);
 const UNSUPPORTED_CLAIMS = /\b(?:sell[ -]?out|scarcity|limited availability|access loss|loss of access|will disappear|tickets? (?:disappear|vanish)|become unavailable)\b/i;
@@ -193,9 +194,7 @@ export function deterministicEditorial(projection, status = 'deterministic fallb
       ? 'A watchlist, not a mandate.'
       : 'Nothing earns the trip yet.';
   const sportsLeadsNow = input.overviewPriority === 'sports';
-  const immediateDay = input.overview.find((candidate) => candidate.vertical === 'sports')?.startLocal
-    ? new Date(input.overview.find((candidate) => candidate.vertical === 'sports').startLocal).toLocaleDateString('en-US', { weekday: 'long' })
-    : 'upcoming';
+  const immediateDay = weekdayForLocalDate(input.overview.find((candidate) => candidate.vertical === 'sports')?.startLocal) ?? 'upcoming';
   const lead = input.concertCandidateCount || sports
     ? sportsLeadsNow
       ? `Music leads the broader shortlist, but this ${immediateDay} Dodgers game is the strongest immediate option. The remaining dates can wait for a clearer music signal.`
@@ -293,9 +292,7 @@ function alignEditorialWithOverview(editorial, input) {
     .trim();
 
   const sportsDate = input.overview.find((candidate) => candidate.vertical === 'sports')?.startLocal;
-  const day = sportsDate
-    ? new Date(sportsDate).toLocaleDateString('en-US', { weekday: 'long' })
-    : 'upcoming';
+  const day = weekdayForLocalDate(sportsDate) ?? 'upcoming';
   const bridge = `Music leads the broader shortlist, but this ${day} Dodgers game is the strongest immediate option.`;
   return {
     ...editorial,
@@ -357,7 +354,5 @@ function containsRestrictedCandidate(text, blockedNames) {
 }
 
 function daysFromNow(value, now) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : Math.ceil((date.getTime() - now.getTime()) / 86_400_000);
+  return localDateDifference(value, now);
 }

@@ -1,5 +1,6 @@
 import { normalizeArtistName } from './ranking.js';
 import { resolveMusicVisual, resolveSportsVisual } from './visuals.js';
+import { localDateDifference } from './localDate.js';
 
 export function buildOverview(events = [], sports = []) {
   return selectRepresentatives(buildCandidates(events, sports)).slice(0, 5);
@@ -132,9 +133,5 @@ function callLabel(score) {
 }
 
 function daysFrom(value, now) {
-  if (!value) return null;
-  const date = new Date(value);
-  const reference = new Date(now);
-  if (Number.isNaN(date.getTime()) || Number.isNaN(reference.getTime())) return null;
-  return Math.ceil((date.getTime() - reference.getTime()) / 86_400_000);
+  return localDateDifference(value, now);
 }

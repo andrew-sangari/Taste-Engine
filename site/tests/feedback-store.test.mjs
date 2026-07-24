@@ -59,7 +59,7 @@ function history(id = "event:1", dateLocal = "2026-07-01", surfaces = ["shortlis
   };
 }
 
-test("persists version 2 and fails soft on corruption", () => {
+test("persists version 3 and fails soft on corruption", () => {
   const storage = fakeStorage();
   const store = setPlanningIntent(emptyStore(), musicInput(), "saved", true, NOW);
   assert.ok(saveStore(storage, store));
@@ -68,7 +68,7 @@ test("persists version 2 and fails soft on corruption", () => {
   assert.deepEqual(loadStore(null), emptyStore());
 });
 
-test("migrates saved v1 planning and records while dropping unresolved legacy skips", () => {
+test("migrates saved v1 planning and records while retaining history-only legacy outcomes", () => {
   const saved = musicInput("event:saved");
   const skipped = musicInput("event:skipped");
   const legacy = {
@@ -81,7 +81,7 @@ test("migrates saved v1 planning and records while dropping unresolved legacy sk
     exportBatches: { batch: { exportBatchId: "batch" } },
   };
   const migrated = loadStore(fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify(legacy) }));
-  assert.equal(migrated.version, 2);
+  assert.equal(migrated.version, 3);
   assert.equal(migrated.planning["event:saved"].saved, true);
   assert.equal(migrated.planning["event:saved"].held, false);
   assert.equal(migrated.planning["event:skipped"], undefined);
@@ -122,30 +122,41 @@ test("didn't go dismisses locally without creating taste evidence", () => {
 
 test("attendance and explicit Not for me map to existing journal states and reject duplicates", () => {
   const item = history();
-  let attended = confirmHistoryFeedback(emptyStore(), item, "attended-worth-it", { now: NOW, uuid: "attended" });
+  let attended = confirmHistoryFeedback(emptyStore(), item, "attended-worth-it", [], { now: NOW, uuid: "attended" });
   assert.equal(attended.records["site-attended"].record.status, "attended-worth-it");
   assert.equal(attended.historyResponses[item.historyId].state, "resolved");
-  attended = confirmHistoryFeedback(attended, item, "attended-not-worth-it", { now: NOW, uuid: "duplicate" });
+  attended = confirmHistoryFeedback(attended, item, "attended-not-worth-it", [], { now: NOW, uuid: "duplicate" });
   assert.equal(attended.records["site-duplicate"], undefined);
 
   const snapshot = musicInput("event:negative", "2026-08-01").feedbackSnapshot;
-  let negative = recordNotForMe(emptyStore(), snapshot, { now: NOW, uuid: "negative" });
-  assert.equal(negative.records["site-negative"].record.status, "skipped-no-longer-interested");
-  negative = recordNotForMe(negative, snapshot, { now: NOW, uuid: "again" });
+  let negative = recordNotForMe(emptyStore(), snapshot, ["artist"], { now: NOW, uuid: "negative" });
+  assert.equal(negative.records["site-negative"].record.status, "lost-interest");
+  negative = recordNotForMe(negative, snapshot, ["artist"], { now: NOW, uuid: "again" });
   assert.equal(negative.records["site-again"], undefined);
+});
+
+test("non-attendance and lost-interest records require a classified reason", () => {
+  const item = history();
+  const store = emptyStore();
+  const noReason = confirmHistoryFeedback(store, item, "wanted-to-attend", [], { now: NOW, uuid: "no-reason" });
+  assert.equal(Object.keys(noReason.records).length, 0);
+  const legacyOnly = confirmHistoryFeedback(store, item, "lost-interest", ["legacy-unknown"], { now: NOW, uuid: "legacy-only" });
+  assert.equal(Object.keys(legacyOnly.records).length, 0);
+  const classified = confirmHistoryFeedback(store, item, "did-not-attend-logistical", ["timing"], { now: NOW, uuid: "classified" });
+  assert.equal(Object.keys(classified.records).length, 1);
 });
 
 test("movies remain visible history but are not feedback eligible", () => {
   const item = { ...history("movie:1"), vertical: "movies", feedbackSnapshotId: null };
   const queue = recentRecommendationQueue(emptyStore(), [item], "2026-07-13");
   assert.equal(queue[0].eligible, false);
-  const unchanged = confirmHistoryFeedback(emptyStore(), item, "attended-worth-it", { now: NOW, uuid: "no" });
+  const unchanged = confirmHistoryFeedback(emptyStore(), item, "attended-worth-it", [], { now: NOW, uuid: "no" });
   assert.equal(Object.keys(unchanged.records).length, 0);
 });
 
 test("export batches remain deterministic and truthful about triggered downloads", () => {
-  let store = confirmHistoryFeedback(emptyStore(), history("event:1", "2026-07-01"), "attended-worth-it", { now: "2026-07-13T02:00:00.000Z", uuid: "b" });
-  store = confirmHistoryFeedback(store, history("event:2", "2026-07-02"), "attended-not-worth-it", { now: "2026-07-13T01:00:00.000Z", uuid: "a" });
+  let store = confirmHistoryFeedback(emptyStore(), history("event:1", "2026-07-01"), "attended-worth-it", [], { now: "2026-07-13T02:00:00.000Z", uuid: "b" });
+  store = confirmHistoryFeedback(store, history("event:2", "2026-07-02"), "attended-not-worth-it", [], { now: "2026-07-13T01:00:00.000Z", uuid: "a" });
   const first = prepareExportBatch(store, { now: NOW, uuid: "batch1" });
   assert.deepEqual(first.batch.feedbackIds, ["site-a", "site-b"]);
   assert.equal(unexportedRecords(first.store).length, 2);

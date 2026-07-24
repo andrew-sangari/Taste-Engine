@@ -4,6 +4,7 @@ import { useState } from "react";
 import { buildCalendarEvent, type CalendarEventInput } from "./ics";
 import { useFeedback } from "./feedback-context";
 import type { PlanningInput } from "./feedback-store";
+import type { FeedbackReasonCode } from "./feedback-store";
 
 // Shared secondary-action disclosure. Cards keep their primary decision CTA
 // visible and tuck planning/feedback actions behind one compact control.
@@ -16,6 +17,7 @@ export function CardActions({ layout, planning, calendarEvent }: {
 }) {
   const feedback = useFeedback();
   const [confirmingNegative, setConfirmingNegative] = useState(false);
+  const [negativeReason, setNegativeReason] = useState<FeedbackReasonCode>("artist");
   const item = planning && feedback?.ready ? feedback.planningFor(planning.planningSnapshot.itemId) : null;
   const saved = item?.saved ?? false;
   const held = item?.held ?? false;
@@ -58,8 +60,11 @@ export function CardActions({ layout, planning, calendarEvent }: {
           <button className="cardAction cardActionQuiet" onClick={() => setConfirmingNegative(true)} type="button">Not for me</button>
         ) : null}
         {planning?.feedbackSnapshot && confirmingNegative ? <span className="cardActionConfirm" role="group" aria-label="Confirm Not for me">
-          <span>Create negative taste feedback?</span>
-          <button onClick={() => { feedback?.notForMe(planning.feedbackSnapshot!); setConfirmingNegative(false); }} type="button">Confirm</button>
+          <span>What changed?</span>
+          <select aria-label="Not for me reason" onChange={(event) => setNegativeReason(event.target.value as FeedbackReasonCode)} value={negativeReason}>
+            <option value="artist">Artist or taste</option><option value="lineup">Lineup</option><option value="production">Production quality</option><option value="venue">Venue</option><option value="timing">Timing</option><option value="price">Price</option><option value="distance">Distance</option><option value="other">Other</option>
+          </select>
+          <button onClick={() => { feedback?.notForMe(planning.feedbackSnapshot!, [negativeReason]); setConfirmingNegative(false); }} type="button">Confirm</button>
           <button onClick={() => setConfirmingNegative(false)} type="button">Cancel</button>
         </span> : null}
         {outcomeRecorded ? <span className="cardActionResolved">Taste feedback recorded</span> : null}

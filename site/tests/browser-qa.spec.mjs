@@ -74,12 +74,15 @@ test("renders the complete frozen fixture and its source-health states", async (
   expect(musicVisualState.some((visual) => visual.kind === "image" && visual.role === "img" && visual.label)).toBeTruthy();
 });
 
-test("renders the v2 data texture and vertical light fields without changing card content", async ({ page }) => {
+test("renders distinct recommendation signals and vertical light fields without changing card content", async ({ page }) => {
   await visit(page);
   await expect(page.locator(".ghostRank")).toHaveCount(8);
-  await expect(page.locator(".hassleTicks").first()).toHaveAttribute("aria-label", /^Hassle \d+ of 10$/);
-  expect(await page.locator(".hassleTicks").first().locator("i").count()).toBe(10);
-  expect(await page.locator(".hassleTicks.warm").count()).toBeGreaterThan(0);
+  const signals = page.locator(".recommendationSignals").first();
+  await expect(signals).toContainText("Fit");
+  await expect(signals).toContainText("Friction");
+  await expect(signals).toContainText("Urgency");
+  await expect(signals).toContainText("Confidence");
+  await expect(signals).toContainText("Status");
   await expect(page.locator(".sourceHealthList.board")).toHaveCount(1);
   await expect(page.locator(".srcRow")).toHaveCount(12);
   await expect(page.locator(".srcNote").filter({ hasText: /active|partial|unavailable|not configured/i }).first()).toHaveCount(1);
@@ -149,6 +152,34 @@ test("supports roving keyboard tabs, native activation, hash reload, and history
   await expect(page.getByRole("tab", { name: "Music" })).toHaveAttribute("aria-selected", "true");
   await page.goForward({ waitUntil: "networkidle" });
   await expect(page.getByRole("tab", { name: "Movies" })).toHaveAttribute("aria-selected", "true");
+});
+
+test("resolves overview event anchors through direct loads, reloads, and browser history", async ({ page }) => {
+  await visit(page);
+  const musicLink = page.getByRole("link", { name: "View in Music" }).first();
+  await expect(musicLink).toHaveCount(1);
+  const href = await musicLink.getAttribute("href");
+  expect(href).toMatch(/^#event-/);
+  const targetId = href.slice(1);
+
+  await musicLink.click();
+  await expect(page.getByRole("tab", { name: "Music" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(`[id="${targetId}"]`)).toBeVisible();
+  await expect(page.locator(`[id="${targetId}"]`)).toBeFocused();
+
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+  await page.goBack({ waitUntil: "networkidle" });
+  await expect(page.getByRole("tab", { name: "Music" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(`[id="${targetId}"]`)).toBeVisible();
+  await page.goForward({ waitUntil: "networkidle" });
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+
+  await page.goto(`${new URL(page.url()).origin}/${href}`, { waitUntil: "networkidle" });
+  await expect(page.getByRole("tab", { name: "Music" })).toHaveAttribute("aria-selected", "true");
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByRole("tab", { name: "Music" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(`[id="${targetId}"]`)).toBeVisible();
 });
 
 test("keeps links, controls, disclosures, and visuals accessible", async ({ page }) => {
@@ -255,6 +286,7 @@ test("uses a history-driven, two-step feedback flow in the intended section orde
     "Upcoming saves",
     "Recent recommendations",
     "Hosted engine",
+    "Coverage review",
     "Taste profile",
     "Feedback sync",
   ]);

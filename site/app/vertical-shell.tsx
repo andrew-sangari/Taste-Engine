@@ -10,6 +10,7 @@ import { FeedbackProvider, useFeedback } from "./feedback-context";
 import { planningInputFrom } from "./card-actions";
 import type { PlanningInput, RecommendationHistoryItem } from "./feedback-store";
 import { currentLocalDateKey, isCurrentOrFuture, isDateAwareRefreshNeeded } from "./date-aware";
+import { eventIdFromHash } from "./event-anchor";
 
 type Vertical = "overview" | "music" | "movies" | "sports" | "taste";
 const TABS: Array<[Vertical, string]> = [['overview', 'Overview'], ['music', 'Music'], ['movies', 'Movies'], ['sports', 'Sports'], ['taste', 'Taste']];
@@ -29,12 +30,27 @@ export function VerticalShell({ overview, overviewPlanAhead, events, movies, spo
   changesSinceRefresh?: any;
 }) {
   const [active, setActive] = useState<Vertical>("overview");
+  const [targetEventId, setTargetEventId] = useState<string | null>(null);
   const [currentAsOf, setCurrentAsOf] = useState<string | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const verticalByEventId = useMemo(() => new Map([
+    ...events.map((event) => [String(event.id), "music" as const]),
+    ...sports.map((game) => [String(game.id), "sports" as const]),
+  ]), [events, sports]);
   useEffect(() => {
     const setFromHash = () => {
       const next = window.location.hash.slice(1) as Vertical;
-      if (["overview", "music", "movies", "sports", "taste"].includes(next)) setActive(next);
+      const eventId = eventIdFromHash(window.location.hash);
+      if (eventId) {
+        const vertical = verticalByEventId.get(eventId);
+        if (vertical) {
+          setTargetEventId(eventId);
+          setActive(vertical);
+        }
+      } else if (["overview", "music", "movies", "sports", "taste"].includes(next)) {
+        setTargetEventId(null);
+        setActive(next);
+      }
     };
     setFromHash();
     window.addEventListener("hashchange", setFromHash);
@@ -43,7 +59,23 @@ export function VerticalShell({ overview, overviewPlanAhead, events, movies, spo
       window.removeEventListener("hashchange", setFromHash);
       window.removeEventListener("popstate", setFromHash);
     };
-  }, []);
+  }, [verticalByEventId]);
+  useEffect(() => {
+    if (!targetEventId) return;
+    const anchor = `event-${targetEventId}`;
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(anchor);
+      if (!target) return;
+      const parentDetails = target.closest("details") as HTMLDetailsElement | null;
+      if (parentDetails) parentDetails.open = true;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("eventAnchorHighlight");
+      target.setAttribute("tabindex", "-1");
+      target.focus({ preventScroll: true });
+      window.setTimeout(() => target.classList.remove("eventAnchorHighlight"), 1800);
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [active, targetEventId]);
   useEffect(() => {
     const updateClock = () => setCurrentAsOf(new Date().toISOString());
     updateClock();
@@ -68,6 +100,7 @@ export function VerticalShell({ overview, overviewPlanAhead, events, movies, spo
   ].filter((item): item is PlanningInput => item != null), [events, movies, sports]);
   const select = (next: Vertical, focus = false) => {
     setActive(next);
+    setTargetEventId(null);
     if (window.location.hash !== `#${next}`) window.history.pushState(null, "", `#${next}`);
     if (focus) window.setTimeout(() => tabRefs.current[TABS.findIndex(([value]) => value === next)]?.focus({ preventScroll: true }), 0);
   };
@@ -94,11 +127,11 @@ export function VerticalShell({ overview, overviewPlanAhead, events, movies, spo
         value={value}
       />)}
     </div>
-    <div aria-labelledby={`tab-${active}`} id={`panel-${active}`} role="tabpanel" tabIndex={0}>
+    <div aria-labelledby={`tab-${active}`} className={`verticalPanel verticalPanel-${active}`} id={`panel-${active}`} role="tabpanel" tabIndex={0}>
       {active === "overview" ? <OverviewExplorer changesSinceRefresh={changesSinceRefresh} dateAwareRefresh={dateAwareRefresh} editorial={editorial} generatedAt={asOf} overview={visibleOverview} planAhead={visiblePlanAhead} projectionGeneratedAt={generatedAt} /> : null}
-      {active === "music" ? <EventExplorer events={visibleEvents} generatedAt={asOf} /> : null}
+      {active === "music" ? <EventExplorer events={visibleEvents} generatedAt={asOf} targetEventId={targetEventId} /> : null}
       {active === "movies" ? <MovieExplorer generatedAt={asOf} movies={visibleMovies} tmdbStatus={tmdbStatus} /> : null}
-      {active === "sports" ? <SportsExplorer featuredThreshold={featuredInterestThreshold} games={visibleSports} generatedAt={asOf} /> : null}
+      {active === "sports" ? <SportsExplorer featuredThreshold={featuredInterestThreshold} games={visibleSports} generatedAt={asOf} targetEventId={targetEventId} /> : null}
       {active === "taste" ? <TasteExplorer profile={tasteProfile ?? null} /> : null}
     </div>
     </section>

@@ -3,6 +3,7 @@
 // so consumers must not report an "upgrade" into or out of them.
 export const URGENCY_PRIORITY = Object.freeze({ 'safe to wait': 0, watch: 1, 'buy now': 2 });
 export const UNORDERED_URGENCIES = Object.freeze(['unknown', 'likely unavailable']);
+import { localDateDifference } from './localDate.js';
 
 export function rankCandidates(candidates, artistSnapshot, config, now = new Date()) {
   const bySpotifyId = new Map((artistSnapshot.artists ?? []).filter((artist) => artist.spotifyArtistId).map((artist) => [artist.spotifyArtistId, artist]));
@@ -45,7 +46,8 @@ export function rankCandidates(candidates, artistSnapshot, config, now = new Dat
     const artistFit = strongestMatch?.directAffinity ?? 0;
     const pinnedBonus = candidate.performers.some((performer) => pinned.has(normalizeArtistName(performer.name))) ? 15 : 0;
     const distanceMiles = distanceBetween(config.home, candidate.venue);
-    const hassleScore = calculateHassle(candidate, config, distanceMiles);
+    const hassle = calculateHassle(candidate, config, distanceMiles);
+    const hassleScore = hassle.score;
     const urgency = ticketUrgency(candidate.ticketObservation, candidate.startLocal, now);
     const utility = excluded ? -100 : artistFit + pinnedBonus - hassleScore * 2;
     const confidence = strongestMatch
@@ -74,7 +76,8 @@ export function rankCandidates(candidates, artistSnapshot, config, now = new Dat
         directAffinity: artistFit,
         pinnedBonus,
         hassleScore,
-        hassleReasons: hassleReasons(candidate, config, distanceMiles),
+        hassleBreakdown: hassle,
+        hassleReasons: hassle.reasons,
         utility,
         confidence,
         urgency,
@@ -195,21 +198,40 @@ export function normalizeArtistName(value) {
     .trim();
 }
 
-function calculateHassle(candidate, config, distanceMiles) {
-  let score = distanceMiles == null ? 5 : Math.min(7, Math.round(distanceMiles / 10));
-  const lowestPrice = candidate.ticketObservation.lowestPriceUsd;
-  if (lowestPrice != null && lowestPrice > config.maxTicketPriceUsd) score += 2;
-  if (candidate.timeTbd || candidate.dateTbd) score += 2;
-  return Math.min(10, score);
-}
-
-function hassleReasons(candidate, config, distanceMiles) {
-  const reasons = [];
-  if (distanceMiles != null) reasons.push(`${Math.round(distanceMiles)} mi from ${config.home.label}`);
-  if (candidate.ticketObservation.lowestPriceUsd != null) reasons.push(`from $${candidate.ticketObservation.lowestPriceUsd}`);
-  if (candidate.ticketObservation.lowestPriceUsd != null && candidate.ticketObservation.lowestPriceUsd > config.maxTicketPriceUsd) reasons.push('above ticket budget');
-  if (candidate.timeTbd || candidate.dateTbd) reasons.push('time or date is TBD');
-  return reasons;
+export function calculateHassle(candidate, config, distanceMiles) {
+  const logisticalReasons = [];
+  const commercialReasons = [];
+  let logistical = 0;
+  let commercial = 0;
+  // Missing coordinates are uncertainty, not an invented travel penalty.
+  if (distanceMiles != null) {
+    logistical = Math.min(6, Math.round(distanceMiles / 12));
+    if (distanceMiles >= 12) logisticalReasons.push(`${Math.round(distanceMiles)} mi from ${config.home.label}`);
+  }
+  if (candidate.timeTbd || candidate.dateTbd) {
+    logistical += 2;
+    logisticalReasons.push('time or date is TBD');
+  }
+  const lowestPrice = candidate.ticketObservation?.lowestPriceUsd;
+  if (lowestPrice != null) {
+    commercialReasons.push(`from $${lowestPrice}`);
+    if (lowestPrice > config.maxTicketPriceUsd) {
+      commercial += 2;
+      commercialReasons.push('above ticket budget');
+    }
+  }
+  // Personal context is populated only by validated, repeated feedback. It is
+  // deliberately capped and carried separately from verifiable event facts.
+  const personalContext = Math.max(-2, Math.min(2, Number(candidate.personalContextFriction ?? 0) || 0));
+  const score = Math.max(0, Math.min(10, logistical + commercial + personalContext));
+  return {
+    score,
+    logistical,
+    commercial,
+    personalContext,
+    commercialUncertain: lowestPrice == null,
+    reasons: [...logisticalReasons, ...commercialReasons]
+  };
 }
 
 function ticketUrgency(ticketObservation, startLocal, now) {
@@ -222,10 +244,7 @@ function ticketUrgency(ticketObservation, startLocal, now) {
 }
 
 function daysUntilEvent(startLocal, now) {
-  if (!startLocal) return null;
-  const start = new Date(startLocal);
-  if (Number.isNaN(start.getTime())) return null;
-  return Math.ceil((start.getTime() - now.getTime()) / 86_400_000);
+  return localDateDifference(startLocal, now);
 }
 
 function distanceBetween(home, venue) {

@@ -6,6 +6,33 @@ export const feedbackState = sqliteTable("feedback_state", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// Feedback is append-only so ranking can replay an inspectable outcome trail
+// without depending on a browser-shaped state blob.
+export const feedbackRecords = sqliteTable("feedback_records", {
+  ownerEmail: text("owner_email").notNull(),
+  feedbackId: text("feedback_id").notNull(),
+  canonicalEventId: text("canonical_event_id").notNull(),
+  eventDateLocal: text("event_date_local").notNull(),
+  status: text("status").notNull(),
+  recordedAt: text("recorded_at").notNull(),
+  recordJson: text("record_json").notNull(),
+  evidenceJson: text("evidence_json"),
+  receivedAt: text("received_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.ownerEmail, table.feedbackId] }),
+]);
+
+export const recommendationMisses = sqliteTable("recommendation_misses", {
+  missId: text("miss_id").primaryKey(),
+  ownerEmail: text("owner_email").notNull(),
+  eventUrl: text("event_url"),
+  eventDetails: text("event_details"),
+  submittedAt: text("submitted_at").notNull(),
+  resolutionStage: text("resolution_stage").notNull().default("untriaged"),
+  resolutionNote: text("resolution_note"),
+  resolvedAt: text("resolved_at"),
+});
+
 export const recommendationSnapshots = sqliteTable("recommendation_snapshots", {
   snapshotId: text("snapshot_id").primaryKey(),
   generatedAt: text("generated_at").notNull(),

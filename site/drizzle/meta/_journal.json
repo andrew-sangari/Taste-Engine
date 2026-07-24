@@ -15,6 +15,13 @@
       "when": 1784830224440,
       "tag": "0001_good_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784864661302,
+      "tag": "0002_glossy_susan_delgado",
+      "breakpoints": true
     }
   ]
 }

@@ -50,7 +50,7 @@ test('fixture covers provider resolution, taste windows, missing evidence, and s
   assert.ok(expired.ranking.topItemsAffinity > 0);
   assert.equal(topItemsAffinityFor(expired.matchedArtists.length ? { topEvidence: { shortTermRank: 1 } } : {}, fixture.taste.expiredTopItems, new Date(fixture.now)), 0);
   assert.equal(unresolved.matchedArtists.length, 0);
-  assert.ok(result.stages.rankedAll.some((candidate) => candidate.ranking.utility === fixture.config.minimumUtility));
+  assert.ok(result.stages.rankedAll.some((candidate) => candidate.ranking.hassleBreakdown.commercialUncertain));
   assert.equal(result.stages.deduplication.venueAliasUse, 2);
   assert.equal(result.projection.sports.find((game) => game.id === 'mlb:9002').ticketObservations.length, 0);
   assert.equal(result.projection.sports.find((game) => game.id === 'mlb:9002').ranking.urgency, 'unknown');

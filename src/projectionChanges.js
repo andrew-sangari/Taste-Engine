@@ -15,7 +15,8 @@ export function buildChangesSinceRefresh(accepted, next, { topN = DEFAULT_CHANGE
   const beforeOverview = idList(accepted.overview);
   const afterOverview = idList(next.overview);
   const overview = membership(beforeOverview, afterOverview, mentioned);
-  overview.reordered = survivorOrderChanged(beforeOverview, afterOverview);
+  overview.rankMoves = meaningfulRankMoves(beforeOverview, afterOverview);
+  overview.reordered = overview.rankMoves.length > 0;
 
   const planAhead = membership(idList(accepted.overviewPlanAhead), idList(next.overviewPlanAhead), mentioned);
   delete planAhead.reordered;
@@ -83,12 +84,19 @@ function changedItem({ vertical, id, title }) {
 
 // Only a change in the relative order of items present in BOTH lists counts
 // as a reorder; removals of other items alone must not set this flag.
-function survivorOrderChanged(before, after) {
-  const afterKeys = new Set(after.map((item) => item.key));
-  const beforeSurvivors = before.filter((item) => afterKeys.has(item.key)).map((item) => item.key);
-  const beforeKeys = new Set(before.map((item) => item.key));
-  const afterSurvivors = after.filter((item) => beforeKeys.has(item.key)).map((item) => item.key);
-  return beforeSurvivors.join('|') !== afterSurvivors.join('|');
+function meaningfulRankMoves(before, after) {
+  const beforeRank = new Map(before.map((item, index) => [item.key, index + 1]));
+  const moves = [];
+  for (const [index, item] of after.entries()) {
+    const previous = beforeRank.get(item.key);
+    const next = index + 1;
+    if (previous == null || previous === next) continue;
+    const crossesTopThree = (previous <= 3) !== (next <= 3);
+    const becomesRankOne = next === 1 && previous !== 1;
+    if (Math.abs(previous - next) < 2 && !crossesTopThree && !becomesRankOne) continue;
+    moves.push({ ...changedItem(item), beforeRank: previous, afterRank: next });
+  }
+  return moves.sort((left, right) => left.afterRank - right.afterRank || left.id.localeCompare(right.id));
 }
 
 function collectItems(projection, topN) {

@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useFeedback } from "./feedback-context";
 import { HostedConnections } from "./hosted-connections";
-import type { FeedbackStatus, HistoryQueueEntry } from "./feedback-store";
+import { MissingRecommendation } from "./missing-recommendation";
+import type { FeedbackReasonCode, FeedbackStatus, HistoryQueueEntry } from "./feedback-store";
 
 export type TasteProfile = {
   generatedAt: string;
   seedSummary: { playlistCount: number; sourceArtistCount: number; topArtistCount: number; artistCount: number };
-  topArtists: Array<{ name: string; relativeSignal: number; playlistDiversity: number; seedTrackCount: number; origin: string; evidenceLabels: string[] }>;
+  topArtists: Array<{ name: string; relativeSignal: number; signalContribution?: number; playlistDiversity: number; seedTrackCount: number; origin: string; signalKind?: "direct" | "inferred"; evidenceLabels?: string[]; labels?: string[] }>;
   topTags: string[];
   expansionByOrigin: Record<string, number>;
   feedback: { statusCounts: Record<string, number>; attendedCount: number } | null;
@@ -17,8 +18,9 @@ export type TasteProfile = {
 const STATUS_LABELS: Record<FeedbackStatus, string> = {
   "attended-worth-it": "Went — worth it",
   "attended-not-worth-it": "Went — not worth it",
-  "skipped-still-interested": "Still interested",
-  "skipped-no-longer-interested": "Not for me",
+  "wanted-to-attend": "Wanted to attend",
+  "lost-interest": "Lost interest",
+  "did-not-attend-logistical": "Logistics prevented it",
 };
 
 const ORIGIN_LABELS: Record<string, string> = {
@@ -40,6 +42,7 @@ export function TasteExplorer({ profile }: { profile: TasteProfile | null }) {
       <UpcomingSaves />
       <RecentRecommendations />
       <HostedConnections />
+      <MissingRecommendation />
 
       <section className="tasteBlock" aria-labelledby="taste-profile-title">
         <div className="tasteBlockHeading"><p className="eyebrow">Taste profile</p><h3 id="taste-profile-title">What the engine has learned.</h3></div>
@@ -83,8 +86,8 @@ function RecentRecommendations() {
 
 function RecentRecommendation({ entry }: { entry: HistoryQueueEntry }) {
   const feedback = useFeedback();
-  const [step, setStep] = useState<"attendance" | "worth">("attendance");
-  const [confirmingNegative, setConfirmingNegative] = useState(false);
+  const [step, setStep] = useState<"attendance" | "worth" | "reason">("attendance");
+  const [reason, setReason] = useState<FeedbackReasonCode>("artist");
   const item = entry.history;
   return (
     <article className="timelineRow recentRecommendation">
@@ -100,22 +103,19 @@ function RecentRecommendation({ entry }: { entry: HistoryQueueEntry }) {
         <p><strong>Did you go?</strong></p>
         <div className="checkInOptions">
           <button onClick={() => setStep("worth")} type="button">Yes</button>
-          <button onClick={() => feedback?.dismiss(item.historyId)} type="button">No</button>
-          {!confirmingNegative ? <button className="quietAction" onClick={() => setConfirmingNegative(true)} type="button">Not for me</button> : null}
+          <button onClick={() => feedback?.checkIn(item, "wanted-to-attend", ["calendar"])} type="button">Couldn’t go</button>
+          <button onClick={() => feedback?.checkIn(item, "did-not-attend-logistical", ["timing"])} type="button">Logistics</button>
+          <button className="quietAction" onClick={() => setStep("reason")} type="button">Lost interest</button>
         </div>
-        {confirmingNegative ? <div className="inlineConfirmation" role="group" aria-label="Confirm Not for me">
-          <span>Create negative taste feedback?</span>
-          <button onClick={() => feedback?.checkIn(item, "skipped-no-longer-interested")} type="button">Confirm</button>
-          <button onClick={() => setConfirmingNegative(false)} type="button">Cancel</button>
-        </div> : null}
-      </div> : <div className="checkInPrompt">
+        <button className="quietAction" onClick={() => feedback?.dismiss(item.historyId)} type="button">Not now</button>
+      </div> : step === "worth" ? <div className="checkInPrompt">
         <p><strong>Was it worth it?</strong></p>
         <div className="checkInOptions">
           <button onClick={() => feedback?.checkIn(item, "attended-worth-it")} type="button">Yes</button>
           <button onClick={() => feedback?.checkIn(item, "attended-not-worth-it")} type="button">No</button>
           <button className="quietAction" onClick={() => setStep("attendance")} type="button">Back</button>
         </div>
-      </div>}
+      </div> : <div className="checkInPrompt"><p><strong>Why did it lose you?</strong></p><select aria-label="Lost interest reason" onChange={(event) => setReason(event.target.value as FeedbackReasonCode)} value={reason}><option value="artist">Artist or taste</option><option value="lineup">Lineup</option><option value="production">Production</option><option value="venue">Venue</option><option value="timing">Timing</option><option value="price">Price</option><option value="distance">Distance</option><option value="other">Other</option></select><div className="checkInOptions"><button onClick={() => feedback?.checkIn(item, "lost-interest", [reason])} type="button">Save</button><button className="quietAction" onClick={() => setStep("attendance")} type="button">Back</button></div></div>}
     </article>
   );
 }
@@ -127,7 +127,7 @@ function ProfilePanels({ profile }: { profile: TasteProfile }) {
       <div className="tasteArtists">
         <p className="eyebrow">Strongest signals</p><p className="tasteScaleNote">Relative signal within the current Taste Engine seed.</p>
         {profile.topArtists.map((artist) => <div className="tasteArtistRow" key={artist.name}>
-          <div className="tasteArtistName"><strong>{artist.name}</strong>{artist.evidenceLabels.length ? <span>{artist.evidenceLabels.join(" · ")}</span> : null}</div>
+          <div className="tasteArtistName"><strong>{artist.name}</strong><span>{artist.signalKind === "inferred" ? "Inferred discovery" : "Direct taste"}{(artist.evidenceLabels ?? artist.labels ?? []).length ? ` · ${(artist.evidenceLabels ?? artist.labels ?? []).join(" · ")}` : ""}</span></div>
           <div className="tasteArtistTrack"><span style={{ width: `${artist.relativeSignal}%` }} /></div>
         </div>)}
       </div>

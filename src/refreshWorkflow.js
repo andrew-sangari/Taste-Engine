@@ -14,7 +14,6 @@ export const DEFAULT_WORKFLOW_PATHS = Object.freeze({
 });
 
 export function feedbackSimulationArgs(config) {
-  if (config?.feedback?.applyToPublishedRanking === true) throw new Error('Published feedback application must remain disabled.');
   return config?.feedback?.enabled === true ? ['src/cli/taste-feedback.js', 'simulate'] : null;
 }
 
@@ -51,7 +50,12 @@ export async function validatePreview({
   if (!publicFiles.length) errors.push(issue('build-failure', 'Preview bundle is missing.'));
   if (!publicFiles.some((path) => path.endsWith('/client/index.html') || path.endsWith('/server/index.js'))) errors.push(issue('required-asset-missing', 'Preview has no client or server entry point.'));
   if (publicFiles.some((path) => PRIVATE_NAME.test(basename(path)))) errors.push(issue('private-artifact-public', 'A private artifact was copied into the public bundle.'));
-  if (feedbackApplicationEnabled) errors.push(issue('feedback-application-active', 'Published feedback application must remain disabled.'));
+  if (feedbackApplicationEnabled) {
+    const learning = projection?.feedbackLearning;
+    if (!learning || learning.applied !== true || !Number.isInteger(learning.policyVersion) || !learning.capUsage) {
+      errors.push(issue('feedback-learning-audit-missing', 'Published feedback adjustment is missing validated aggregate audit metadata.'));
+    }
+  }
   if (!browserSmokePassed) errors.push(issue('browser-smoke-failure', 'Browser smoke validation failed.'));
 
   for (const path of [projectionPath, ...publicFiles.filter((file) => /\.(?:js|json|html|css|md|txt)$/i.test(file))]) {

@@ -2,7 +2,7 @@ export type ChangedItem = { vertical: string; id: string; title: string };
 
 export type ChangesSinceRefresh = {
   previousGeneratedAt: string | null;
-  overview: { added: ChangedItem[]; removed: ChangedItem[]; reordered: boolean };
+  overview: { added: ChangedItem[]; removed: ChangedItem[]; reordered: boolean; rankMoves?: Array<ChangedItem & { beforeRank: number; afterRank: number }> };
   planAhead: { added: ChangedItem[]; removed: ChangedItem[] };
   urgencyUpgrades: Array<ChangedItem & { before: string; after: string }>;
   newlyShortlisted: ChangedItem[];
@@ -16,6 +16,7 @@ export function ChangesStrip({ changes }: { changes: ChangesSinceRefresh | null 
   const parts = [
     countPhrase(shortlistedIn.length + changes.planAhead.added.length, "newly shortlisted"),
     countPhrase(changes.overview.removed.length + changes.planAhead.removed.length, "left the shortlist"),
+    ...((changes.overview.rankMoves ?? []).slice(0, 2).map((item) => `${item.title} moved ${item.beforeRank}→${item.afterRank}`)),
     ...changes.urgencyUpgrades.slice(0, 2).map((item) => `${item.title} moved to ${capitalize(item.after)}`),
   ].filter(Boolean);
   if (!parts.length && !changes.overview.reordered) return null;
@@ -29,6 +30,7 @@ export function ChangesStrip({ changes }: { changes: ChangesSinceRefresh | null 
         <ChangeList items={shortlistedIn} label="Newly shortlisted" />
         <ChangeList items={changes.planAhead.added} label="Added to Plan Ahead" />
         <ChangeList items={[...changes.overview.removed, ...changes.planAhead.removed]} label="Left the shortlist" />
+        {(changes.overview.rankMoves ?? []).length ? <div><strong>Meaningful rank moves</strong><ul>{changes.overview.rankMoves?.map((item) => <li key={item.id}>{item.title}: {item.beforeRank} → {item.afterRank}</li>)}</ul></div> : null}
         {changes.urgencyUpgrades.length ? (
           <div><strong>Urgency</strong><ul>{changes.urgencyUpgrades.map((item) => <li key={item.id}>{item.title}: {item.before} → {item.after}</li>)}</ul></div>
         ) : null}

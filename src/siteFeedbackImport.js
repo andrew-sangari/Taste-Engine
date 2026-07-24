@@ -1,6 +1,8 @@
 import { readFile, stat } from 'node:fs/promises';
 import {
+  FEEDBACK_REASON_CODES,
   FEEDBACK_STATUSES,
+  LEGACY_FEEDBACK_STATUSES,
   appendFeedbackRecords,
   readFeedbackJournal
 } from './feedback.js';
@@ -17,9 +19,12 @@ export const IMPORT_LIMITS = Object.freeze({
 // browser records are untrusted input and may never supply evidence entities.
 const ENVELOPE_KEYS = Object.freeze([
   'schemaVersion', 'source', 'feedbackId', 'feedbackSnapshotId', 'canonicalEventId',
-  'eventDateLocal', 'eventTitleSnapshot', 'status', 'rating', 'signalTags', 'notes', 'recordedAt'
+  'eventDateLocal', 'eventTitleSnapshot', 'status', 'reasonCodes', 'rating', 'signalTags', 'notes', 'recordedAt'
 ]);
-const REQUIRED_ENVELOPE_KEYS = ENVELOPE_KEYS.filter((key) => !['rating'].includes(key));
+// reasonCodes did not exist in v1/v2 browser exports. Keep it optional at
+// the envelope boundary so history can round-trip, then mark legacy reasons
+// history-only when normalizing the durable record.
+const REQUIRED_ENVELOPE_KEYS = ENVELOPE_KEYS.filter((key) => !['rating', 'reasonCodes'].includes(key));
 
 export function validateImportEnvelope(raw) {
   const errors = [];
@@ -37,7 +42,10 @@ export function validateImportEnvelope(raw) {
     if (typeof raw[key] !== 'string' || !raw[key].trim() || raw[key].length > 300) errors.push(`${key} must be a non-empty string`);
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw.eventDateLocal))) errors.push('eventDateLocal must be YYYY-MM-DD');
-  if (!FEEDBACK_STATUSES.includes(raw.status)) errors.push('status is unsupported');
+  if (!FEEDBACK_STATUSES.includes(raw.status) && !Object.hasOwn(LEGACY_FEEDBACK_STATUSES, String(raw.status))) errors.push('status is unsupported');
+  if (raw.reasonCodes != null && (!Array.isArray(raw.reasonCodes) || raw.reasonCodes.some((reason) => !FEEDBACK_REASON_CODES.includes(reason)) || new Set(raw.reasonCodes).size !== raw.reasonCodes.length)) {
+    errors.push('reasonCodes must contain unique supported reasons');
+  }
   if (raw.rating != null && (!Number.isInteger(raw.rating) || raw.rating < 1 || raw.rating > 5)) errors.push('rating must be null or an integer from 1 to 5');
   if (!Array.isArray(raw.signalTags)) errors.push('signalTags must be an array');
   if (raw.notes !== null) errors.push('notes must be null in site exports');
@@ -56,6 +64,7 @@ export function envelopeIdentity(envelope) {
     eventDateLocal: envelope.eventDateLocal,
     eventTitleSnapshot: envelope.eventTitleSnapshot,
     status: envelope.status,
+    reasonCodes: envelope.reasonCodes ?? [],
     rating: envelope.rating ?? null,
     signalTags: [...(envelope.signalTags ?? [])].sort(),
     recordedAt: new Date(envelope.recordedAt).toISOString()
@@ -189,6 +198,7 @@ export async function importSiteFeedback({
       eventDateLocal: envelope.eventDateLocal,
       eventTitleSnapshot: envelope.eventTitleSnapshot,
       status: envelope.status,
+      reasonCodes: envelope.reasonCodes ?? [],
       rating: envelope.rating ?? null,
       signalTags: envelope.signalTags,
       notes: null,

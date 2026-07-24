@@ -21,6 +21,8 @@ import {
   upcomingPlanning,
   type HistoryQueueEntry,
   type LocalFeedbackStore,
+  type FeedbackReasonCode,
+  type FeedbackStatus,
   type PlanningInput,
   type PlanningItem,
   type PublicFeedbackSnapshot,
@@ -32,9 +34,9 @@ type FeedbackContextValue = {
   store: LocalFeedbackStore;
   planningFor: (itemId: string) => PlanningItem | null;
   setIntent: (input: PlanningInput, intent: "saved" | "held", active: boolean) => void;
-  notForMe: (snapshot: PublicFeedbackSnapshot) => void;
+  notForMe: (snapshot: PublicFeedbackSnapshot, reasons: FeedbackReasonCode[]) => void;
   hasOutcome: (snapshot: PublicFeedbackSnapshot | null) => boolean;
-  checkIn: (history: RecommendationHistoryItem, status: "attended-worth-it" | "attended-not-worth-it" | "skipped-no-longer-interested") => void;
+  checkIn: (history: RecommendationHistoryItem, status: FeedbackStatus, reasons?: FeedbackReasonCode[]) => void;
   dismiss: (historyId: string) => void;
   queue: HistoryQueueEntry[];
   upcoming: PlanningItem[];
@@ -81,7 +83,9 @@ export function FeedbackProvider({ projectionItems, recentHistory, todayKey, chi
         const body = await response.json() as { store?: unknown };
         const remote = body.store ? normalizeStore(body.store) : local;
         const loaded = reconcileWithProjection(remote, projectionItems, new Date().toISOString());
-        if (!body.store) await persistRemoteStore(loaded);
+        // A hosted v2 blob is migrated immediately after its browser-safe v3
+        // normalization, which also backfills its immutable D1 record rows.
+        if (!body.store || storeVersion(body.store) !== 3) await persistRemoteStore(loaded);
         if (!active) return;
         setStore(loaded);
         saveStore(storage(), loaded);
@@ -139,9 +143,9 @@ export function FeedbackProvider({ projectionItems, recentHistory, todayKey, chi
       store,
       planningFor: (itemId) => store.planning[itemId] ?? null,
       setIntent: (input, intent, active) => update(setPlanningIntent(store, input, intent, active, new Date().toISOString())),
-      notForMe: (snapshot) => update(recordNotForMe(store, snapshot, { now: new Date().toISOString(), uuid: generateUuid() })),
+      notForMe: (snapshot, reasons) => update(recordNotForMe(store, snapshot, reasons, { now: new Date().toISOString(), uuid: generateUuid() })),
       hasOutcome: (snapshot) => hasFeedbackForSnapshot(store, snapshot),
-      checkIn: (history, status) => update(confirmHistoryFeedback(store, history, status, { now: new Date().toISOString(), uuid: generateUuid() })),
+      checkIn: (history, status, reasons = []) => update(confirmHistoryFeedback(store, history, status, reasons, { now: new Date().toISOString(), uuid: generateUuid() })),
       dismiss: (historyId) => update(dismissHistory(store, historyId, new Date().toISOString())),
       queue,
       upcoming: upcomingPlanning(store, todayKey),
@@ -167,6 +171,12 @@ function normalizeStore(value: unknown): LocalFeedbackStore {
     getItem: (key) => key === "taste-engine.feedback.v2" ? JSON.stringify(value) : null,
     setItem: () => undefined,
   });
+}
+
+function storeVersion(value: unknown): number | null {
+  return value && typeof value === "object" && !Array.isArray(value) && typeof (value as { version?: unknown }).version === "number"
+    ? (value as { version: number }).version
+    : null;
 }
 
 async function persistRemoteStore(store: LocalFeedbackStore): Promise<void> {
