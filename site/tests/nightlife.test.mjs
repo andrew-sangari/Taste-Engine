@@ -158,3 +158,36 @@ test("status names the route without exposing a credential", async () => {
     }
   });
 });
+
+test("the local-inspection gate is closed outside local and test environments", async () => {
+  // The route module itself imports extensionless paths that only the bundler
+  // resolves, so the security-relevant predicate is exercised directly and the
+  // handlers are checked structurally below.
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../app/api/nightlife/route.ts", import.meta.url), "utf8");
+
+  const prior = process.env.TASTE_ENGINE_ENV;
+  try {
+    const { deploymentEnvironment } = await import("../server/release.ts");
+    const allowed = () => ["local", "test"].includes(deploymentEnvironment());
+    for (const environment of ["production", "preview", "staging", "unknown"]) {
+      process.env.TASTE_ENGINE_ENV = environment;
+      assert.equal(allowed(), false, `must stay closed when env is ${environment}`);
+    }
+    delete process.env.TASTE_ENGINE_ENV;
+    assert.equal(allowed(), false, "must stay closed when the variable is unset");
+    for (const environment of ["local", "test"]) {
+      process.env.TASTE_ENGINE_ENV = environment;
+      assert.equal(allowed(), true);
+    }
+  } finally {
+    if (prior === undefined) delete process.env.TASTE_ENGINE_ENV;
+    else process.env.TASTE_ENGINE_ENV = prior;
+  }
+
+  // Both handlers must gate on it, and neither may drop the 401 entirely.
+  const guards = source.match(/if \(!user && !localInspectionAllowed\(\)\)/g) ?? [];
+  assert.equal(guards.length, 2, "GET and POST must both gate unauthenticated access");
+  assert.equal((source.match(/status: 401/g) ?? []).length, 2);
+  assert.match(source, /\["local", "test"\]\.includes\(deploymentEnvironment\(\)\)/);
+});

@@ -224,7 +224,10 @@ evaluation output, and re-tune whenever the pinned model version moves.
 
 Across live runs, `context_fit` came back `unknown` at low certainty for nearly
 every candidate, while `music_fit` and `late_night_fit` returned high certainty
-on the same state. That is the model behaving correctly: `context_fit` asks it
+on the same state. This persists after the projection was regenerated with full
+per-occurrence provenance — candidates carrying a title, venue, neighbourhood
+and lineup count still return `unknown` — so it is a property of the question,
+not of thin evidence. That is the model behaving correctly: `context_fit` asks it
 to weigh music, timing, travel, party and novelty at once, which is exactly the
 kind of multi-factor question the vendor's guidance says to decompose.
 
