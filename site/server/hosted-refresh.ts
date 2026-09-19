@@ -8,6 +8,8 @@ import {
 } from "./hosted-refresh-contract";
 import { buildHostedProjection } from "./hosted-projection";
 import { readActiveProjection, readFeedbackRecords } from "./persistence";
+import type { ProfileScope } from "./profiles";
+import { releaseMetadata } from "./release";
 import {
   getSpotifyPlaylistArtists,
   readPlaylistSelections,
@@ -15,7 +17,6 @@ import {
   SpotifyHttpError,
 } from "./spotify";
 
-const LOCK_NAME = "hosted-refresh";
 const LOCK_TTL_MS = 45 * 60 * 1000;
 
 type SourceHealth = {
@@ -27,6 +28,7 @@ type SourceHealth = {
 };
 
 export type HostedRefreshSummary = {
+  profileId: string;
   runId: string;
   status: "completed" | "partial" | "blocked";
   startedAt: string;
@@ -39,40 +41,22 @@ export type HostedRefreshSummary = {
   publicationBlockers: string[];
 };
 
-export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<HostedRefreshSummary> {
+export async function runHostedRefresh(profile: ProfileScope): Promise<HostedRefreshSummary> {
   const runId = `refresh-${crypto.randomUUID()}`;
   const startedAt = new Date().toISOString();
-  await acquireRefreshLock(runId);
+  await acquireRefreshLock(profile.id, runId);
 
   try {
     await getD1().prepare(`
-      INSERT INTO source_runs (run_id, status, started_at)
-      VALUES (?1, 'running', ?2)
-    `).bind(runId, startedAt).run();
+      INSERT INTO source_runs (run_id, profile_id, code_version, status, started_at)
+      VALUES (?1, ?2, ?3, 'running', ?4)
+    `).bind(runId, profile.id, releaseMetadata().release, startedAt).run();
 
-    const ownerEmail = requestedOwnerEmail ?? await singleSpotifyOwner();
-    if (!ownerEmail) {
-      return finishRun({
-        runId,
-        startedAt,
-        status: "blocked",
-        tasteSnapshotId: null,
-        sourceHealth: [
-          health("spotify-playlists", "unavailable", 0, 1),
-          health("spotify-top-artists", "unavailable", 0, 1),
-          health("lastfm", process.env.LASTFM_API_KEY ? "unavailable" : "not configured", 0, process.env.LASTFM_API_KEY ? 1 : 0),
-        ],
-        directArtistCount: 0,
-        expandedArtistCount: 0,
-        projectionPublished: false,
-        publicationBlockers: ["Connect Spotify from the Taste tab before running the hosted refresh."],
-      });
-    }
-
-    const selections = (await readPlaylistSelections(ownerEmail))
+    const selections = (await readPlaylistSelections(profile))
       .filter((playlist: { enabled: boolean }) => playlist.enabled);
     if (!selections.length) {
       return finishRun({
+        profileId: profile.id,
         runId,
         startedAt,
         status: "blocked",
@@ -91,7 +75,7 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
 
     const sourceHealth: SourceHealth[] = [];
     const warnings: string[] = [];
-    const directArtists = await buildDirectArtistSeed(ownerEmail, selections, warnings);
+    const directArtists = await buildDirectArtistSeed(profile, selections, warnings);
     const directArtistCount = directArtists.length;
     if (!directArtistCount && !warnings.length) {
       warnings.push("Selected Spotify playlists yielded no artist evidence.");
@@ -106,7 +90,7 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
 
     let topArtists: Awaited<ReturnType<typeof refreshSpotifyTopArtists>> | null = null;
     try {
-      topArtists = await refreshSpotifyTopArtists(ownerEmail, 50);
+      topArtists = await refreshSpotifyTopArtists(profile, 50);
       mergeHostedTopArtists(directArtists, topArtists.artists);
       sourceHealth.push(health(
         "spotify-top-artists",
@@ -122,6 +106,7 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
 
     if (!directArtists.length) {
       return finishRun({
+        profileId: profile.id,
         runId,
         startedAt,
         status: "blocked",
@@ -160,9 +145,10 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
       },
       warnings,
     };
-    const previousProjection = await readActiveProjection();
-    const feedbackRecords = await readFeedbackRecords(ownerEmail);
+    const previousProjection = await readActiveProjection(profile.id);
+    const feedbackRecords = await readFeedbackRecords(profile);
     const hosted = await buildHostedProjection({
+      profile,
       sourceSnapshot,
       initialSourceHealth: sourceHealth,
       previousProjection: previousProjection && typeof previousProjection === "object"
@@ -173,6 +159,7 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
     });
     if (hosted.publicationBlockers.length) {
       return finishRun({
+        profileId: profile.id,
         runId,
         startedAt,
         status: "blocked",
@@ -185,8 +172,8 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
       });
     }
     const published = await publishHostedState({
-      ownerEmail,
-      ownerRef: await ownerReference(ownerEmail),
+      profile,
+      ownerRef: await ownerReference(profile.id),
       generatedAt: generatedAt.toISOString(),
       artistSnapshot: hosted.artistSnapshot,
       projection: hosted.projection,
@@ -194,6 +181,7 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
     });
 
     return finishRun({
+      profileId: profile.id,
       runId,
       startedAt,
       status: hosted.sourceHealth.some((source) => source.status === "unavailable" || source.status === "partial") ? "partial" : "completed",
@@ -213,19 +201,19 @@ export async function runHostedRefresh(requestedOwnerEmail?: string): Promise<Ho
     `).bind(runId, completedAt, safeWarning("Hosted refresh", error)).run();
     throw error;
   } finally {
-    await releaseRefreshLock(runId);
+    await releaseRefreshLock(profile.id, runId);
   }
 }
 
 async function buildDirectArtistSeed(
-  ownerEmail: string,
+  profile: ProfileScope,
   selections: Awaited<ReturnType<typeof readPlaylistSelections>>,
   warnings: string[],
 ): Promise<DirectArtist[]> {
   const evidence: HostedPlaylistEvidence[] = [];
   for (const playlist of selections) {
     try {
-      const playlistArtists = await getSpotifyPlaylistArtists(ownerEmail, playlist.id, 250);
+      const playlistArtists = await getSpotifyPlaylistArtists(profile, playlist.id, 250);
       evidence.push({
         playlistId: playlist.id,
         playlistName: playlist.name,
@@ -246,14 +234,14 @@ async function buildDirectArtistSeed(
 }
 
 async function publishHostedState({
-  ownerEmail,
+  profile,
   ownerRef,
   generatedAt,
   artistSnapshot,
   projection,
   sourceHealth,
 }: {
-  ownerEmail: string;
+  profile: ProfileScope;
   ownerRef: string;
   generatedAt: string;
   artistSnapshot: Record<string, unknown>;
@@ -270,38 +258,44 @@ async function publishHostedState({
   const projectionPayload = JSON.stringify(projection);
   const tasteSnapshotId = `hosted-taste-${(await sha256Hex(tastePayload)).slice(0, 24)}`;
   const projectionHash = await sha256Hex(projectionPayload);
-  const projectionSnapshotId = `projection-${projectionHash.slice(0, 24)}`;
+  const projectionSnapshotId = `${profile.id}-projection-${projectionHash.slice(0, 24)}`;
   const createdAt = new Date().toISOString();
   const status = sourceHealth.some((source) => source.status !== "active") ? "partial" : "active";
+  const codeVersion = releaseMetadata().release;
   const db = getD1();
   await db.batch([
-    db.prepare("UPDATE hosted_taste_snapshots SET active = 0 WHERE owner_email = ?1 AND active = 1").bind(ownerEmail),
+    db.prepare("UPDATE hosted_taste_snapshots SET active = 0 WHERE profile_id = ?1 AND active = 1").bind(profile.id),
     db.prepare(`
       INSERT INTO hosted_taste_snapshots
-        (snapshot_id, owner_email, generated_at, status, payload_json, active)
-      VALUES (?1, ?2, ?3, ?4, ?5, 1)
+        (snapshot_id, owner_email, profile_id, code_version, generated_at, status, payload_json, active)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1)
       ON CONFLICT(snapshot_id) DO UPDATE SET
         generated_at = excluded.generated_at,
         status = excluded.status,
         payload_json = excluded.payload_json,
         active = 1
-    `).bind(tasteSnapshotId, ownerEmail, generatedAt, status, tastePayload),
-    db.prepare("UPDATE recommendation_snapshots SET active = 0 WHERE active = 1"),
+    `).bind(tasteSnapshotId, profile.email, profile.id, codeVersion, generatedAt, status, tastePayload),
+    db.prepare("UPDATE recommendation_snapshots SET active = 0 WHERE profile_id = ?1 AND active = 1").bind(profile.id),
     db.prepare(`
       INSERT INTO recommendation_snapshots
-        (snapshot_id, generated_at, payload_json, payload_hash, created_at, active)
-      VALUES (?1, ?2, ?3, ?4, ?5, 1)
+        (snapshot_id, profile_id, generated_at, payload_json, payload_hash, code_version, data_schema_version, created_at, active)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1)
       ON CONFLICT(snapshot_id) DO UPDATE SET
         generated_at = excluded.generated_at,
         payload_json = excluded.payload_json,
         payload_hash = excluded.payload_hash,
+        code_version = excluded.code_version,
+        data_schema_version = excluded.data_schema_version,
         created_at = excluded.created_at,
         active = 1
     `).bind(
       projectionSnapshotId,
+      profile.id,
       generatedAt,
       projectionPayload,
       projectionHash,
+      codeVersion,
+      Number(projection.schemaVersion ?? 5),
       createdAt,
     ),
   ]);
@@ -327,7 +321,7 @@ async function finishRun(
   return summary;
 }
 
-async function acquireRefreshLock(runId: string): Promise<void> {
+async function acquireRefreshLock(profileId: string, runId: string): Promise<void> {
   const now = Date.now();
   const result = await getD1().prepare(`
     INSERT INTO refresh_locks (lock_name, run_id, expires_at)
@@ -336,26 +330,14 @@ async function acquireRefreshLock(runId: string): Promise<void> {
       run_id = excluded.run_id,
       expires_at = excluded.expires_at
     WHERE refresh_locks.expires_at < ?4
-  `).bind(LOCK_NAME, runId, now + LOCK_TTL_MS, now).run();
+  `).bind(`hosted-refresh:${profileId}`, runId, now + LOCK_TTL_MS, now).run();
   if (!result.meta.changes) throw new HostedRefreshConflictError();
 }
 
-async function releaseRefreshLock(runId: string): Promise<void> {
+async function releaseRefreshLock(profileId: string, runId: string): Promise<void> {
   await getD1().prepare("DELETE FROM refresh_locks WHERE lock_name = ?1 AND run_id = ?2")
-    .bind(LOCK_NAME, runId)
+    .bind(`hosted-refresh:${profileId}`, runId)
     .run();
-}
-
-async function singleSpotifyOwner(): Promise<string | null> {
-  const result = await getD1().prepare(`
-    SELECT owner_email
-    FROM spotify_tokens
-    ORDER BY updated_at DESC
-    LIMIT 2
-  `).all<{ owner_email: string }>();
-  const owners = result.results ?? [];
-  if (owners.length > 1) throw new Error("Hosted refresh requires an explicit owner when multiple Spotify users are connected.");
-  return owners[0]?.owner_email ?? null;
 }
 
 function serializeDirectArtist(artist: DirectArtist) {
@@ -411,8 +393,8 @@ async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function ownerReference(ownerEmail: string): Promise<string> {
-  return (await sha256Hex(ownerEmail.toLowerCase())).slice(0, 20);
+async function ownerReference(profileId: string): Promise<string> {
+  return (await sha256Hex(profileId)).slice(0, 20);
 }
 
 export class HostedRefreshConflictError extends Error {

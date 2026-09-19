@@ -643,6 +643,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visib
 .recommendationScoreFactors { border-top: 1px solid rgba(202, 218, 211, .12); display: flex; flex-wrap: wrap; gap: 7px 12px; margin-top: 4px; padding-top: 9px; }
 .recommendationScoreFactors span { color: var(--text-secondary); white-space: nowrap; }
 .recommendationScoreFactors b { color: var(--accent-bright); font-weight: 600; margin-right: 3px; }
+/* Sports game rows can place the score inside a narrow second grid column.
+   Keep the factor action on its own row instead of letting it escape the card. */
+.gameSignals .recommendationScore summary { grid-template-columns: auto auto minmax(0, 1fr); }
+.gameSignals .recommendationScorePrompt { grid-column: 1 / -1; justify-self: start; }
 .eventAnchorHighlight { animation: event-anchor-flash 1.8s ease-out; outline: 2px solid var(--accent-bright); outline-offset: 5px; }
 .eventCard, .gameRow, .occurrenceRow { scroll-margin-top: 92px; }
 @keyframes event-anchor-flash { 0% { background: rgba(98, 223, 195, .22); } 100% { background: transparent; } }

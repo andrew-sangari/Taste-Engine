@@ -15,6 +15,7 @@ import {
   saveStore,
   serializeBatch,
   setPlanningIntent,
+  storageKeyForProfile,
   unexportedRecords,
   upcomingPlanning,
 } from "../app/feedback-store.ts";
@@ -66,6 +67,21 @@ test("persists version 3 and fails soft on corruption", () => {
   assert.equal(loadStore(storage).planning["event:1"].saved, true);
   assert.deepEqual(loadStore(fakeStorage({ [STORAGE_KEY]: "{corrupted" })), emptyStore());
   assert.deepEqual(loadStore(null), emptyStore());
+});
+
+test("namespaces device state by profile and migrates the unscoped key only for the legacy profile", () => {
+  const legacyStore = setPlanningIntent(emptyStore(), musicInput("event:legacy"), "saved", true, NOW);
+  const storage = fakeStorage({ [STORAGE_KEY]: JSON.stringify(legacyStore) });
+  const profileA = storageKeyForProfile("profile_aaaaaaaaaaaaaaaaaaaaaaaa");
+  const profileB = storageKeyForProfile("profile_bbbbbbbbbbbbbbbbbbbbbbbb");
+
+  assert.equal(loadStore(storage, profileA, true).planning["event:legacy"].saved, true);
+  assert.deepEqual(loadStore(storage, profileB, false), emptyStore());
+
+  const profileBStore = setPlanningIntent(emptyStore(), musicInput("event:b"), "held", true, NOW);
+  assert.equal(saveStore(storage, profileBStore, profileB), true);
+  assert.equal(loadStore(storage, profileB, false).planning["event:b"].held, true);
+  assert.equal(loadStore(storage, profileA, true).planning["event:b"], undefined);
 });
 
 test("migrates saved v1 planning and records while retaining history-only legacy outcomes", () => {

@@ -66,6 +66,8 @@ test('validation manifest detects any preview change after validation', async ()
   const validation = await validatePreview({ previewDir: preview, acceptedDir: accepted });
   assert.equal(validation.ok, true);
   const manifest = await createValidationManifest({ previewDir: preview, validation });
+  assert.equal(manifest.manifestVersion, 2);
+  assert.equal(manifest.previewDir, '.');
   await writeFile(join(preview, 'site', 'dist', 'client', 'index.html'), '<main>changed</main>');
   await assert.rejects(
     promoteValidatedPreview({ previewDir: preview, acceptedDir: accepted, manifest, confirmation: 'PROMOTE' }),

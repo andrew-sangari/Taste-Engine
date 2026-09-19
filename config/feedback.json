@@ -4,8 +4,8 @@
   },
   "feedback": {
     "enabled": true,
-    "applyToPublishedRanking": false,
-    "policyVersion": 1,
+    "applyToPublishedRanking": true,
+    "policyVersion": 3,
     "journalPath": "data/taste/feedback.jsonl",
     "statePath": "data/taste/feedback-state.json",
     "reportPath": "data/taste/feedback-report.json",

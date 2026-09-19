@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { isGroundedAdvisory } from "./advisories";
 import { CardActions, calendarInputFrom, planningInputFrom } from "./card-actions";
 import type { PublicFeedbackSnapshot } from "./feedback-store";
@@ -10,7 +10,7 @@ import { RecommendationScore } from "./signal-texture";
 import { eventAnchor } from "./event-anchor";
 import { daysFromLocalDate, formatLocalDate, formatLocalTime } from "./local-date";
 
-type SportsGame = {
+export type SportsGame = {
   id: string;
   sourceUrl: string;
   startLocal: string | null;
@@ -50,8 +50,7 @@ export function SportsExplorer({ games, generatedAt, featuredThreshold = 70, tar
   const [sortMode, setSortMode] = useState<SortMode>("interest");
   const [ticketFilter, setTicketFilter] = useState<TicketFilter>("all");
   const [rivalryOnly, setRivalryOnly] = useState(false);
-  const [showAll, setShowAll] = useState(false);
-  useEffect(() => { if (targetEventId) { setWindowFilter("all"); setShowAll(true); } }, [targetEventId]);
+  const [showAll, setShowAll] = useState(Boolean(targetEventId));
   const filtered = useMemo(() => games.filter((game) => {
     const daysAway = daysFromLocalDate(game.startLocal, generatedAt) ?? Number.POSITIVE_INFINITY;
     if (windowFilter === "soon" && daysAway > 30) return false;

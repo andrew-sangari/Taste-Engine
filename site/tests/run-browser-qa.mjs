@@ -6,7 +6,7 @@ const siteRoot = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const fixture = process.argv[2] === "empty" ? "empty" : "full";
 const spec = fixture === "empty" ? "tests/browser-qa-empty.spec.mjs" : "tests/browser-qa.spec.mjs";
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const env = { ...process.env, BROWSER_QA: "1", TASTE_ENGINE_QA_FIXTURE: fixture };
+const env = { ...process.env, BROWSER_QA: "1", TASTE_ENGINE_ENV: "test", TASTE_ENGINE_QA_FIXTURE: fixture };
 
 await run(npm, ["run", "build"], { cwd: siteRoot, env });
 await run(process.execPath, [

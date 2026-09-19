@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { NO_INFORMATION_ADVISORY, isGroundedAdvisory } from "./advisories";
 import { CardActions, calendarInputFrom, planningInputFrom } from "./card-actions";
@@ -18,7 +18,7 @@ type LocalEnhancement = {
   hassle?: { score: number; explanation: string };
 };
 
-type EventItem = {
+export type EventItem = {
   id: string;
   title: string;
   sourceUrl: string;
@@ -61,16 +61,13 @@ type ProviderFilter = "all" | "seatgeek" | "ticketmaster" | "framework" | "insom
 type SortMode = "fit" | "date" | "urgency" | "hassle";
 
 export function EventExplorer({ events, generatedAt, targetEventId = null }: { events: EventItem[]; generatedAt: string; targetEventId?: string | null }) {
-  const [windowFilter, setWindowFilter] = useState<WindowFilter>("soon");
+  const [windowFilter, setWindowFilter] = useState<WindowFilter>(targetEventId ? "all" : "soon");
   const [eventType, setEventType] = useState<EventTypeFilter>("all");
   const [provider, setProvider] = useState<ProviderFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("fit");
   const [lowHassleOnly, setLowHassleOnly] = useState(false);
   const [urgentOnly, setUrgentOnly] = useState(false);
-  const [showAll, setShowAll] = useState(false);
-  useEffect(() => {
-    if (targetEventId) { setWindowFilter("all"); setShowAll(true); }
-  }, [targetEventId]);
+  const [showAll, setShowAll] = useState(Boolean(targetEventId));
 
   const filtered = useMemo(() => {
     const result = events.filter((event) => {

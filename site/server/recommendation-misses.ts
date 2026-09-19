@@ -1,4 +1,5 @@
-import { getD1 } from "../db";
+import { getD1 } from "../db/index.ts";
+import type { ProfileScope } from "./profiles";
 
 export const MISS_CLASSIFICATIONS = [
   "retrieval",
@@ -12,7 +13,7 @@ export const MISS_CLASSIFICATIONS = [
 
 export type MissClassification = (typeof MISS_CLASSIFICATIONS)[number];
 
-export async function createRecommendationMiss(ownerEmail: string, input: unknown) {
+export async function createRecommendationMiss(profile: ProfileScope, input: unknown) {
   const value = record(input);
   const eventUrl = optionalUrl(value.eventUrl);
   const eventDetails = optionalText(value.eventDetails, 2_000);
@@ -21,13 +22,13 @@ export async function createRecommendationMiss(ownerEmail: string, input: unknow
   const submittedAt = new Date().toISOString();
   await getD1().prepare(`
     INSERT INTO recommendation_misses
-      (miss_id, owner_email, event_url, event_details, submitted_at, resolution_stage)
-    VALUES (?1, ?2, ?3, ?4, ?5, 'untriaged')
-  `).bind(missId, ownerEmail, eventUrl, eventDetails, submittedAt).run();
+      (miss_id, owner_email, profile_id, event_url, event_details, submitted_at, resolution_stage)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'untriaged')
+  `).bind(missId, profile.email, profile.id, eventUrl, eventDetails, submittedAt).run();
   return { missId, submittedAt };
 }
 
-export async function classifyRecommendationMiss(ownerEmail: string, input: unknown) {
+export async function classifyRecommendationMiss(profile: ProfileScope, input: unknown) {
   const value = record(input);
   const missId = requiredText(value.missId, 200, "Miss id");
   const classification = String(value.classification ?? "");
@@ -39,8 +40,8 @@ export async function classifyRecommendationMiss(ownerEmail: string, input: unkn
   const result = await getD1().prepare(`
     UPDATE recommendation_misses
     SET resolution_stage = ?1, resolution_note = ?2, resolved_at = ?3
-    WHERE miss_id = ?4 AND owner_email = ?5
-  `).bind(classification, resolutionNote, resolvedAt, missId, ownerEmail).run();
+    WHERE miss_id = ?4 AND profile_id = ?5
+  `).bind(classification, resolutionNote, resolvedAt, missId, profile.id).run();
   if (!result.meta.changes) throw new RecommendationMissInputError("That miss was not found for this owner.");
   return { missId, classification, resolvedAt };
 }
@@ -48,17 +49,17 @@ export async function classifyRecommendationMiss(ownerEmail: string, input: unkn
 // This is deliberately a review queue, not an adapter trigger. Three owner
 // submissions from the same host in 90 days merely create an evidence-backed
 // source-review candidate for a human to inspect.
-export async function sourceReviewCandidates(ownerEmail: string, now = new Date()) {
+export async function sourceReviewCandidates(profile: ProfileScope, now = new Date()) {
   const since = new Date(now.getTime() - 90 * 86_400_000).toISOString();
   const result = await getD1().prepare(`
     SELECT event_url, submitted_at
     FROM recommendation_misses
-    WHERE owner_email = ?1
+    WHERE profile_id = ?1
       AND submitted_at >= ?2
       AND resolution_stage = 'retrieval'
       AND event_url IS NOT NULL
     ORDER BY submitted_at DESC
-  `).bind(ownerEmail, since).all<{ event_url: string; submitted_at: string }>();
+  `).bind(profile.id, since).all<{ event_url: string; submitted_at: string }>();
   const groups = new Map<string, Array<{ eventUrl: string; submittedAt: string }>>();
   for (const row of result.results ?? []) {
     const host = sourceHost(row.event_url);

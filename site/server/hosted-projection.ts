@@ -47,6 +47,7 @@ import { buildHostedTasteProfile } from "./taste-profile.ts";
 import { applyHostedFeedbackAdjustments, applyHostedPersonalContext } from "./feedback-learning.ts";
 import { enhanceHostedMusic, enhanceHostedSports, generateHostedEditorial } from "./hosted-advisory.ts";
 import { readHostedPipelineConfig } from "./hosted-config.ts";
+import type { ProfileScope } from "./profiles";
 
 type SourceHealth = {
   source: string;
@@ -70,18 +71,20 @@ export type HostedProjectionResult = {
 
 export async function buildHostedProjection({
   sourceSnapshot,
+  profile,
   initialSourceHealth,
   previousProjection,
   feedbackRecords = [],
   generatedAt = new Date(),
 }: {
   sourceSnapshot: Record<string, unknown>;
+  profile?: ProfileScope;
   initialSourceHealth: SourceHealth[];
   previousProjection: Record<string, unknown> | null;
   feedbackRecords?: Array<Record<string, unknown>>;
   generatedAt?: Date;
 }): Promise<HostedProjectionResult> {
-  const config = readHostedPipelineConfig();
+  const config = readHostedPipelineConfig(profile);
   const startDate = localIsoDate(generatedAt, config.brief.timezone);
   const end = new Date(generatedAt);
   end.setDate(end.getDate() + config.brief.upcomingHorizonDays);

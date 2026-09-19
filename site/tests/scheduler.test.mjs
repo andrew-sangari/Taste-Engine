@@ -65,6 +65,41 @@ test("workflow step invokes and returns the hosted refresh", async () => {
   }
 });
 
+test("deterministic per-profile blockers are reported without retrying healthy profiles", async () => {
+  const priorFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({
+    status: "partial",
+    projectionPublished: false,
+    publishedProfileCount: 1,
+    failedProfileCount: 1,
+    profiles: [
+      { profileId: "profile_a", projectionPublished: true },
+      { profileId: "profile_b", projectionPublished: false },
+    ],
+  });
+  try {
+    const output = await runRefresh(environment());
+    assert.equal(output.projectionPublished, false);
+    assert.equal(output.publishedProfileCount, 1);
+  } finally {
+    globalThis.fetch = priorFetch;
+  }
+});
+
+test("retryable refresh conflicts still fail the workflow step", async () => {
+  const priorFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({
+    projectionPublished: false,
+    publicationBlockers: ["refresh already running"],
+    retryable: true,
+  }, { status: 409 });
+  try {
+    await assert.rejects(runRefresh(environment()), /refresh already running/);
+  } finally {
+    globalThis.fetch = priorFetch;
+  }
+});
+
 function environment(instances = new Map()) {
   return {
     TASTE_ENGINE_REFRESH_URL: "https://taste.example/refresh",

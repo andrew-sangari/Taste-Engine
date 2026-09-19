@@ -10,6 +10,8 @@
     "site:export": "node scripts/export-site-data.js",
     "site:refresh": "npm run taste:expand && npm run site:export",
     "build:site": "node scripts/build-site.js",
+    "build:release": "npm --prefix site run build",
+    "verify:release": "npm test && npm --prefix site run verify",
     "taste:refresh": "node src/cli/taste-refresh.js",
     "taste:validate": "node src/cli/taste-validate.js",
     "taste:preview": "node src/cli/taste-preview.js",
@@ -30,6 +32,6 @@
     "test": "node --test test/*.test.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   }
 }

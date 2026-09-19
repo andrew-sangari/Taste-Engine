@@ -1,17 +1,19 @@
-import { getD1 } from "../db";
+import { getD1 } from "../db/index.ts";
+import type { ProfileScope } from "./profiles";
+import { releaseMetadata } from "./release.ts";
 
 const MAX_FEEDBACK_STATE_BYTES = 1_500_000;
 const MAX_PROJECTION_BYTES = 3_000_000;
 
-export async function readFeedbackState(ownerEmail: string): Promise<unknown | null> {
+export async function readFeedbackState(profile: ProfileScope): Promise<unknown | null> {
   const row = await getD1()
-    .prepare("SELECT state_json FROM feedback_state WHERE owner_email = ?1")
-    .bind(ownerEmail)
+    .prepare("SELECT state_json FROM feedback_state WHERE profile_id = ?1")
+    .bind(profile.id)
     .first<{ state_json: string }>();
   if (!row?.state_json) return null;
   try {
     const state = JSON.parse(row.state_json) as Record<string, unknown>;
-    const records = await readFeedbackRecords(ownerEmail);
+    const records = await readFeedbackRecords(profile);
     if (!records.length || !state || typeof state !== "object") return state;
     return {
       ...state,
@@ -22,31 +24,32 @@ export async function readFeedbackState(ownerEmail: string): Promise<unknown | n
   }
 }
 
-export async function writeFeedbackState(ownerEmail: string, state: unknown): Promise<string> {
+export async function writeFeedbackState(profile: ProfileScope, state: unknown): Promise<string> {
   assertFeedbackState(state);
   const stateJson = JSON.stringify(state);
   if (new TextEncoder().encode(stateJson).byteLength > MAX_FEEDBACK_STATE_BYTES) {
     throw new PersistenceInputError("Feedback state is too large.");
   }
   const updatedAt = new Date().toISOString();
-  await writeFeedbackRecords(ownerEmail, feedbackRecordsFromState(state), updatedAt);
+  await writeFeedbackRecords(profile, feedbackRecordsFromState(state), updatedAt);
   await getD1()
     .prepare(`
-      INSERT INTO feedback_state (owner_email, state_json, updated_at)
-      VALUES (?1, ?2, ?3)
-      ON CONFLICT(owner_email) DO UPDATE SET
+      INSERT INTO feedback_state (owner_email, profile_id, state_json, updated_at)
+      VALUES (?1, ?2, ?3, ?4)
+      ON CONFLICT(profile_id) DO UPDATE SET
+        owner_email = excluded.owner_email,
         state_json = excluded.state_json,
         updated_at = excluded.updated_at
     `)
-    .bind(ownerEmail, stateJson, updatedAt)
+    .bind(profile.email, profile.id, stateJson, updatedAt)
     .run();
   return updatedAt;
 }
 
-export async function readFeedbackRecords(ownerEmail: string): Promise<Array<Record<string, unknown>>> {
+export async function readFeedbackRecords(profile: ProfileScope): Promise<Array<Record<string, unknown>>> {
   const result = await getD1().prepare(`
-    SELECT record_json FROM feedback_records WHERE owner_email = ?1 ORDER BY recorded_at ASC, feedback_id ASC
-  `).bind(ownerEmail).all<{ record_json: string }>();
+    SELECT record_json FROM feedback_records WHERE profile_id = ?1 ORDER BY recorded_at ASC, feedback_id ASC
+  `).bind(profile.id).all<{ record_json: string }>();
   return (result.results ?? []).flatMap((row) => {
     try {
       const parsed = JSON.parse(row.record_json);
@@ -55,17 +58,18 @@ export async function readFeedbackRecords(ownerEmail: string): Promise<Array<Rec
   });
 }
 
-export async function writeFeedbackRecords(ownerEmail: string, records: Array<Record<string, unknown>>, receivedAt = new Date().toISOString()): Promise<void> {
+export async function writeFeedbackRecords(profile: ProfileScope, records: Array<Record<string, unknown>>, receivedAt = new Date().toISOString()): Promise<void> {
   if (!records.length) return;
-  const projection = await readActiveProjection();
+  const projection = await readActiveProjection(profile.id);
   const statements = records.map((record) => enrichFeedbackEvidence(record, projection))
     .filter((record) => safeText(record.feedbackId) && safeText(record.canonicalEventId) && safeText(record.eventDateLocal) && safeText(record.status) && safeText(record.recordedAt))
     .map((record) => getD1().prepare(`
-      INSERT INTO feedback_records (owner_email, feedback_id, canonical_event_id, event_date_local, status, recorded_at, record_json, evidence_json, received_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-      ON CONFLICT(owner_email, feedback_id) DO NOTHING
+      INSERT INTO feedback_records (owner_email, profile_id, feedback_id, canonical_event_id, event_date_local, status, recorded_at, record_json, evidence_json, received_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+      ON CONFLICT(profile_id, feedback_id) DO NOTHING
     `).bind(
-      ownerEmail,
+      profile.email,
+      profile.id,
       String(record.feedbackId),
       String(record.canonicalEventId),
       String(record.eventDateLocal),
@@ -106,15 +110,15 @@ function enrichFeedbackEvidence(record: Record<string, unknown>, projection: unk
 
 function array(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 
-export async function readActiveProjection(): Promise<unknown | null> {
+export async function readActiveProjection(profileId: string): Promise<unknown | null> {
   const row = await getD1()
     .prepare(`
       SELECT payload_json
       FROM recommendation_snapshots
-      WHERE active = 1
+      WHERE profile_id = ?1 AND active = 1
       ORDER BY created_at DESC
       LIMIT 1
-    `)
+    `).bind(profileId)
     .first<{ payload_json: string }>();
   if (!row?.payload_json) return null;
   try {
@@ -124,7 +128,7 @@ export async function readActiveProjection(): Promise<unknown | null> {
   }
 }
 
-export async function publishProjection(payload: unknown): Promise<{
+export async function publishProjection(profileId: string, payload: unknown): Promise<{
   snapshotId: string;
   payloadHash: string;
   generatedAt: string;
@@ -136,22 +140,26 @@ export async function publishProjection(payload: unknown): Promise<{
   }
   const generatedAt = String((payload as { generatedAt: string }).generatedAt);
   const payloadHash = await sha256Hex(payloadJson);
-  const snapshotId = `projection-${payloadHash.slice(0, 24)}`;
+  const snapshotId = `${profileId}-projection-${payloadHash.slice(0, 24)}`;
   const createdAt = new Date().toISOString();
+  const codeVersion = releaseMetadata().release;
+  const dataSchemaVersion = Number((payload as { schemaVersion?: unknown }).schemaVersion ?? 5);
   const db = getD1();
   await db.batch([
-    db.prepare("UPDATE recommendation_snapshots SET active = 0 WHERE active = 1"),
+    db.prepare("UPDATE recommendation_snapshots SET active = 0 WHERE profile_id = ?1 AND active = 1").bind(profileId),
     db.prepare(`
       INSERT INTO recommendation_snapshots
-        (snapshot_id, generated_at, payload_json, payload_hash, created_at, active)
-      VALUES (?1, ?2, ?3, ?4, ?5, 1)
+        (snapshot_id, profile_id, generated_at, payload_json, payload_hash, code_version, data_schema_version, created_at, active)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1)
       ON CONFLICT(snapshot_id) DO UPDATE SET
         generated_at = excluded.generated_at,
         payload_json = excluded.payload_json,
         payload_hash = excluded.payload_hash,
+        code_version = excluded.code_version,
+        data_schema_version = excluded.data_schema_version,
         created_at = excluded.created_at,
         active = 1
-    `).bind(snapshotId, generatedAt, payloadJson, payloadHash, createdAt),
+    `).bind(snapshotId, profileId, generatedAt, payloadJson, payloadHash, codeVersion, dataSchemaVersion, createdAt),
   ]);
   return { snapshotId, payloadHash, generatedAt };
 }

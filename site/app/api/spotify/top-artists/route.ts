@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { refreshSpotifyTopArtists, SpotifyHttpError } from "../../../../server/spotify";
+import { resolveProfile } from "../../../../server/profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ export async function POST(request: Request) {
   if (!user) return Response.json({ error: "Sign in with ChatGPT." }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({})) as { limit?: number };
-    return Response.json(await refreshSpotifyTopArtists(user.email, body.limit ?? 50), {
+    return Response.json(await refreshSpotifyTopArtists(await resolveProfile(user), body.limit ?? 50), {
       headers: { "cache-control": "no-store" },
     });
   } catch (error) {

@@ -14,40 +14,65 @@ async function render() {
 }
 
 test("server-renders the Taste Engine product surface", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+  const previousEnvironment = process.env.TASTE_ENGINE_ENV;
+  process.env.TASTE_ENGINE_ENV = "test";
+  try {
+    const response = await render();
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
-  const html = await response.text();
-  assert.match(html, /<title>Taste Engine — Upcoming<\/title>/i);
-  assert.match(html, /One taste engine/);
-  assert.match(html, /Overview/);
-  assert.match(html, /Sports/);
-  assert.match(html, /sourceHealthGroup/);
-  assert.match(html, /Ollama overview queue/);
-  assert.match(html, /Current call/);
-  assert.match(html, /How it thinks/);
-  assert.match(html, /View(?: <!-- -->)? ?in(?: <!-- -->)? ?(?:Music|Sports)/);
-  assert.match(html, /aria-controls="panel-movies"/);
-  assert.match(html, /Source health/);
-  assert.match(html, /Engine notes/);
-  assert.match(html, /Taste health/);
-  assert.match(html, /TMDB API but is not endorsed or certified by TMDB/);
-  assert.match(html, /tmdb-logo\.svg/);
-  assert.match(html, /rel="icon" href="\/favicon-32\.png"/);
-  assert.match(html, /rel="apple-touch-icon" href="\/apple-touch-icon\.png"/);
-  assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
-  assert.match(html, /recommendationVisual/);
-  assert.match(html, /ghostRank/);
-  assert.match(html, /recommendationScore/);
-  assert.match(html, /Decision points/);
-  assert.match(html, /Friction/);
-  assert.match(html, /sourceHealthList board/);
-  assert.match(html, /methodSteps methodRail/);
-  assert.match(html, /data-count=/);
-  assert.match(html, /og\.png/);
-  assert.match(html, /1200/);
-  assert.match(html, /630/);
-  assert.match(html, /spotify-top-artists|Spotify Top Artists/);
-  assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/);
+    const html = await response.text();
+    assert.match(html, /<title>Taste Engine — Upcoming<\/title>/i);
+    assert.match(html, /One taste engine/);
+    assert.match(html, /Overview/);
+    assert.match(html, /Sports/);
+    assert.match(html, /sourceHealthGroup/);
+    assert.match(html, /Ollama overview queue/);
+    assert.match(html, /Current call/);
+    assert.match(html, /How it thinks/);
+    assert.match(html, /View(?: <!-- -->)? ?in(?: <!-- -->)? ?(?:Music|Sports)/);
+    assert.match(html, /aria-controls="panel-movies"/);
+    assert.match(html, /Source health/);
+    assert.match(html, /Engine notes/);
+    assert.match(html, /Taste health/);
+    assert.match(html, /TMDB API but is not endorsed or certified by TMDB/);
+    assert.match(html, /tmdb-logo\.svg/);
+    assert.match(html, /rel="icon" href="\/favicon-32\.png"/);
+    assert.match(html, /rel="apple-touch-icon" href="\/apple-touch-icon\.png"/);
+    assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
+    assert.match(html, /recommendationVisual/);
+    assert.match(html, /ghostRank/);
+    assert.match(html, /recommendationScore/);
+    assert.match(html, /Decision points/);
+    assert.match(html, /Friction/);
+    assert.match(html, /sourceHealthList board/);
+    assert.match(html, /methodSteps methodRail/);
+    assert.match(html, /data-count=/);
+    assert.match(html, /og\.png/);
+    assert.match(html, /1200/);
+    assert.match(html, /630/);
+    assert.match(html, /spotify-top-artists|Spotify Top Artists/);
+    assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/);
+  } finally {
+    restoreEnvironment(previousEnvironment);
+  }
 });
+
+test("an unspecified hosted environment fails closed instead of rendering bundled profile data", async () => {
+  const previousEnvironment = process.env.TASTE_ENGINE_ENV;
+  delete process.env.TASTE_ENGINE_ENV;
+  try {
+    const response = await render();
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /Sign in to select your taste profile/);
+    assert.doesNotMatch(html, /One taste engine|ranked candidates|Ollama overview queue/);
+  } finally {
+    restoreEnvironment(previousEnvironment);
+  }
+});
+
+function restoreEnvironment(value) {
+  if (value == null) delete process.env.TASTE_ENGINE_ENV;
+  else process.env.TASTE_ENGINE_ENV = value;
+}
