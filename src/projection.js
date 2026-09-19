@@ -1,4 +1,5 @@
 import { classifyEventType } from './eventEnhancement.js';
+import { nightlifeEvidenceFor } from './nightlife/semanticInput.js';
 import { resolveMusicVisual, resolveSportsVisual } from './visuals.js';
 
 export function toDisplayEvent(candidate, localEnhancement = null) {
@@ -25,6 +26,11 @@ export function toDisplayEvent(candidate, localEnhancement = null) {
     lineupDisplay: sanitizeLineupDisplay(candidate.lineupDisplay),
     visual: candidate.visual ?? resolveMusicVisual(candidate),
     ranking: safeRanking,
+    // Source provenance is decided here, while the real source occurrences are
+    // still in hand. The published row collapses them, so anything downstream
+    // that needs to know what a candidate may contribute reads this instead of
+    // guessing from the canonical fields.
+    nightlifeEvidence: nightlifeEvidenceFor(candidate),
     localEnhancement
   };
 }

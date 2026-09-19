@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "taste-engine-site",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "set -a; [ -f .env ] && . ./.env; set +a; exec npm --prefix site run dev"],
+      "port": 3000
+    }
+  ]
+}

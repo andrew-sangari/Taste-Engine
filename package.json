@@ -26,6 +26,8 @@
     "taste:feedback:simulate": "node src/cli/taste-feedback.js simulate",
     "taste:feedback:import": "node src/cli/taste-feedback.js import",
     "evaluation:fixtures": "node scripts/evaluate-fixtures.js",
+    "nightlife:probe": "node src/cli/nightlife-probe.js",
+    "nightlife:shadow": "node src/cli/nightlife-shadow.js",
     "projection:diff": "node scripts/projection-diff.js",
     "taste:explain": "node scripts/taste-explain.js",
     "debug:artist": "node scripts/debug-artist.js",

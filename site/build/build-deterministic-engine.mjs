@@ -9,6 +9,9 @@ await build({
   bundle: true,
   format: "esm",
   platform: "neutral",
+  // The Worker runs with nodejs_compat, so node: builtins stay as imports
+  // rather than being inlined into the neutral bundle.
+  external: ["node:crypto"],
   target: "es2022",
   banner: { js: "// Generated from deterministic Taste Engine modules. Do not edit directly.\n" },
 });

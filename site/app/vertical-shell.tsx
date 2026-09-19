@@ -6,6 +6,7 @@ import { MovieExplorer, type Movie } from "./movie-explorer";
 import { OverviewExplorer, type Editorial, type OverviewItem } from "./overview-explorer";
 import { SportsExplorer, type SportsGame } from "./sports-explorer";
 import { TasteExplorer, type TasteProfile } from "./taste-explorer";
+import { NightlifeExplorer } from "./nightlife-explorer";
 import type { ChangesSinceRefresh } from "./changes-strip";
 import { FeedbackProvider, useFeedback } from "./feedback-context";
 import { planningInputFrom } from "./card-actions";
@@ -13,8 +14,8 @@ import type { PlanningInput, RecommendationHistoryItem } from "./feedback-store"
 import { currentLocalDateKey, isCurrentOrFuture, isDateAwareRefreshNeeded } from "./date-aware";
 import { eventIdFromHash } from "./event-anchor";
 
-type Vertical = "overview" | "music" | "movies" | "sports" | "taste";
-const TABS: Array<[Vertical, string]> = [['overview', 'Overview'], ['music', 'Music'], ['movies', 'Movies'], ['sports', 'Sports'], ['taste', 'Taste']];
+type Vertical = "overview" | "music" | "tonight" | "movies" | "sports" | "taste";
+const TABS: Array<[Vertical, string]> = [['overview', 'Overview'], ['music', 'Music'], ['tonight', 'Tonight'], ['movies', 'Movies'], ['sports', 'Sports'], ['taste', 'Taste']];
 
 export function VerticalShell({ overview, overviewPlanAhead, events, movies, sports, recentHistory, generatedAt, tmdbStatus, featuredInterestThreshold, editorial, tasteProfile, changesSinceRefresh, storageProfileId, allowLegacyStorageMigration }: {
   overview: OverviewItem[];
@@ -50,7 +51,7 @@ export function VerticalShell({ overview, overviewPlanAhead, events, movies, spo
           setTargetEventId(eventId);
           setActive(vertical);
         }
-      } else if (["overview", "music", "movies", "sports", "taste"].includes(next)) {
+      } else if (["overview", "music", "tonight", "movies", "sports", "taste"].includes(next)) {
         setTargetEventId(null);
         setActive(next);
       }
@@ -133,6 +134,7 @@ export function VerticalShell({ overview, overviewPlanAhead, events, movies, spo
     <div aria-labelledby={`tab-${active}`} className={`verticalPanel verticalPanel-${active}`} id={`panel-${active}`} role="tabpanel" tabIndex={0}>
       {active === "overview" ? <OverviewExplorer changesSinceRefresh={changesSinceRefresh} dateAwareRefresh={dateAwareRefresh} editorial={editorial} generatedAt={asOf} overview={visibleOverview} planAhead={visiblePlanAhead} projectionGeneratedAt={generatedAt} /> : null}
       {active === "music" ? <EventExplorer events={visibleEvents} generatedAt={asOf} key={targetEventId ?? "music"} targetEventId={targetEventId} /> : null}
+      {active === "tonight" ? <NightlifeExplorer generatedAt={generatedAt} /> : null}
       {active === "movies" ? <MovieExplorer generatedAt={asOf} movies={visibleMovies} tmdbStatus={tmdbStatus} /> : null}
       {active === "sports" ? <SportsExplorer featuredThreshold={featuredInterestThreshold} games={visibleSports} generatedAt={asOf} key={targetEventId ?? "sports"} targetEventId={targetEventId} /> : null}
       {active === "taste" ? <TasteExplorer profile={tasteProfile ?? null} /> : null}

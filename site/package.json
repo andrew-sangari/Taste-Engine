@@ -10,7 +10,7 @@
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/release-metadata.test.mjs && node --experimental-strip-types --test tests/date-aware.test.mjs tests/ics.test.mjs tests/feedback-store.test.mjs tests/health-route.test.mjs tests/hosted-refresh.test.mjs tests/hosted-projection.test.mjs tests/migration.test.mjs tests/profile-isolation.test.mjs tests/scheduler.test.mjs tests/token-crypto.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/release-metadata.test.mjs && node --experimental-strip-types --test tests/date-aware.test.mjs tests/ics.test.mjs tests/feedback-store.test.mjs tests/health-route.test.mjs tests/hosted-refresh.test.mjs tests/hosted-projection.test.mjs tests/migration.test.mjs tests/profile-isolation.test.mjs tests/scheduler.test.mjs tests/token-crypto.test.mjs tests/nightlife.test.mjs",
     "test:browser": "node tests/run-browser-qa.mjs full",
     "test:browser:empty": "node tests/run-browser-qa.mjs empty",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",

@@ -107,6 +107,22 @@ The event explorer supports date-window and event-type filters, personal-fit/dat
 
 For music advisory passes, intentionally absent lineup, genre, or identity detail is uncertainty rather than a reason to skip; missing-evidence skips fall back to the deterministic call. Optional `EDMTRAIN_CLIENT_KEY` enables documented-API lineup enrichment only for confidently matched existing events. Unmatched results stay in a private audit and EDMTrain payloads never enter Ollama.
 
+### Tonight: contextual nightlife discovery
+
+The **Tonight** tab answers a question static filters cannot express: "what is worth doing on Saturday, given the kind of night I actually want?" You state a goal in your own words plus explicit context — date, starting area, transport, who you are with, budget, how late you want to be out — and get a short, explainable shortlist, an optional running order, and a "nothing is worth the hassle" result when that is the honest answer. Location and companions are only ever what you type; nothing is inferred from your device.
+
+Behind it is a second, separate inference layer built on a System One evaluation model (Jev). It is not a chat model. It answers narrow typed questions about one candidate — how the likely sound and room match, whether the schedule supports a late night, how novel it is, where the friction is — and returns a probability distribution and a confidence value for each. It generates no text at all, so no sentence in the product was written by a model about an event it cannot see: explanations are composed in code from typed answers and the fields that were actually sent. When the model is not reasonably sure, the dimension is shown as *not clear* rather than as a low rating.
+
+```text
+TYPESAFE_AI_API_KEY=
+```
+
+That one key is enough; direct TypeSafe serving is the default route and the Vercel AI Gateway (`AI_GATEWAY_API_KEY`) is an alternate route, not a hosting change. With no key the tab still works and renders the deterministic shortlist alone. One candidate costs about $0.00007 and returns in roughly 150–375ms.
+
+The same source policy applies as everywhere else: SeatGeek-only material, Spotify Content and Spotify-derived preference evidence, EDMTrain payloads, and private context never reach the model. A candidate backed only by a restricted source still ranks, but is shown unnamed. Withheld evidence is listed as *not known* and never counted against a candidate. Schedule, travel, overlap, budget and window feasibility are always recomputed deterministically, an evening order is an option rather than a booking, and nothing here changes the canonical ranking, the published projection, or the learned taste profile.
+
+Use `npm run nightlife:probe` to check the route end to end, and `npm run nightlife:shadow` to compare deterministic and inference-assisted shortlists side by side. See `docs/system-one-inference.md`.
+
 ### Automation requirements
 
 ### Guarded refresh and local promotion

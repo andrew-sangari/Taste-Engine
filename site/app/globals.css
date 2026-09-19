@@ -753,3 +753,74 @@ html.motion-ready .srcBar:not(.on) i { width: 0; }
   .srcBar i, html.motion-ready .srcBar:not(.on) i { transition: none; width: var(--source-width, 0%); }
   * { animation: none !important; transition: none !important; }
 }
+
+/* Nightlife / Tonight ---------------------------------------------------- */
+.nightlifeForm { border-bottom: 1px solid var(--line); padding: 0 0 28px; }
+.nightlifeGoal { display: block; }
+.nightlifeGoal span { display: block; font-family: var(--font-mono), monospace; font-size: 12px; letter-spacing: .14em; margin: 0 0 12px; text-transform: uppercase; }
+.nightlifeGoal textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; color: var(--text-primary); font-family: inherit; font-size: 17px; line-height: 1.5; padding: 14px 16px; resize: vertical; width: 100%; }
+.nightlifeGoal textarea:focus-visible { border-color: var(--accent); outline: none; }
+.nightlifeControls { align-items: center; display: flex; flex-wrap: wrap; gap: 14px; margin: 18px 0 0; }
+.nightlifeControls input { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; color: var(--text-primary); color-scheme: dark; min-height: 36px; padding: 7px 12px; }
+.nightlifeSubmit { background: var(--accent-dark); border: 1px solid var(--accent); border-radius: 999px; color: var(--accent-bright); cursor: pointer; font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .08em; margin-left: auto; min-height: 44px; padding: 11px 22px; text-transform: uppercase; transition: background 160ms ease, transform 160ms ease; }
+.nightlifeSubmit:hover:not(:disabled) { background: var(--accent); color: var(--background); transform: translateY(-1px); }
+.nightlifeSubmit:disabled { cursor: progress; opacity: .6; }
+.nightlifeNote { color: var(--text-muted); font-size: 13px; margin: 14px 0 0; }
+
+.nightlifeStatus { align-items: center; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px; font-size: 14px; padding: 16px 0; }
+.nightlifeStatus.warn { color: var(--text-secondary); }
+.nightlifeStatus small { color: var(--text-muted); font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .04em; margin-left: auto; }
+
+.nightlifeShortlist { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); padding: 28px 0 0; }
+.nightlifeCard { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; display: flex; flex-direction: column; gap: 10px; padding: 20px; }
+.nightlifeCard.isFeatured { border-color: var(--border-strong); grid-column: span 2; }
+.nightlifeCard header { align-items: flex-start; display: flex; justify-content: space-between; }
+.nightlifeWhen { display: flex; flex-direction: column; font-family: var(--font-mono), monospace; }
+.nightlifeWhen span { color: var(--text-muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.nightlifeWhen strong { font-size: 19px; }
+.nightlifeScore { display: flex; flex-direction: column; text-align: right; }
+.nightlifeScore strong { color: var(--accent); font-family: var(--font-mono), monospace; font-size: 25px; line-height: 1; }
+.nightlifeScore small { color: var(--text-muted); font-size: 11px; }
+.nightlifeCard h3 { font-size: 23px; letter-spacing: -.02em; margin: 4px 0 0; }
+.nightlifeWhere { color: var(--text-secondary); font-size: 14px; margin: 0; }
+.nightlifeRestricted { color: var(--text-muted); font-size: 13px; font-style: italic; margin: 0; }
+.nightlifeReason { font-size: 15px; line-height: 1.5; margin: 4px 0 0; }
+
+.nightlifeDimensions { display: flex; flex-wrap: wrap; gap: 8px; }
+.nightlifeDimension { background: var(--surface-raised); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 2px; min-width: 88px; padding: 8px 10px; }
+.nightlifeDimension small { color: var(--text-muted); font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.nightlifeDimension strong { font-size: 14px; }
+.nightlifeDimension em { color: var(--text-muted); font-size: 10px; font-style: normal; }
+.nightlifeDimension.value-strong, .nightlifeDimension.value-confirmed { border-color: var(--accent); color: var(--accent-bright); }
+.nightlifeDimension.value-poor, .nightlifeDimension.value-weak, .nightlifeDimension.value-unlikely { border-color: rgba(213, 163, 111, .5); }
+/* An unclear dimension reads as a stated gap, never as a low score. */
+.nightlifeDimension.value-unknown { border-style: dashed; color: var(--text-muted); }
+
+.nightlifeFriction { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.nightlifeFriction li { border: 1px solid rgba(213, 163, 111, .4); border-radius: 999px; color: var(--orange); font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .06em; padding: 4px 9px; text-transform: uppercase; }
+.nightlifeUnknowns { color: var(--text-muted); font-size: 13px; margin: 0; }
+.nightlifeUnknowns strong { color: var(--text-secondary); }
+.nightlifeSources { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 0; }
+.nightlifeSources a { color: var(--text-secondary); font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.nightlifeSources a:hover { color: var(--accent-bright); }
+
+.nightlifePlan { border: 1px solid var(--line); border-radius: 18px; margin: 28px 0 0; padding: 20px; }
+.nightlifePlan ol { display: flex; flex-direction: column; gap: 12px; margin: 0; padding-left: 20px; }
+.nightlifePlan li { display: flex; flex-direction: column; }
+.nightlifePlan li span { color: var(--text-muted); font-size: 13px; }
+
+.nightlifeRevisions { border-top: 1px solid var(--line); margin: 32px 0 0; padding: 24px 0 0; }
+.nightlifeRevisionButtons { display: flex; flex-wrap: wrap; gap: 10px; }
+.nightlifeRevisionButtons button { background: transparent; border: 1px solid var(--line); border-radius: 999px; color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .06em; min-height: 40px; padding: 9px 16px; text-transform: uppercase; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
+.nightlifeRevisionButtons button:hover:not(:disabled) { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-bright); }
+.nightlifeRevisionButtons button:disabled { opacity: .5; }
+
+.nightlifeAlternatives { border-top: 1px solid var(--line); margin: 24px 0 0; padding: 18px 0 0; }
+.nightlifeAlternatives summary { color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.nightlifeExcluded { color: var(--text-muted); font-size: 14px; margin: 14px 0 0; padding-left: 20px; }
+
+@media (max-width: 820px) {
+  .nightlifeCard.isFeatured { grid-column: span 1; }
+  .nightlifeSubmit { margin-left: 0; width: 100%; }
+  .nightlifeStatus small { margin-left: 0; width: 100%; }
+}

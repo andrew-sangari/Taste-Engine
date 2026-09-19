@@ -29,6 +29,8 @@ The current snapshot is a technical proof from the selected Playlist Sync source
 - `npm run taste:promote -- --confirm PROMOTE` — explicitly replace local accepted artifacts after validation; never publish remotely
 - `npm run taste:rollback -- --confirm ROLLBACK` — restore the last locally accepted projection and bundle
 - `npm run debug:artist -- "Artist Name"` — trace one artist through SeatGeek performer resolution and regional events
+- `npm run nightlife:probe` — send one synthetic candidate through the configured decision-inference route and report real latency, spend, and contract validity
+- `npm run nightlife:shadow` — compare deterministic and inference-assisted nightlife shortlists side by side; changes no ranking or publication state
 
 ## Private local files
 
@@ -82,6 +84,16 @@ Unavailable inference is normal and must render deterministic editorial copy. Ho
 
 For music advisory passes, missing lineup, genre, or identity detail in the source-safe payload is uncertainty, not negative evidence, and must never by itself produce a `skip`. EDMTrain payloads and lineup provenance are not model input.
 
+### Decision inference (System One / Jev)
+
+A second, separate inference layer serves contextual nightlife discovery. It is a System One evaluation model, not a chat model: it answers typed Choice and Noul questions about one candidate and returns probabilities and confidence. It generates no text, so no model-written sentence ever describes an event; explanations are composed deterministically from typed answers and the fields actually sent. Low confidence becomes an explicit `unknown` rather than a weak rating.
+
+Everything in the LLM boundary above applies unchanged. Never send SeatGeek-only API materials, Spotify Content or Spotify-derived preference evidence, EDMTrain payloads, personal-context notes, or credentials. `src/nightlife/semanticInput.js` enforces this with a field allowlist, a declared provenance for every emittable field, and a transmission guard run by both adapters; withheld evidence is named in `knownUnknowns` and never converted into a negative signal.
+
+Provider selection is configuration. Direct TypeSafe serving is the verified default; the Vercel AI Gateway is an alternate inference route and not a hosting change. No module outside `src/nightlife/providers/` may branch on which provider is active.
+
+This layer launches in shadow/advisory mode. It may order its own nightlife surface, but it must not change the canonical utility score, source facts, publication eligibility, or the learned taste profile. Schedule, travel, overlap, budget, and window feasibility are always recomputed deterministically. See `docs/system-one-inference.md`.
+
 ## Automation contract
 
 - `site/` is an ordinary tracked directory in the main Taste Engine repository, not a submodule or nested Git repository. Keep the personal GitHub SSH remote as the only persistent `origin`; never persist a Sites source credential or managed Sites remote in local Git configuration. Sites publication must derive a site-rooted source commit from the `site/` subtree, push it with a short-lived per-command Sites credential, and package the matching `site/` build.
@@ -103,6 +115,7 @@ Read these before changing product scope:
 - `docs/source-strategy.md`
 - `docs/output-and-automation.md`
 - `docs/build-plan.md`
+- `docs/system-one-inference.md`
 
 ## Completion standard
 
