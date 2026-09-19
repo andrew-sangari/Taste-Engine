@@ -6,6 +6,7 @@ import {
   SpotifyInputError,
   writePlaylistSelections,
 } from "../../../../server/spotify";
+import { resolveProfile } from "../../../../server/profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +14,11 @@ export async function GET(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Sign in with ChatGPT." }, { status: 401 });
   try {
+    const profile = await resolveProfile(user);
     const available = new URL(request.url).searchParams.get("available") === "1"
-      ? await listSpotifyPlaylists(user.email)
+      ? await listSpotifyPlaylists(profile)
       : null;
-    return Response.json({ selected: await readPlaylistSelections(user.email), available }, {
+    return Response.json({ selected: await readPlaylistSelections(profile), available }, {
       headers: { "cache-control": "no-store" },
     });
   } catch (error) {
@@ -29,7 +31,7 @@ export async function PUT(request: Request) {
   if (!user) return Response.json({ error: "Sign in with ChatGPT." }, { status: 401 });
   try {
     const body = await request.json() as { playlists?: unknown };
-    return Response.json({ selected: await writePlaylistSelections(user.email, body.playlists) });
+    return Response.json({ selected: await writePlaylistSelections(await resolveProfile(user), body.playlists) });
   } catch (error) {
     return spotifyError(error);
   }

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { CardActions, calendarInputFrom, planningInputFrom } from "./card-actions";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
 
-type Movie = {
+export type Movie = {
   id: string;
   title: string;
   sourceUrl: string;

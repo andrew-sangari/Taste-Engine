@@ -6,7 +6,14 @@ const HALF_LIFE_DAYS = 180;
 const CAPS = { artist: 4, venue: 2, series: 2, shape: 1, total: 8 } as const;
 const ATTENDED = new Set(["attended-worth-it", "attended-not-worth-it"]);
 
-type Candidate = Record<string, any>;
+type Candidate = Record<string, unknown> & {
+  eventType?: unknown;
+  matchedArtists?: unknown;
+  ranking?: Record<string, unknown>;
+  series?: unknown;
+  source?: unknown;
+  venue?: unknown;
+};
 type SignalCategory = "artist" | "venue" | "series" | "shape";
 
 export function applyHostedFeedbackAdjustments<T extends Candidate>(candidates: T[], records: Array<Record<string, unknown>>, now = new Date()) {
@@ -112,7 +119,7 @@ function candidateEffects(candidate: Candidate, signals: Map<string, { category:
 }
 
 function candidateShape(candidate: Candidate) { return String(candidate.eventType ?? (candidate.source === "mlb" ? "baseball" : "")); }
-function object(value: unknown): Record<string, any> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {}; }
+function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function array(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 function decay(value: unknown, now: Date) { const timestamp = Date.parse(String(value)); const age = Number.isFinite(timestamp) ? Math.max(0, now.getTime() - timestamp) / 86_400_000 : Infinity; return 2 ** (-age / HALF_LIFE_DAYS); }
 function clamp(value: number, minimum: number, maximum: number) { return Math.max(minimum, Math.min(maximum, value)); }

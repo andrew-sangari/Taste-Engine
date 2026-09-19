@@ -6,7 +6,7 @@
   "workers_dev": true,
   "preview_urls": false,
   "triggers": {
-    "crons": ["0 16 * * *"]
+    "crons": ["30 15 * * 1,4"]
   },
   "workflows": [
     {

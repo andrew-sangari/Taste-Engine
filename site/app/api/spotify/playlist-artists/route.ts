@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { getSpotifyPlaylistArtists, SpotifyHttpError } from "../../../../server/spotify";
+import { resolveProfile } from "../../../../server/profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
   const playlistId = url.searchParams.get("playlistId");
   if (!playlistId) return Response.json({ error: "playlistId is required." }, { status: 400 });
   try {
-    const artists = await getSpotifyPlaylistArtists(user.email, playlistId, Number(url.searchParams.get("limit") ?? 250));
+    const artists = await getSpotifyPlaylistArtists(await resolveProfile(user), playlistId, Number(url.searchParams.get("limit") ?? 250));
     return Response.json({ artists, warnings: [] }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     if (error instanceof SpotifyHttpError) return Response.json({ error: error.message }, { status: error.status });

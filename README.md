@@ -21,6 +21,7 @@ The repository starts with the product brief and an execution plan. The first mi
 - [Build plan](docs/build-plan.md)
 - [Source strategy](docs/source-strategy.md)
 - [Output and automation](docs/output-and-automation.md)
+- [Deployment and friend profiles](docs/deployment-and-profiles.md)
 - [Starter preference profile](config/preferences.example.yaml)
 
 ## First working slice
@@ -69,6 +70,8 @@ The Sites surface projects concerts and a second movie vertical across the next 
 Run `npm run site:refresh` to expand the current Spotify seed through Last.fm and rebuild the display-safe projection in `site/app/data/upcoming.json`. It uses the `LASTFM_API_KEY` already configured in the sibling Playlist Sync project as a fallback, or the same variable in this project's `.env`. The site is date-aware at render time: past-dated music, sports, movie, Overview, and Plan Ahead records fall away in the browser without requiring a rebuild. A rebuild is still needed to retrieve new source records or refreshed rankings.
 
 For the complete refresh plus site build, run `npm run build:site`. It prints compact timings for Spotify/Last.fm, ticket sources, MLB/TMDB, normalization, Ollama enhancement, projection export, the Next/vinext build, and the total run.
+
+For a deterministic code release from a clean checkout, use `npm ci --prefix site` followed by `npm run verify:release`. `npm run build:release` builds only the checked-out application and bundled recovery projection; it never contacts sources or mutates durable taste data. See the deployment/profile runbook above for versioning, D1 migration, health checks, and friend-specific Spotify onboarding.
 
 Concert retrieval now merges and deduplicates:
 

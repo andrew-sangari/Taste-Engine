@@ -3,6 +3,17 @@ import type { CSSProperties } from "react";
 import { loadProjection } from "./data/projection";
 import { Reveal } from "./reveal";
 import { VerticalShell } from "./vertical-shell";
+import { chatGPTSignInPath, getChatGPTUser } from "./chatgpt-auth";
+import { ProfileAccessError, profileScopeForUser, resolveProfile, type ProfileScope } from "../server/profiles";
+import { HostedConnections } from "./hosted-connections";
+import { deploymentEnvironment } from "../server/release";
+import type { ChangesSinceRefresh } from "./changes-strip";
+import type { EventItem } from "./event-explorer";
+import type { RecommendationHistoryItem } from "./feedback-store";
+import type { Movie } from "./movie-explorer";
+import type { Editorial, OverviewItem } from "./overview-explorer";
+import type { SportsGame } from "./sports-explorer";
+import type { TasteProfile } from "./taste-explorer";
 
 export const metadata: Metadata = {
   title: "Taste Engine — Upcoming",
@@ -12,34 +23,25 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const upcoming = await loadProjection();
-  const projection = upcoming as typeof upcoming & {
-    overview?: any[];
-    overviewPlanAhead?: any[];
-    recentHistory?: any[];
-    sports?: any[];
-    sportsConfig?: { featuredInterestThreshold?: number };
-    sportsEnhancement?: { mode: string; model: string | null; enhancedGameCount: number };
-    movies?: any[];
-    sourceHealth?: Array<{
-      source: string;
-      status: string;
-      itemCount: number;
-      warningCount: number;
-      details?: Record<string, string | null>;
-    }>;
-    priorityTheaters?: Array<{ name: string; formats: string[] }>;
-    editorial?: {
-      mode: string;
-      status: string;
-      headline: string;
-      verdict: string;
-      lead: string;
-      decisionNotes: string[];
-      skipCall: string;
-      caution: string;
-    };
-  };
+  const user = await getChatGPTUser();
+  if (!user && !["local", "test"].includes(deploymentEnvironment())) return <SignInRequired />;
+  let profile: ProfileScope | null = null;
+  if (user) {
+    try {
+      profile = await resolveProfile(user);
+    } catch (error) {
+      if (error instanceof ProfileAccessError) throw error;
+      // D1 outages may use the bundled projection only for the explicitly
+      // configured original profile. Authorization failures never bypass D1.
+      profile = await profileScopeForUser(user);
+    }
+  }
+  const upcoming = await loadProjection(profile ? {
+    id: profile.id,
+    allowBundledFallback: profile.legacyDefault,
+  } : null);
+  if (!upcoming) return <ProfileOnboarding displayName={profile?.displayName ?? "your profile"} />;
+  const projection = upcoming as unknown as ProjectionView;
   const movies = projection.movies ?? [];
   const sports = projection.sports ?? [];
   const overview = projection.overview ?? [];
@@ -56,7 +58,8 @@ export default async function Home() {
         </a>
         <div className="mastheadMeta">
           <span className="mastheadLocation">Los Angeles</span>
-          <span className="liveDot">Refreshed {new Date(upcoming.generatedAt).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric" })}</span>
+          {profile ? <span>Profile · {profile.displayName}</span> : null}
+          <span className="liveDot">Refreshed {new Date(projection.generatedAt).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric" })}</span>
           <a className="mastheadNotes" href="#engine-notes">Engine notes ↓</a>
         </div>
       </header>
@@ -72,22 +75,24 @@ export default async function Home() {
           timing lens. Music remains the primary learned taste signal; films
           and Dodgers games stay legible, bounded, and explainable.
           </p>
-          <p className="projectionUtility"><span><b data-count={upcoming.events.length + movies.length + sports.length}>{upcoming.events.length + movies.length + sports.length}</b> ranked candidates</span><span aria-hidden="true">·</span><span><b data-count={(upcoming as { expandedArtistCount?: number }).expandedArtistCount ?? upcoming.sourceArtistCount}>{(upcoming as { expandedArtistCount?: number }).expandedArtistCount ?? upcoming.sourceArtistCount}</b> taste signals</span><span aria-hidden="true">·</span><span><b data-count={upcoming.horizon.days}>{upcoming.horizon.days}</b>-day horizon</span></p>
+          <p className="projectionUtility"><span><b data-count={projection.events.length + movies.length + sports.length}>{projection.events.length + movies.length + sports.length}</b> ranked candidates</span><span aria-hidden="true">·</span><span><b data-count={projection.expandedArtistCount ?? projection.sourceArtistCount}>{projection.expandedArtistCount ?? projection.sourceArtistCount}</b> taste signals</span><span aria-hidden="true">·</span><span><b data-count={projection.horizon.days}>{projection.horizon.days}</b>-day horizon</span></p>
         </div>
       </section>
 
       <VerticalShell
-        changesSinceRefresh={(projection as { changesSinceRefresh?: unknown }).changesSinceRefresh ?? null}
-        events={upcoming.events}
+        changesSinceRefresh={projection.changesSinceRefresh ?? null}
+        allowLegacyStorageMigration={profile?.legacyDefault ?? true}
+        events={projection.events}
         editorial={projection.editorial}
         featuredInterestThreshold={projection.sportsConfig?.featuredInterestThreshold ?? 70}
-        generatedAt={upcoming.generatedAt}
+        generatedAt={projection.generatedAt}
         movies={movies}
         overview={overview}
         overviewPlanAhead={projection.overviewPlanAhead ?? []}
         recentHistory={projection.recentHistory ?? []}
         sports={sports}
-        tasteProfile={(projection as { tasteProfile?: never }).tasteProfile ?? null}
+        storageProfileId={profile?.id ?? null}
+        tasteProfile={projection.tasteProfile ?? null}
         tmdbStatus={tmdbStatus}
       />
 
@@ -152,7 +157,7 @@ export default async function Home() {
         <p className="eyebrow"><span className="lit">Taste health</span></p>
         <div className="sourceNoteGrid">
           <div>
-            <h2>{upcoming.sourcePlaylistCount} source playlists anchor three bounded verticals.</h2>
+            <h2>{projection.sourcePlaylistCount} source playlists anchor three bounded verticals.</h2>
           <p>
             Music remains the learned center of gravity, with current Spotify
             affinity kept as replaceable cache evidence rather than a permanent
@@ -193,7 +198,54 @@ export default async function Home() {
   );
 }
 
+function ProfileOnboarding({ displayName }: { displayName: string }) {
+  return <main>
+    <header className="masthead">
+      <a className="wordmark" href="#top" aria-label="Taste Engine home"><span>TASTE</span><span>ENGINE</span></a>
+      <div className="mastheadMeta"><span>Profile · {displayName}</span></div>
+    </header>
+    <section className="projectionHero" id="top">
+      <div><p className="kicker">Private profile</p><h1>Connect your own taste signals.</h1></div>
+      <div className="projectionAside">
+        <p>This profile starts empty so another person’s Spotify evidence and recommendations never become yours.</p>
+        <p><a href="/api/spotify/connect">Connect Spotify</a>, select the playlists that represent you, then run the hosted refresh from the Taste tab.</p>
+      </div>
+    </section>
+    <section className="engineNotes"><HostedConnections /></section>
+  </main>;
+}
+
+function SignInRequired() {
+  return <main>
+    <header className="masthead"><span className="wordmark"><span>TASTE</span><span>ENGINE</span></span></header>
+    <section className="projectionHero" id="top">
+      <div><p className="kicker">Private by design</p><h1>Sign in to select your taste profile.</h1></div>
+      <div className="projectionAside"><p>Recommendation and Spotify state are selected only from the authenticated ChatGPT identity.</p><p><a href={chatGPTSignInPath("/")} target="_top">Sign in with ChatGPT</a></p></div>
+    </section>
+  </main>;
+}
+
 type SourceHealth = { source: string; status: string; itemCount: number; warningCount: number; details?: Record<string, string | number | null> };
+
+type ProjectionView = {
+  changesSinceRefresh?: ChangesSinceRefresh | null;
+  editorial?: Editorial;
+  events: EventItem[];
+  expandedArtistCount?: number;
+  generatedAt: string;
+  horizon: { days: number };
+  movies?: Movie[];
+  overview?: OverviewItem[];
+  overviewPlanAhead?: OverviewItem[];
+  priorityTheaters?: Array<{ name: string; formats: string[] }>;
+  recentHistory?: RecommendationHistoryItem[];
+  sourceArtistCount: number;
+  sourceHealth?: SourceHealth[];
+  sourcePlaylistCount: number;
+  sports?: SportsGame[];
+  sportsConfig?: { featuredInterestThreshold?: number };
+  tasteProfile?: TasteProfile | null;
+};
 
 function groupSourceHealth(sources: SourceHealth[]) {
   const order = ["Music", "Sports", "Movies", "Editorial", "Other"];

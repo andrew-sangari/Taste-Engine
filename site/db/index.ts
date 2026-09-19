@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./schema";
+import * as schema from "./schema.ts";
 
 let runtimeD1: D1Database | null = null;
 

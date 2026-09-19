@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EventExplorer } from "./event-explorer";
-import { MovieExplorer } from "./movie-explorer";
-import { OverviewExplorer } from "./overview-explorer";
-import { SportsExplorer } from "./sports-explorer";
+import { EventExplorer, type EventItem } from "./event-explorer";
+import { MovieExplorer, type Movie } from "./movie-explorer";
+import { OverviewExplorer, type Editorial, type OverviewItem } from "./overview-explorer";
+import { SportsExplorer, type SportsGame } from "./sports-explorer";
 import { TasteExplorer, type TasteProfile } from "./taste-explorer";
+import type { ChangesSinceRefresh } from "./changes-strip";
 import { FeedbackProvider, useFeedback } from "./feedback-context";
 import { planningInputFrom } from "./card-actions";
 import type { PlanningInput, RecommendationHistoryItem } from "./feedback-store";
@@ -15,27 +16,29 @@ import { eventIdFromHash } from "./event-anchor";
 type Vertical = "overview" | "music" | "movies" | "sports" | "taste";
 const TABS: Array<[Vertical, string]> = [['overview', 'Overview'], ['music', 'Music'], ['movies', 'Movies'], ['sports', 'Sports'], ['taste', 'Taste']];
 
-export function VerticalShell({ overview, overviewPlanAhead, events, movies, sports, recentHistory, generatedAt, tmdbStatus, featuredInterestThreshold, editorial, tasteProfile, changesSinceRefresh }: {
-  overview: any[];
-  overviewPlanAhead?: any[];
-  events: any[];
-  movies: any[];
-  sports: any[];
+export function VerticalShell({ overview, overviewPlanAhead, events, movies, sports, recentHistory, generatedAt, tmdbStatus, featuredInterestThreshold, editorial, tasteProfile, changesSinceRefresh, storageProfileId, allowLegacyStorageMigration }: {
+  overview: OverviewItem[];
+  overviewPlanAhead?: OverviewItem[];
+  events: EventItem[];
+  movies: Movie[];
+  sports: SportsGame[];
   recentHistory: RecommendationHistoryItem[];
   generatedAt: string;
   tmdbStatus: string;
   featuredInterestThreshold: number;
-  editorial?: any;
+  editorial?: Editorial;
   tasteProfile?: TasteProfile | null;
-  changesSinceRefresh?: any;
+  changesSinceRefresh?: ChangesSinceRefresh | null;
+  storageProfileId: string | null;
+  allowLegacyStorageMigration: boolean;
 }) {
   const [active, setActive] = useState<Vertical>("overview");
   const [targetEventId, setTargetEventId] = useState<string | null>(null);
   const [currentAsOf, setCurrentAsOf] = useState<string | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const verticalByEventId = useMemo(() => new Map([
-    ...events.map((event) => [String(event.id), "music" as const]),
-    ...sports.map((game) => [String(game.id), "sports" as const]),
+  const verticalByEventId = useMemo(() => new Map<string, Vertical>([
+    ...events.map((event): [string, Vertical] => [String(event.id), "music"]),
+    ...sports.map((game): [string, Vertical] => [String(game.id), "sports"]),
   ]), [events, sports]);
   useEffect(() => {
     const setFromHash = () => {
@@ -109,7 +112,7 @@ export function VerticalShell({ overview, overviewPlanAhead, events, movies, spo
     const nextIndex = direction === "first" ? 0 : direction === "last" ? TABS.length - 1 : (index + (direction === "next" ? 1 : -1) + TABS.length) % TABS.length;
     select(TABS[nextIndex][0], true);
   };
-  return <FeedbackProvider projectionItems={projectionItems} recentHistory={recentHistory} todayKey={todayKey}>
+  return <FeedbackProvider allowLegacyStorageMigration={allowLegacyStorageMigration} profileId={storageProfileId} projectionItems={projectionItems} recentHistory={recentHistory} todayKey={todayKey}>
     <section className="verticalShell" aria-label="Taste Engine verticals">
     <div className="verticalTabs" role="tablist" aria-label="Taste Engine verticals">
       {TABS.map(([value, label], index) => <TabButton
@@ -129,9 +132,9 @@ export function VerticalShell({ overview, overviewPlanAhead, events, movies, spo
     </div>
     <div aria-labelledby={`tab-${active}`} className={`verticalPanel verticalPanel-${active}`} id={`panel-${active}`} role="tabpanel" tabIndex={0}>
       {active === "overview" ? <OverviewExplorer changesSinceRefresh={changesSinceRefresh} dateAwareRefresh={dateAwareRefresh} editorial={editorial} generatedAt={asOf} overview={visibleOverview} planAhead={visiblePlanAhead} projectionGeneratedAt={generatedAt} /> : null}
-      {active === "music" ? <EventExplorer events={visibleEvents} generatedAt={asOf} targetEventId={targetEventId} /> : null}
+      {active === "music" ? <EventExplorer events={visibleEvents} generatedAt={asOf} key={targetEventId ?? "music"} targetEventId={targetEventId} /> : null}
       {active === "movies" ? <MovieExplorer generatedAt={asOf} movies={visibleMovies} tmdbStatus={tmdbStatus} /> : null}
-      {active === "sports" ? <SportsExplorer featuredThreshold={featuredInterestThreshold} games={visibleSports} generatedAt={asOf} targetEventId={targetEventId} /> : null}
+      {active === "sports" ? <SportsExplorer featuredThreshold={featuredInterestThreshold} games={visibleSports} generatedAt={asOf} key={targetEventId ?? "sports"} targetEventId={targetEventId} /> : null}
       {active === "taste" ? <TasteExplorer profile={tasteProfile ?? null} /> : null}
     </div>
     </section>
@@ -165,7 +168,7 @@ function TabButton({ value, label, active, onSelect, onKeyDown, refCallback }: {
   >{label}{pending ? <span aria-hidden="true" className="tabBadge">{pending}</span> : null}</button>;
 }
 
-function sportsTitle(game: any) {
+function sportsTitle(game: SportsGame) {
   const opponent = game.awayTeam?.shortName ?? game.awayTeam?.name ?? "opponent";
   return `Dodgers vs. ${opponent}`;
 }

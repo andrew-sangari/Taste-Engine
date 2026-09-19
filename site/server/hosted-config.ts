@@ -45,7 +45,29 @@ export type HostedPipelineConfig = {
   };
 };
 
-export function readHostedPipelineConfig(): HostedPipelineConfig {
+const SHARED_SECTION_KEYS = {
+  brief: [
+    "timezone",
+    "home",
+    "searchRadiusMiles",
+    "upcomingHorizonDays",
+    "maxSeatGeekPages",
+    "seatGeekWindowDays",
+    "seatGeekPerformerArtistLimit",
+    "frameworkArtistLimit",
+    "ticketmasterArtistQueryLimit",
+    "lastFmSeedArtistLimit",
+    "lastFmSimilarPerArtist",
+    "lastFmTopTagCount",
+    "lastFmArtistsPerTag",
+    "edmtrain",
+  ],
+  movies: ["maxCandidates"],
+  sports: ["maxPitcherStats", "maxTicketPages"],
+  personalContext: ["version", "maxEnhancedEvents", "maxEnhancedSports"],
+} as const;
+
+export function readHostedPipelineConfig(profile?: ProfileScope): HostedPipelineConfig {
   const raw = process.env.TASTE_ENGINE_CONFIG_JSON;
   if (!raw) throw new HostedConfigError("TASTE_ENGINE_CONFIG_JSON is not configured.");
   let parsed: unknown;
@@ -55,10 +77,11 @@ export function readHostedPipelineConfig(): HostedPipelineConfig {
     throw new HostedConfigError("TASTE_ENGINE_CONFIG_JSON is invalid JSON.");
   }
   if (!isRecord(parsed)) throw new HostedConfigError("Hosted configuration must be an object.");
-  const briefInput = record(parsed.brief);
-  const movieInput = record(parsed.movies);
-  const sportsInput = record(parsed.sports);
-  const personalInput = record(parsed.personalContext);
+  const selected = selectProfileConfig(parsed, profile);
+  const briefInput = record(selected.brief);
+  const movieInput = record(selected.movies);
+  const sportsInput = record(selected.sports);
+  const personalInput = record(selected.personalContext);
   const home = record(briefInput.home);
   const brief = {
     ...briefInput,
@@ -120,6 +143,51 @@ export function readHostedPipelineConfig(): HostedPipelineConfig {
   };
 }
 
+function selectProfileConfig(input: Record<string, unknown>, profile?: ProfileScope): Record<string, unknown> {
+  const profiles = record(input.profiles);
+  const versioned = input.version === 2 || Object.keys(profiles).length > 0;
+  if (!versioned) {
+    if (profile && !profile.legacyDefault) {
+      throw new HostedConfigError("This profile needs an explicit entry in TASTE_ENGINE_CONFIG_JSON.");
+    }
+    return input;
+  }
+  if (!profile) throw new HostedConfigError("Profile identity is required for version 2 hosted configuration.");
+  const profileInput = record(profiles[profile.id]);
+  if (!Object.keys(profileInput).length) {
+    throw new HostedConfigError(`Hosted configuration is missing profile ${profile.id}.`);
+  }
+  const shared = record(input.shared);
+  return {
+    brief: mergeSection(sharedSection("brief", shared.brief), profileInput.brief, ["home", "edmtrain"]),
+    movies: mergeSection(sharedSection("movies", shared.movies), profileInput.movies),
+    sports: mergeSection(sharedSection("sports", shared.sports), profileInput.sports, ["rivalries"]),
+    personalContext: mergeSection(sharedSection("personalContext", shared.personalContext), profileInput.personalContext),
+  };
+}
+
+function sharedSection(
+  name: keyof typeof SHARED_SECTION_KEYS,
+  value: unknown,
+): Record<string, unknown> {
+  const input = record(value);
+  const allowed = new Set<string>(SHARED_SECTION_KEYS[name]);
+  for (const key of Object.keys(input)) {
+    if (!allowed.has(key)) {
+      throw new HostedConfigError(`shared.${name}.${key} must be configured inside each profile.`);
+    }
+  }
+  return input;
+}
+
+function mergeSection(shared: unknown, profile: unknown, nestedKeys: string[] = []): Record<string, unknown> {
+  const base = record(shared);
+  const override = record(profile);
+  const output = { ...base, ...override };
+  for (const key of nestedKeys) output[key] = { ...record(base[key]), ...record(override[key]) };
+  return output;
+}
+
 function record(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
@@ -161,3 +229,4 @@ function integer(value: unknown, fallback: number): number {
 }
 
 export class HostedConfigError extends Error {}
+import type { ProfileScope } from "./profiles";

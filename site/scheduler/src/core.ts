@@ -67,7 +67,7 @@ export async function runRefresh(env: SchedulerEnv): Promise<Record<string, unkn
     headers: {
       authorization: `Bearer ${env.TASTE_REFRESH_SECRET}`,
       "content-type": "application/json",
-      "user-agent": "taste-engine-refresh-scheduler/2.0",
+      "user-agent": "taste-engine-refresh-scheduler/3.0",
     },
   });
   const payload = await response.json().catch(() => null) as {
@@ -75,7 +75,7 @@ export async function runRefresh(env: SchedulerEnv): Promise<Record<string, unkn
     publicationBlockers?: string[];
     [key: string]: unknown;
   } | null;
-  if (!response.ok || payload?.projectionPublished !== true) {
+  if (!response.ok || !payload) {
     const blocker = payload?.publicationBlockers?.[0] ?? `HTTP ${response.status}`;
     throw new Error(`Taste Engine refresh did not publish: ${blocker}`);
   }

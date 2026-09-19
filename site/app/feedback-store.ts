@@ -104,8 +104,13 @@ export type LocalFeedbackStore = {
   exportBatches: Record<string, ExportBatch>;
 };
 
-export const STORAGE_KEY = "taste-engine.feedback.v2";
+export const STORAGE_KEY = "taste-engine.feedback.v3";
+export const PRIOR_STORAGE_KEY = "taste-engine.feedback.v2";
 export const LEGACY_STORAGE_KEY = "taste-engine.feedback.v1";
+
+export function storageKeyForProfile(profileId: string | null): string {
+  return profileId ? `taste-engine.feedback.v3.profile.${profileId}` : STORAGE_KEY;
+}
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
@@ -113,9 +118,13 @@ export function emptyStore(): LocalFeedbackStore {
   return { version: 3, planning: {}, historyResponses: {}, records: {}, exportBatches: {} };
 }
 
-export function loadStore(storage: StorageLike | null | undefined): LocalFeedbackStore {
+export function loadStore(
+  storage: StorageLike | null | undefined,
+  key = STORAGE_KEY,
+  allowLegacyFallback = true,
+): LocalFeedbackStore {
   try {
-    const current = storage?.getItem(STORAGE_KEY);
+    const current = storage?.getItem(key);
     if (current) {
       const parsed = JSON.parse(current);
       if (parsed?.version === 2) return migrateV2Store(parsed);
@@ -128,16 +137,30 @@ export function loadStore(storage: StorageLike | null | undefined): LocalFeedbac
         exportBatches: asRecord(parsed.exportBatches),
       };
     }
-    const legacy = storage?.getItem(LEGACY_STORAGE_KEY);
+    const prior = allowLegacyFallback
+      ? (key !== STORAGE_KEY ? storage?.getItem(STORAGE_KEY) : null) ?? storage?.getItem(PRIOR_STORAGE_KEY)
+      : null;
+    if (prior) {
+      const parsed = JSON.parse(prior);
+      if (parsed?.version === 2) return migrateV2Store(parsed);
+      if (parsed?.version === 3) return {
+        version: 3,
+        planning: asRecord(parsed.planning),
+        historyResponses: asRecord(parsed.historyResponses),
+        records: asRecord(parsed.records),
+        exportBatches: asRecord(parsed.exportBatches),
+      };
+    }
+    const legacy = allowLegacyFallback ? storage?.getItem(LEGACY_STORAGE_KEY) : null;
     return legacy ? migrateLegacyStore(JSON.parse(legacy)) : emptyStore();
   } catch {
     return emptyStore();
   }
 }
 
-export function saveStore(storage: StorageLike | null | undefined, store: LocalFeedbackStore): boolean {
+export function saveStore(storage: StorageLike | null | undefined, store: LocalFeedbackStore, key = STORAGE_KEY): boolean {
   try {
-    storage?.setItem(STORAGE_KEY, JSON.stringify(store));
+    storage?.setItem(key, JSON.stringify(store));
     return true;
   } catch {
     return false;
@@ -445,10 +468,26 @@ export function generateUuid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function migrateLegacyStore(input: any): LocalFeedbackStore {
-  if (!input || input.version !== 1) return emptyStore();
+type LegacyPlanningItem = {
+  state?: unknown;
+  resolvedFeedbackId?: unknown;
+  capturedSnapshot: PlanningSnapshot;
+  currentSnapshot: PlanningSnapshot;
+  capturedFeedbackSnapshot?: PublicFeedbackSnapshot | null;
+  currentFeedbackSnapshot?: PublicFeedbackSnapshot | null;
+  presentInProjection?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastReconciledAt?: string | null;
+};
+
+function migrateLegacyStore(input: unknown): LocalFeedbackStore {
+  const legacy = input && typeof input === "object" && !Array.isArray(input)
+    ? input as Record<string, unknown>
+    : {};
+  if (legacy.version !== 1) return emptyStore();
   const planning: Record<string, PlanningItem> = {};
-  for (const [itemId, item] of Object.entries(asRecord<any>(input.planning))) {
+  for (const [itemId, item] of Object.entries(asRecord<LegacyPlanningItem>(legacy.planning))) {
     if (item?.state !== "saved" || item.resolvedFeedbackId) continue;
     planning[itemId] = {
       itemId,
@@ -468,8 +507,8 @@ function migrateLegacyStore(input: any): LocalFeedbackStore {
     version: 2,
     planning,
     historyResponses: {},
-    records: asRecord(input.records),
-    exportBatches: asRecord(input.exportBatches),
+    records: asRecord(legacy.records),
+    exportBatches: asRecord(legacy.exportBatches),
   });
 }
 

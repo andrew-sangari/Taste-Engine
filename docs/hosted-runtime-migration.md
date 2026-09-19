@@ -23,9 +23,10 @@ D1 is the production serving store for:
 - source-run status and grouped source health
 - Spotify tokens, selected playlists, and seven-day Top Artists windows
 - saved/held planning state and post-event outcomes
-- later: normalized candidates, occurrences, profiles, and sync checkpoints
+- profiles and profile ownership for all hosted state
+- later, if useful: normalized candidate/occurrence tables and sync checkpoints
 
-The bundled `site/app/data/upcoming.json` remains a validated bootstrap and disaster-recovery snapshot during migration. The site reads an active D1 recommendation snapshot first and falls back to that bundle only when the database is empty or unavailable.
+The bundled `site/app/data/upcoming.json` remains a validated bootstrap and disaster-recovery snapshot for the explicitly migrated original profile. The site reads that profile's active D1 recommendation snapshot first. New friend profiles never fall back to the bundle and begin empty.
 
 Browser storage is a compatibility fallback, not the hosted source of truth. Signed-in feedback is loaded from and written to D1. Existing device state is uploaded when the signed-in D1 record is empty.
 
@@ -39,7 +40,8 @@ Taste Engine now owns the hosted read-only Spotify path copied from Playlist Syn
 - playlist artist summaries
 - short-, medium-, and long-term Top Artists windows
 - seven-day per-window cache reuse
-- explicit disconnect deletion
+- explicit profile-scoped disconnect deletion of tokens and derived Spotify snapshots
+- application-layer AES-256-GCM encryption for access and refresh tokens
 
 Playlist Sync remains a local development and recovery tool. Production does not call a localhost Playlist Sync URL.
 
@@ -67,18 +69,22 @@ Ollama Cloud never becomes the ranker or source of canonical facts. Spotify-deri
 Set these in the Sites project’s hosted environment settings; never commit them:
 
 - `SPOTIFY_CLIENT_ID`
+- `SPOTIFY_TOKEN_ENCRYPTION_KEY` — a base64/base64url-encoded 32-byte key
+- `TASTE_ENGINE_ENV=production`
+- `TASTE_LEGACY_PROFILE_EMAIL` — the original profile only, during and after migration
+- `TASTE_ALLOWED_PROFILE_EMAILS` — canonical emails for the small trusted-user set
 - `TASTE_REFRESH_SECRET` — at least 24 random characters
 - `OLLAMA_API_KEY`
 - `OLLAMA_MODEL`
 - optional `OLLAMA_BASE_URL` (defaults to `https://ollama.com/api`)
 - optional `OLLAMA_TIMEOUT_MS` (defaults to 180000)
 - source keys used by enabled adapters: `LASTFM_API_KEY`, `SEATGEEK_CLIENT_ID`, `TICKETMASTER_API_KEY`, `TMDB_ACCESS_TOKEN` or `TMDB_API_KEY`, and `EDMTRAIN_CLIENT_KEY`
-- `TASTE_ENGINE_CONFIG_JSON` — the private brief, movie, sports, and personal-context configuration serialized as one JSON object
+- `TASTE_ENGINE_CONFIG_JSON` — version 2 allowlisted shared operational settings plus private per-profile brief, movie, sports, and personal-context configuration
 
 Both administrative routes use `Authorization: Bearer <TASTE_REFRESH_SECRET>`:
 
-- `POST /api/admin/projection` uploads an already validated projection. It remains a migration and recovery path.
-- `POST /api/admin/refresh` runs the complete pipeline: Spotify evidence, Last.fm expansion, Framework/Insomniac calendars, SeatGeek and Ticketmaster discovery, EDMTrain matched-lineup enrichment, MLB and ticket observations, TMDB selection, deterministic normalization/deduplication/ranking, source-safe Ollama Cloud advisory passes, validation, and atomic D1 publication.
+- `POST /api/admin/projection` uploads an already validated projection for an explicit `profileId`. It remains a migration and recovery path.
+- `POST /api/admin/refresh` runs the complete pipeline for an explicit `profileId`, or serially for all enabled connected profiles when omitted: Spotify evidence, Last.fm expansion, Framework/Insomniac calendars, SeatGeek and Ticketmaster discovery, EDMTrain matched-lineup enrichment, MLB and ticket observations, TMDB selection, deterministic normalization/deduplication/ranking, source-safe Ollama Cloud advisory passes, validation, and atomic profile-scoped D1 publication.
 - `POST /api/runtime/refresh` runs the same pipeline for the signed-in owner without exposing the administrative secret.
 
 An incomplete or invalid run never replaces the active projection. The hosted taste snapshot and recommendation projection become active together in one D1 batch.
@@ -96,3 +102,5 @@ Before the hosted route can refresh taste evidence, connect Spotify from the dep
 7. Two hosted refreshes complete without local repair before the local recovery producer is retired.
 
 The guarded local refresh remains a disaster-recovery producer. It may upload a validated snapshot through the protected projection route, but local promotion and Sites publication remain separate operations.
+
+See [Deployment and profile operations](deployment-and-profiles.md) for the clean-checkout release procedure, version contract, minimum profile boundary, and ordered migration/external actions.

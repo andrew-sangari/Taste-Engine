@@ -1,4 +1,11 @@
-import { getD1 } from "../db";
+import { getD1 } from "../db/index.ts";
+import type { ProfileScope } from "./profiles";
+import {
+  isSealedSpotifyToken,
+  openSpotifyToken,
+  sealSpotifyToken,
+  TokenEncryptionError,
+} from "./token-crypto.ts";
 
 const AUTH_URL = "https://accounts.spotify.com/authorize";
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
@@ -63,7 +70,7 @@ type CombinedTopArtist = {
   [key: string]: string | number | null;
 };
 
-export async function createSpotifyConnectUrl(ownerEmail: string, origin: string): Promise<string> {
+export async function createSpotifyConnectUrl(profile: ProfileScope, origin: string): Promise<string> {
   const clientId = spotifyClientId();
   const verifier = randomBase64Url(64);
   const challenge = await sha256Base64Url(verifier);
@@ -72,9 +79,9 @@ export async function createSpotifyConnectUrl(ownerEmail: string, origin: string
   await getD1().batch([
     getD1().prepare("DELETE FROM spotify_oauth_states WHERE expires_at < ?1").bind(Date.now()),
     getD1().prepare(`
-      INSERT INTO spotify_oauth_states (state, owner_email, verifier, expires_at)
-      VALUES (?1, ?2, ?3, ?4)
-    `).bind(state, ownerEmail, verifier, expiresAt),
+      INSERT INTO spotify_oauth_states (state, owner_email, profile_id, verifier, expires_at)
+      VALUES (?1, ?2, ?3, ?4, ?5)
+    `).bind(state, profile.email, profile.id, verifier, expiresAt),
   ]);
   const url = new URL(AUTH_URL);
   url.searchParams.set("client_id", clientId);
@@ -87,17 +94,20 @@ export async function createSpotifyConnectUrl(ownerEmail: string, origin: string
   return url.toString();
 }
 
-export async function completeSpotifyConnection(callbackUrl: URL): Promise<void> {
+export async function completeSpotifyConnection(callbackUrl: URL, expectedProfileId: string): Promise<void> {
   const error = callbackUrl.searchParams.get("error");
   if (error) throw new SpotifyInputError(`Spotify authorization failed: ${error}`);
   const code = callbackUrl.searchParams.get("code");
   const state = callbackUrl.searchParams.get("state");
   if (!code || !state) throw new SpotifyInputError("Spotify callback is missing code or state.");
   const row = await getD1()
-    .prepare("SELECT owner_email, verifier, expires_at FROM spotify_oauth_states WHERE state = ?1")
+    .prepare("SELECT owner_email, profile_id, verifier, expires_at FROM spotify_oauth_states WHERE state = ?1")
     .bind(state)
-    .first<{ owner_email: string; verifier: string; expires_at: number }>();
+    .first<{ owner_email: string; profile_id: string | null; verifier: string; expires_at: number }>();
   if (!row || row.expires_at < Date.now()) throw new SpotifyInputError("Spotify connection expired. Start again.");
+  if (!row.profile_id || row.profile_id !== expectedProfileId) {
+    throw new SpotifyInputError("Spotify connection belongs to a different Taste Engine profile.");
+  }
   const token = await tokenRequest(new URLSearchParams({
     client_id: spotifyClientId(),
     grant_type: "authorization_code",
@@ -105,38 +115,45 @@ export async function completeSpotifyConnection(callbackUrl: URL): Promise<void>
     redirect_uri: spotifyRedirectUri(callbackUrl.origin),
     code_verifier: row.verifier,
   }));
-  await saveToken(row.owner_email, normalizeToken(token));
+  await saveToken({
+    id: row.profile_id,
+    email: row.owner_email,
+    displayName: row.owner_email,
+    legacyDefault: false,
+  }, normalizeToken(token));
   await getD1().prepare("DELETE FROM spotify_oauth_states WHERE state = ?1").bind(state).run();
 }
 
-export async function spotifyStatus(ownerEmail: string) {
-  const token = await readToken(ownerEmail);
+export async function spotifyStatus(profile: ProfileScope) {
+  const token = await readToken(profile);
   const granted = new Set(String(token?.scopes ?? "").split(/\s+/).filter(Boolean));
-  const selections = await readPlaylistSelections(ownerEmail);
+  const selections = await readPlaylistSelections(profile);
   return {
     configured: Boolean(process.env.SPOTIFY_CLIENT_ID),
     connected: Boolean(token?.accessToken),
     missingScopes: SCOPES.filter((scope) => !granted.has(scope)),
     selectedPlaylistCount: selections.filter((item) => item.enabled).length,
-    topArtistWindows: await cachedWindowHealth(ownerEmail),
+    topArtistWindows: await cachedWindowHealth(profile),
   };
 }
 
-export async function disconnectSpotify(ownerEmail: string): Promise<void> {
+export async function disconnectSpotify(profile: ProfileScope): Promise<void> {
   const db = getD1();
   await db.batch([
-    db.prepare("DELETE FROM spotify_tokens WHERE owner_email = ?1").bind(ownerEmail),
-    db.prepare("DELETE FROM spotify_top_artist_windows WHERE owner_email = ?1").bind(ownerEmail),
-    db.prepare("DELETE FROM spotify_playlist_selections WHERE owner_email = ?1").bind(ownerEmail),
-    db.prepare("DELETE FROM spotify_oauth_states WHERE owner_email = ?1").bind(ownerEmail),
+    db.prepare("DELETE FROM spotify_tokens WHERE profile_id = ?1").bind(profile.id),
+    db.prepare("DELETE FROM spotify_top_artist_windows WHERE profile_id = ?1").bind(profile.id),
+    db.prepare("DELETE FROM spotify_playlist_selections WHERE profile_id = ?1").bind(profile.id),
+    db.prepare("DELETE FROM spotify_oauth_states WHERE profile_id = ?1").bind(profile.id),
+    db.prepare("DELETE FROM hosted_taste_snapshots WHERE profile_id = ?1").bind(profile.id),
+    db.prepare("DELETE FROM recommendation_snapshots WHERE profile_id = ?1").bind(profile.id),
   ]);
 }
 
-export async function listSpotifyPlaylists(ownerEmail: string, limit = 200) {
+export async function listSpotifyPlaylists(profile: ProfileScope, limit = 200) {
   const playlists: Array<Record<string, unknown>> = [];
   let path: string | null = "/me/playlists?limit=50";
   while (path && playlists.length < Math.min(200, Math.max(1, limit))) {
-    const page = await spotifyApi<SpotifyPage<SpotifyPlaylist>>(ownerEmail, path);
+    const page = await spotifyApi<SpotifyPage<SpotifyPlaylist>>(profile, path);
     for (const item of page.items ?? []) {
       playlists.push({
         id: item.id,
@@ -153,12 +170,12 @@ export async function listSpotifyPlaylists(ownerEmail: string, limit = 200) {
   return playlists;
 }
 
-export async function getSpotifyPlaylistArtists(ownerEmail: string, playlistId: string, limit = 250) {
+export async function getSpotifyPlaylistArtists(profile: ProfileScope, playlistId: string, limit = 250) {
   const tracks: SpotifyTrack[] = [];
   let path: string | null = `/playlists/${encodeURIComponent(playlistId)}/items?limit=50&fields=next,items(item(id,uri,name,type,artists(id,name),album(name)),track(id,uri,name,type,artists(id,name),album(name)))`;
   const boundedLimit = Math.min(500, Math.max(1, limit));
   while (path && tracks.length < boundedLimit) {
-    const page = await spotifyApi<SpotifyPage<SpotifyPlaylistItem>>(ownerEmail, path);
+    const page = await spotifyApi<SpotifyPage<SpotifyPlaylistItem>>(profile, path);
     for (const item of page.items ?? []) {
       const track = item?.track ?? item?.item;
       if (track?.id && track.type !== "episode") tracks.push(track);
@@ -170,7 +187,7 @@ export async function getSpotifyPlaylistArtists(ownerEmail: string, playlistId: 
   const artistDetails = new Map<string, SpotifyArtist>();
   for (let index = 0; index < artistIds.length; index += 50) {
     const ids = artistIds.slice(index, index + 50);
-    const response = await spotifyApi<{ artists?: SpotifyArtist[] }>(ownerEmail, `/artists?ids=${ids.map(encodeURIComponent).join(",")}`);
+    const response = await spotifyApi<{ artists?: SpotifyArtist[] }>(profile, `/artists?ids=${ids.map(encodeURIComponent).join(",")}`);
     for (const artist of response.artists ?? []) if (artist?.id) artistDetails.set(artist.id, artist);
   }
   const summaries = new Map<string, PlaylistArtistSummary>();
@@ -192,13 +209,13 @@ export async function getSpotifyPlaylistArtists(ownerEmail: string, playlistId: 
   return [...summaries.values()].sort((left, right) => right.trackCount - left.trackCount || left.name.localeCompare(right.name));
 }
 
-export async function refreshSpotifyTopArtists(ownerEmail: string, limit = 50) {
+export async function refreshSpotifyTopArtists(profile: ProfileScope, limit = 50) {
   const now = new Date();
   const windows: Record<string, TopArtistWindow> = {};
   let authenticationFailure = false;
   for (const definition of TOP_WINDOWS) {
     try {
-      const response = await spotifyApi<{ items?: SpotifyArtist[] }>(ownerEmail, `/me/top/artists?time_range=${definition.apiRange}&limit=${Math.min(50, Math.max(1, limit))}`);
+      const response = await spotifyApi<{ items?: SpotifyArtist[] }>(profile, `/me/top/artists?time_range=${definition.apiRange}&limit=${Math.min(50, Math.max(1, limit))}`);
       const fetchedAt = now.toISOString();
       const expiresAt = new Date(now.getTime() + TOP_ARTIST_TTL_MS).toISOString();
       const items = (response.items ?? []).map((artist, index) => ({
@@ -207,36 +224,37 @@ export async function refreshSpotifyTopArtists(ownerEmail: string, limit = 50) {
         rank: index + 1,
       })).filter((artist) => artist.artistId && artist.artistName);
       await getD1().prepare(`
-        INSERT INTO spotify_top_artist_windows (owner_email, window_key, fetched_at, expires_at, items_json)
-        VALUES (?1, ?2, ?3, ?4, ?5)
-        ON CONFLICT(owner_email, window_key) DO UPDATE SET
+        INSERT INTO spotify_top_artist_windows (owner_email, profile_id, window_key, fetched_at, expires_at, items_json)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        ON CONFLICT(profile_id, window_key) DO UPDATE SET
+          owner_email = excluded.owner_email,
           fetched_at = excluded.fetched_at,
           expires_at = excluded.expires_at,
           items_json = excluded.items_json
-      `).bind(ownerEmail, definition.key, fetchedAt, expiresAt, JSON.stringify(items)).run();
+      `).bind(profile.email, profile.id, definition.key, fetchedAt, expiresAt, JSON.stringify(items)).run();
       windows[definition.key] = { status: "fresh", warning: null, fetchedAt, expiresAt, items };
     } catch (error) {
-      if (error instanceof SpotifyHttpError && [401, 403].includes(error.status)) authenticationFailure = true;
-      const cached = await readCachedWindow(ownerEmail, definition.key, now);
+      if (error instanceof SpotifyHttpError && error.status === 401) authenticationFailure = true;
+      const cached = await readCachedWindow(profile, definition.key, now);
       windows[definition.key] = cached
         ? { ...cached, status: "cached", warning: error instanceof Error ? error.message : "Spotify request failed." }
         : { status: "unavailable", warning: error instanceof Error ? error.message : "Spotify request failed.", fetchedAt: null, expiresAt: null, items: [] };
     }
   }
   if (authenticationFailure) {
-    await disconnectSpotify(ownerEmail);
+    await disconnectSpotify(profile);
     throw new SpotifyHttpError(401, "Spotify authorization is missing or expired. Reconnect Spotify.");
   }
   return buildTopArtistResponse(windows, now);
 }
 
-export async function readPlaylistSelections(ownerEmail: string) {
+export async function readPlaylistSelections(profile: ProfileScope) {
   const result = await getD1().prepare(`
     SELECT playlist_id, playlist_name, weight, enabled, updated_at
     FROM spotify_playlist_selections
-    WHERE owner_email = ?1
+    WHERE profile_id = ?1
     ORDER BY playlist_name COLLATE NOCASE, playlist_id
-  `).bind(ownerEmail).all<{
+  `).bind(profile.id).all<{
     playlist_id: string;
     playlist_name: string;
     weight: number;
@@ -252,7 +270,7 @@ export async function readPlaylistSelections(ownerEmail: string) {
   }));
 }
 
-export async function writePlaylistSelections(ownerEmail: string, selections: unknown) {
+export async function writePlaylistSelections(profile: ProfileScope, selections: unknown) {
   if (!Array.isArray(selections) || selections.length > 100) throw new SpotifyInputError("Playlists must be an array of at most 100 items.");
   const normalized = selections.map((item) => {
     if (!item || typeof item !== "object") throw new SpotifyInputError("Each playlist must be an object.");
@@ -265,29 +283,29 @@ export async function writePlaylistSelections(ownerEmail: string, selections: un
   });
   const db = getD1();
   const now = new Date().toISOString();
-  await db.prepare("DELETE FROM spotify_playlist_selections WHERE owner_email = ?1").bind(ownerEmail).run();
+  await db.prepare("DELETE FROM spotify_playlist_selections WHERE profile_id = ?1").bind(profile.id).run();
   if (normalized.length) {
     await db.batch(normalized.map((item) => db.prepare(`
       INSERT INTO spotify_playlist_selections
-        (owner_email, playlist_id, playlist_name, weight, enabled, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-    `).bind(ownerEmail, item.id, item.name, item.weight, item.enabled ? 1 : 0, now)));
+        (owner_email, profile_id, playlist_id, playlist_name, weight, enabled, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    `).bind(profile.email, profile.id, item.id, item.name, item.weight, item.enabled ? 1 : 0, now)));
   }
-  return readPlaylistSelections(ownerEmail);
+  return readPlaylistSelections(profile);
 }
 
-async function spotifyApi<T>(ownerEmail: string, path: string): Promise<T> {
-  const token = await getAccessToken(ownerEmail);
+async function spotifyApi<T>(profile: ProfileScope, path: string): Promise<T> {
+  const token = await getAccessToken(profile);
   const response = await fetch(`${API_URL}${path}`, {
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
   });
   if (!response.ok) throw new SpotifyHttpError(response.status, `Spotify API request failed: ${path}`);
-  if (response.status === 204) return null;
+  if (response.status === 204) return null as T;
   return response.json() as Promise<T>;
 }
 
-async function getAccessToken(ownerEmail: string): Promise<string> {
-  const token = await readToken(ownerEmail);
+async function getAccessToken(profile: ProfileScope): Promise<string> {
+  const token = await readToken(profile);
   if (!token) throw new SpotifyHttpError(401, "Spotify is not connected.");
   if (Date.now() < token.expiresAt - 60_000) return token.accessToken;
   if (!token.refreshToken) throw new SpotifyHttpError(401, "Spotify token expired without a refresh token.");
@@ -297,41 +315,56 @@ async function getAccessToken(ownerEmail: string): Promise<string> {
     refresh_token: token.refreshToken,
   }));
   const next = normalizeToken({ ...refreshed, refresh_token: refreshed.refresh_token ?? token.refreshToken });
-  await saveToken(ownerEmail, next);
+  await saveToken(profile, next);
   return next.accessToken;
 }
 
-async function readToken(ownerEmail: string): Promise<SpotifyToken | null> {
+async function readToken(profile: ProfileScope): Promise<SpotifyToken | null> {
   const row = await getD1().prepare(`
     SELECT access_token, refresh_token, expires_at, scopes
     FROM spotify_tokens
-    WHERE owner_email = ?1
-  `).bind(ownerEmail).first<{
+    WHERE profile_id = ?1
+  `).bind(profile.id).first<{
     access_token: string;
     refresh_token: string | null;
     expires_at: number;
     scopes: string;
   }>();
-  return row ? {
-    accessToken: row.access_token,
-    refreshToken: row.refresh_token,
+  if (!row) return null;
+  const token = {
+    accessToken: await openSpotifyToken(row.access_token),
+    refreshToken: row.refresh_token ? await openSpotifyToken(row.refresh_token) : null,
     expiresAt: row.expires_at,
     scopes: row.scopes,
-  } : null;
+  };
+  if (!isSealedSpotifyToken(row.access_token) || (row.refresh_token && !isSealedSpotifyToken(row.refresh_token))) {
+    await saveToken(profile, token);
+  }
+  return token;
 }
 
-async function saveToken(ownerEmail: string, token: SpotifyToken): Promise<void> {
+async function saveToken(profile: ProfileScope, token: SpotifyToken): Promise<void> {
+  let accessToken: string;
+  let refreshToken: string | null;
+  try {
+    accessToken = await sealSpotifyToken(token.accessToken);
+    refreshToken = token.refreshToken ? await sealSpotifyToken(token.refreshToken) : null;
+  } catch (error) {
+    if (error instanceof TokenEncryptionError) throw new SpotifyInputError(error.message);
+    throw error;
+  }
   await getD1().prepare(`
     INSERT INTO spotify_tokens
-      (owner_email, access_token, refresh_token, expires_at, scopes, updated_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-    ON CONFLICT(owner_email) DO UPDATE SET
+      (owner_email, profile_id, access_token, refresh_token, expires_at, scopes, updated_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    ON CONFLICT(profile_id) DO UPDATE SET
+      owner_email = excluded.owner_email,
       access_token = excluded.access_token,
       refresh_token = excluded.refresh_token,
       expires_at = excluded.expires_at,
       scopes = excluded.scopes,
       updated_at = excluded.updated_at
-  `).bind(ownerEmail, token.accessToken, token.refreshToken, token.expiresAt, token.scopes, new Date().toISOString()).run();
+  `).bind(profile.email, profile.id, accessToken, refreshToken, token.expiresAt, token.scopes, new Date().toISOString()).run();
 }
 
 async function tokenRequest(body: URLSearchParams): Promise<SpotifyTokenResponse> {
@@ -353,12 +386,12 @@ function normalizeToken(input: SpotifyTokenResponse): SpotifyToken {
   };
 }
 
-async function readCachedWindow(ownerEmail: string, windowKey: string, now: Date) {
+async function readCachedWindow(profile: ProfileScope, windowKey: string, now: Date) {
   const row = await getD1().prepare(`
     SELECT fetched_at, expires_at, items_json
     FROM spotify_top_artist_windows
-    WHERE owner_email = ?1 AND window_key = ?2
-  `).bind(ownerEmail, windowKey).first<{ fetched_at: string; expires_at: string; items_json: string }>();
+    WHERE profile_id = ?1 AND window_key = ?2
+  `).bind(profile.id, windowKey).first<{ fetched_at: string; expires_at: string; items_json: string }>();
   if (!row || Date.parse(row.expires_at) <= now.getTime()) return null;
   try {
     const items = JSON.parse(row.items_json) as unknown;
@@ -370,10 +403,10 @@ async function readCachedWindow(ownerEmail: string, windowKey: string, now: Date
   }
 }
 
-async function cachedWindowHealth(ownerEmail: string) {
+async function cachedWindowHealth(profile: ProfileScope) {
   const result: Record<string, { status: string; fetchedAt: string | null; expiresAt: string | null }> = {};
   for (const definition of TOP_WINDOWS) {
-    const cached = await readCachedWindow(ownerEmail, definition.key, new Date());
+    const cached = await readCachedWindow(profile, definition.key, new Date());
     result[definition.key] = cached
       ? { status: "cached", fetchedAt: cached.fetchedAt, expiresAt: cached.expiresAt }
       : { status: "unavailable", fetchedAt: null, expiresAt: null };
@@ -424,7 +457,7 @@ function spotifyRedirectUri(origin: string): string {
   return `${origin.replace(/\/$/, "")}/api/spotify/callback`;
 }
 
-function nextPagePath(nextUrl: string | null): string | null {
+function nextPagePath(nextUrl: string | null | undefined): string | null {
   if (!nextUrl) return null;
   const url = new URL(nextUrl);
   return `${url.pathname.replace(/^\/v1(?=\/)/, "")}${url.search}`;
@@ -449,7 +482,10 @@ function base64Url(value: Uint8Array): string {
 
 export class SpotifyInputError extends Error {}
 export class SpotifyHttpError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }

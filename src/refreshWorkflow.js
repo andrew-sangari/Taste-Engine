@@ -90,8 +90,8 @@ export async function validatePreview({
 export async function createValidationManifest({ previewDir, validation }) {
   if (!validation?.ok) throw new Error('Cannot seal an invalid preview.');
   return {
-    manifestVersion: 1,
-    previewDir: resolve(previewDir),
+    manifestVersion: 2,
+    previewDir: '.',
     contentSha256: await hashTree(previewDir),
     validation
   };

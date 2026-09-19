@@ -2,6 +2,7 @@ import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
+import { resolveReleaseMetadata } from "./build/release-metadata.mjs";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
@@ -34,6 +35,7 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
+  const release = resolveReleaseMetadata();
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
@@ -44,6 +46,14 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    define: {
+      __TASTE_ENGINE_RELEASE__: JSON.stringify(release.release),
+      __TASTE_ENGINE_COMMIT_SHA__: JSON.stringify(release.commitSha),
+      __TASTE_ENGINE_BUILT_AT__: JSON.stringify(release.builtAt),
+      __TASTE_ENGINE_APPLICATION_VERSION__: JSON.stringify(release.applicationVersion),
+      __TASTE_ENGINE_SOURCE_STATE__: JSON.stringify(release.sourceState),
+      __TASTE_ENGINE_RELEASABLE__: JSON.stringify(release.releasable),
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

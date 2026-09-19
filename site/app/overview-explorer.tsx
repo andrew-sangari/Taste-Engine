@@ -6,7 +6,7 @@ import { RecommendationScore } from "./signal-texture";
 import { eventHref } from "./event-anchor";
 import { formatLocalDate as formatLaDate } from "./local-date";
 
-type OverviewItem = {
+export type OverviewItem = {
   vertical: 'music' | 'movies' | 'sports';
   id: string;
   title: string;
@@ -26,7 +26,7 @@ type OverviewItem = {
   feedbackSnapshot?: PublicFeedbackSnapshot | null;
 };
 
-type Editorial = {
+export type Editorial = {
   headline: string;
   verdict: string;
   lead: string;

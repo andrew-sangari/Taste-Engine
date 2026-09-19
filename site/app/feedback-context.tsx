@@ -17,6 +17,7 @@ import {
   saveStore,
   serializeBatch,
   setPlanningIntent,
+  storageKeyForProfile,
   unexportedRecords,
   upcomingPlanning,
   type HistoryQueueEntry,
@@ -61,10 +62,12 @@ function storage(): Storage | null {
   catch { return null; }
 }
 
-export function FeedbackProvider({ projectionItems, recentHistory, todayKey, children }: {
+export function FeedbackProvider({ projectionItems, recentHistory, todayKey, profileId, allowLegacyStorageMigration, children }: {
   projectionItems: PlanningInput[];
   recentHistory: RecommendationHistoryItem[];
   todayKey: string;
+  profileId: string | null;
+  allowLegacyStorageMigration: boolean;
   children: ReactNode;
 }) {
   const [ready, setReady] = useState(false);
@@ -72,10 +75,15 @@ export function FeedbackProvider({ projectionItems, recentHistory, todayKey, chi
   const [persistence, setPersistence] = useState<FeedbackContextValue["persistence"]>("loading");
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
   const writeChain = useRef<Promise<void>>(Promise.resolve());
+  const storageKey = storageKeyForProfile(profileId);
 
   useEffect(() => {
     let active = true;
-    const local = reconcileWithProjection(loadStore(storage()), projectionItems, new Date().toISOString());
+    const local = reconcileWithProjection(
+      loadStore(storage(), storageKey, allowLegacyStorageMigration),
+      projectionItems,
+      new Date().toISOString(),
+    );
     void (async () => {
       try {
         const response = await fetch("/api/feedback/state", { cache: "no-store", credentials: "same-origin" });
@@ -88,13 +96,13 @@ export function FeedbackProvider({ projectionItems, recentHistory, todayKey, chi
         if (!body.store || storeVersion(body.store) !== 3) await persistRemoteStore(loaded);
         if (!active) return;
         setStore(loaded);
-        saveStore(storage(), loaded);
+        saveStore(storage(), loaded, storageKey);
         setPersistence("hosted");
         setPersistenceError(null);
       } catch (error) {
         if (!active) return;
         setStore(local);
-        saveStore(storage(), local);
+        saveStore(storage(), local, storageKey);
         setPersistence("device");
         setPersistenceError(error instanceof Error ? error.message : "Durable feedback is unavailable.");
       } finally {
@@ -108,7 +116,7 @@ export function FeedbackProvider({ projectionItems, recentHistory, todayKey, chi
 
   const update = useCallback((next: LocalFeedbackStore) => {
     setStore(next);
-    saveStore(storage(), next);
+    saveStore(storage(), next, storageKey);
     if (persistence === "hosted") {
       writeChain.current = writeChain.current.then(async () => {
         try {
@@ -119,7 +127,7 @@ export function FeedbackProvider({ projectionItems, recentHistory, todayKey, chi
         }
       });
     }
-  }, [persistence]);
+  }, [persistence, storageKey]);
 
   const value = useMemo<FeedbackContextValue>(() => {
     const queue = recentRecommendationQueue(store, recentHistory, todayKey);

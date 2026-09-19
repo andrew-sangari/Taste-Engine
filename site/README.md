@@ -1,8 +1,8 @@
-# vinext-starter
+# Taste Engine Sites application
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+The authenticated production UI and API run on vinext with a required Sites D1
+binding named `DB`. The repository-root pipeline remains the local recovery
+producer.
 
 ## Prerequisites
 
@@ -11,28 +11,32 @@ Drizzle support.
 ## Quick Start
 
 ```bash
-npm install
+npm ci
 npm run dev
 npm run build
+npm run verify
 ```
 
-This starter does not use `wrangler.jsonc`.
+The application uses `.openai/hosting.json`; it does not use a site-level
+`wrangler.jsonc`. The separate scheduler does.
 
 Taste Engine's projection is date-aware at runtime: the browser compares each record's local date with the current Los Angeles date and hides past records without requiring a new deployment. New source data and ranking changes still come from the local Taste Engine refresh.
 
-## Included Shape
+## Runtime shape
 
 - edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
+- `.openai/hosting.json` declares the required Sites D1 binding and no R2 binding
 - `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
+- `db/schema.ts` and `drizzle/` define profile-scoped production persistence
 - `drizzle.config.ts` supports local migration generation when needed
+- `GET /api/health` reports release and readiness metadata without secrets
+- `tests/deployment-smoke.mjs` checks the packaged Worker, bindings, and migrations
 
 ## Workspace Auth Headers
 
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
+Sites provides authenticated email plus optional full name. Taste Engine hashes
+the normalized server-injected email into an opaque profile ID; the browser
+cannot select the tenancy key.
 
 SIWC-authenticated workspace sites may also receive
 `oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
@@ -80,21 +84,28 @@ OAuth cookies, and identity header injection. Do not implement app routes for
 those reserved paths. Routes that do not import and call the helper remain
 anonymous-compatible.
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks. Deployment automation
-must preserve the current access policy and must not toggle share visibility as part
-of a build or publish.
+SIWC establishes identity only; it does not prove workspace membership. Production
+requires the comma-separated server-side `TASTE_ALLOWED_PROFILE_EMAILS` allowlist,
+and the Sites hosting access policy remains the outer restriction. Deployment
+automation must preserve the current access policy and must not toggle share
+visibility as part of a build or publish.
 
 Use SIWC for account pages, user-specific dashboards, saved records, and write
 actions tied to the current ChatGPT user. Leave public content anonymous.
 
-## Useful Commands
+## Useful commands
 
 - `npm run dev`: start local development
 - `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
+- `npm test`: production-build and run server, rendering, profile-isolation, Spotify, scheduler, and persistence tests
+- `npm run typecheck`: validate the application and Worker/D1 boundary
+- `npm run smoke:build`: validate the already-built deployment package
+- `npm run verify`: lint, type-check, test/build, and run the deployment smoke check
 - `npm run db:generate`: generate Drizzle migrations after schema changes
+
+See [deployment and profile operations](../docs/deployment-and-profiles.md) for
+release metadata, clean-checkout verification, migration order, and external
+Spotify/Sites actions.
 
 ## Learn More
 
