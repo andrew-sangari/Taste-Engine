@@ -5,6 +5,7 @@ import {
   DEFAULT_NOUL_THRESHOLDS,
   NOUL_QUESTIONS,
   QUESTION_SET_VERSION,
+  buildQuestionSet,
   certaintyBand,
   nulBand
 } from './questions.js';
@@ -12,7 +13,7 @@ import {
 // The internal decision contract. Every provider adapter maps its own answers
 // into exactly this shape; nothing downstream of `assessCandidates` sees a
 // provider-specific field, probability, or confidence number.
-export const DECISION_SCHEMA_VERSION = 1;
+export const DECISION_SCHEMA_VERSION = 2;
 
 export const CONTEXT_FIT = ['strong', 'possible', 'exploratory', 'poor', 'unknown'];
 export const MUSIC_ATMOSPHERE_FIT = ['strong', 'possible', 'weak', 'unknown'];
@@ -36,6 +37,15 @@ const DIMENSIONS = {
   musicAtmosphereFit: { allowed: MUSIC_ATMOSPHERE_FIT, questionId: 'music_fit' },
   lateNightFit: { allowed: LATE_NIGHT_FIT, questionId: 'late_night_fit' },
   novelty: { allowed: NOVELTY, questionId: 'novelty' }
+};
+
+const EVENT_DIMENSIONS = {
+  experienceCharacter: { allowed: ['dance_floor', 'live_performance', 'seated_listening', 'festival_multi_stage', 'mixed_or_other', 'unknown'], questionId: 'event_experience' },
+  musicCharacter: { allowed: ['electronic_dance', 'band_or_live', 'mixed_lineup', 'named_style', 'unknown'], questionId: 'music_character' },
+  participationFormat: { allowed: ['standing_or_floor', 'seated', 'mixed', 'not_published', 'unknown'], questionId: 'participation_format' },
+  scheduleCharacter: { allowed: ['published_late_window', 'published_early_window', 'published_event_window', 'unknown'], questionId: 'schedule_character' },
+  entryPolicy: { allowed: ['age_restricted', 'all_ages', 'policy_other', 'unknown'], questionId: 'entry_policy' },
+  venueCharacter: { allowed: ['club_or_dance_room', 'concert_hall', 'outdoor_or_festival', 'other_published', 'unknown'], questionId: 'venue_character' }
 };
 
 /**
@@ -65,6 +75,9 @@ export function assessmentFromAnswers(answers, {
     throw new DecisionSchemaError('Provider answers must be an object keyed by question id.');
   }
 
+  const evidenceMode = Object.keys(input?.fields?.publishedFacts ?? {}).length > 0;
+  const questionSet = buildQuestionSet({ input });
+  const dimensions = evidenceMode ? EVENT_DIMENSIONS : DIMENSIONS;
   const assessment = {
     candidateRef,
     schemaVersion: DECISION_SCHEMA_VERSION,
@@ -74,14 +87,19 @@ export function assessmentFromAnswers(answers, {
   const signals = {};
   let answeredCount = 0;
 
-  for (const [field, { allowed, questionId }] of Object.entries(DIMENSIONS)) {
+  for (const [field, { allowed, questionId }] of Object.entries(dimensions)) {
+    if (evidenceMode && !questionSet[questionId]) {
+      assessment[field] = 'unknown';
+      certainty[field] = 'low';
+      continue;
+    }
     const answer = answers[questionId];
     if (answer == null) {
       assessment[field] = 'unknown';
       certainty[field] = 'low';
       continue;
     }
-    const choice = validateChoiceAnswer(answer, questionId);
+    const choice = validateChoiceAnswer(answer, questionId, questionSet);
     const band = certaintyBand(choice.confidence, certaintyThresholds);
     // A value the model is not reasonably sure of is recorded as unknown, not
     // as a weak rating. "We could not tell" and "this is a poor fit" are
@@ -97,7 +115,7 @@ export function assessmentFromAnswers(answers, {
   }
 
   const frictionFlags = [];
-  for (const [questionId, definition] of Object.entries(NOUL_QUESTIONS)) {
+  for (const [questionId, definition] of Object.entries(evidenceMode ? {} : NOUL_QUESTIONS)) {
     const answer = answers[questionId];
     if (answer == null) continue;
     const noul = validateNoulAnswer(answer, questionId);
@@ -112,6 +130,7 @@ export function assessmentFromAnswers(answers, {
   if (input?.fields) {
     if (input.fields.startPeriod === 'unknown') frictionFlags.push('schedule-unconfirmed');
     if (input.fields.advertisedPriceUsd == null) frictionFlags.push('cost-unknown');
+    if (evidenceMode && !input.fields.publishedFacts?.endTime) frictionFlags.push('schedule-unconfirmed');
     frictionFlags.push('ticket-unknown');
   }
 
@@ -139,6 +158,8 @@ export function assessmentFromAnswers(answers, {
 export function composeReason(assessment, input) {
   const fields = input?.fields ?? {};
   const parts = [];
+
+  if (fields.publishedFacts) return composeEvidenceReason(assessment, fields);
 
   const fitClause = {
     strong: 'Matches the night you described',
@@ -171,6 +192,60 @@ export function composeReason(assessment, input) {
   return `${sentence(parts)}.`;
 }
 
+function composeEvidenceReason(assessment, fields) {
+  const published = fields.publishedFacts ?? {};
+  const parts = [];
+  const experience = {
+    dance_floor: 'Published details describe a dance-floor experience',
+    live_performance: 'Published details describe a live-performance experience',
+    seated_listening: 'Published details describe a seated listening experience',
+    festival_multi_stage: 'Published details describe a festival or multi-stage program',
+    mixed_or_other: 'Published details describe a mixed or other event format'
+  }[assessment.experienceCharacter];
+  if (experience && (published.format || published.description || published.classification || published.venueInfo)) parts.push(experience);
+
+  const music = {
+    electronic_dance: 'published music details point to electronic dance music',
+    band_or_live: 'published music details point to a band or live program',
+    mixed_lineup: 'published music details describe a mixed lineup',
+    named_style: 'published music details name a specific style'
+  }[assessment.musicCharacter];
+  if (music && (published.classification || published.description || published.namedLineup)) parts.push(music);
+
+  const participation = {
+    standing_or_floor: 'the published format is standing or floor-oriented',
+    seated: 'the published format is seated',
+    mixed: 'the published format includes seated and floor participation',
+    not_published: 'the event does not publish a participation format'
+  }[assessment.participationFormat];
+  if (participation && (published.format || published.venueInfo || published.description)) parts.push(participation);
+
+  const schedule = {
+    published_late_window: 'published event times establish a late-running window',
+    published_early_window: 'published event times establish an early-evening window',
+    published_event_window: 'published event times establish a bounded event window'
+  }[assessment.scheduleCharacter];
+  if (schedule && published.endTime) parts.push(schedule);
+
+  const entry = {
+    age_restricted: 'the published entry policy is age-restricted',
+    all_ages: 'the published entry policy is all-ages',
+    policy_other: 'the event publishes an entry policy'
+  }[assessment.entryPolicy];
+  if (entry && published.agePolicy) parts.push(entry);
+
+  const venue = {
+    club_or_dance_room: 'published venue metadata describes a club or dance room',
+    concert_hall: 'published venue metadata describes a concert hall',
+    outdoor_or_festival: 'published venue metadata describes an outdoor or festival setting',
+    other_published: 'published venue metadata establishes another room character'
+  }[assessment.venueCharacter];
+  if (venue && published.venueInfo) parts.push(venue);
+
+  if (!parts.length) return 'Published event details were insufficient for a typed characterization.';
+  return `${parts[0]}${parts.length > 1 ? `; ${parts.slice(1).join(', ')}` : ''}.`;
+}
+
 /**
  * Validate a full provider response for one candidate before it is mapped.
  * Extra question ids are rejected: an adapter may not smuggle its own
@@ -187,11 +262,13 @@ export function validateAnswerEnvelope(answers, { expectedQuestionIds } = {}) {
   return answers;
 }
 
-function validateChoiceAnswer(answer, questionId) {
+function validateChoiceAnswer(answer, questionId, questionSet = null) {
   if (answer.type && answer.type !== 'choice') {
     throw new DecisionSchemaError(`Question ${questionId} expected a choice answer.`);
   }
-  const allowed = Object.keys(CHOICE_QUESTIONS[questionId].criteria);
+  const definition = questionSet?.[questionId] ?? CHOICE_QUESTIONS[questionId];
+  if (!definition) throw new DecisionSchemaError(`Unknown choice question ${questionId}.`);
+  const allowed = Object.keys(definition.criteria);
   if (typeof answer.choice !== 'string' || !allowed.includes(answer.choice)) {
     throw new DecisionSchemaError(`Question ${questionId} returned an option outside its criteria.`);
   }

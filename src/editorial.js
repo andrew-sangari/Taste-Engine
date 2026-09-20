@@ -146,7 +146,7 @@ export function buildEditorialCandidates({ events = [], sports = [], movies = []
 }
 
 export function serializeEditorialInput(input) {
-  const allowedProvenance = new Set(['ticketmaster', 'framework', 'insomniac', 'mlb', 'tmdb']);
+  const allowedProvenance = new Set(['ticketmaster', 'framework', 'mlb', 'tmdb']);
   return {
     schemaVersion: input.schemaVersion,
     horizonDays: input.horizonDays,

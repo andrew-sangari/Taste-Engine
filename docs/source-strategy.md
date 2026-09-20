@@ -70,9 +70,18 @@ The parser should target the table structure, not use broad regular expressions.
 
 Use for mainstream concerts, larger venues, stable event/venue identifiers, status, images, and official purchase links. It is a complement to 19hz rather than the primary electronic source.
 
-### 6. Insomniac Los Angeles — followed promoter calendar
+### 6. Insomniac Los Angeles — followed promoter calendar (currently unavailable)
 
-The public Los Angeles events page is a useful electronic-music and festival precision source. Import it at low frequency, preserve the Insomniac event URL and retrieval time, and normalize it into the same concert contract before matching and deduplication. Prefer JSON-LD or explicit structured event attributes when available; do not bypass Cloudflare or other access controls. If the page returns a challenge or an unrecognized shape, mark Insomniac unavailable and render the rest of the projection normally.
+The current Insomniac event extraction is not producing a verified candidate
+stream. Treat the adapter as `unavailable`, `blocked`, or `parser-failed` in
+source health according to the observed failure; do not count its records as
+event-discovery or rich-description coverage and do not send them to a model.
+Repair is a separate gated task: capture a permitted real-page or documented
+feed fixture, preserve challenge and unrecognized-shape failures, validate
+identity/clock/venue matching and one end-to-end candidate, and only then
+re-enable it. Prefer JSON-LD or explicit structured event attributes when
+available; never bypass Cloudflare or other access controls, and never guess a
+lineup, genre, venue, or end time while the extractor is down.
 
 ### 7. Direct venue/promoter pages — precision patches
 
@@ -132,6 +141,42 @@ field-level confidence
 
 Normalization and deduplication happen after ingestion. A source adapter should never decide whether an event fits the user's taste.
 
+### Evidence rights and enrichment coverage
+
+Before source content reaches the card-enrichment layer, retain an
+`EvidenceFact` with provider, source event ID, canonical URL, retrieval time,
+assertion kind, confidence, and separate permissions for internal use,
+display, model input, and persistence. A field may be safe to display while
+remaining disallowed as model input. Keep Ticketmaster and Framework
+description/classification/doors/end fields only when the actual response
+contains them and the applicable terms permit the intended use; keep regular
+venue hours separate from an event's scheduled end. SeatGeek remains a
+deterministic connector and supplies no model payload, including when merged
+with an independently permitted Ticketmaster or Framework occurrence. An
+Insomniac record is not model-eligible while its extractor is unavailable.
+
+Grouped source health should distinguish `configured`, `functioning`,
+`partial`, `blocked`, `not configured`, and `unavailable`. Report event count,
+coverage of title/genre/blurb/doors/end/venue policy, and the count of
+candidates with model-eligible evidence. “The adapter exists” and “the model
+can characterize this event” are separate claims.
+
+### Grounded baseline audit (2026-09-19)
+
+The accepted bundled LA projection contains 82 music candidates. Before this
+enrichment work, 57 have an independently permitted Ticketmaster or Framework
+occurrence and 25 are restricted or too thin for model use. Twenty-eight have
+display lineup metadata, while none expose normalized genre, description, or
+published end-time evidence. The provider split is 37 Ticketmaster-backed, 20
+Framework-backed, and 25 without a permitted occurrence. Insomniac reports
+unavailable with zero candidates. These are aggregate coverage counts only;
+no private taste history or event list is part of the audit.
+
+This baseline is why the first source pass enriches existing Ticketmaster and
+Framework normalization instead of adding another broad feed. A direct-venue
+adapter remains deferred until the post-enrichment audit identifies a
+recurring high-value gap and its reuse/model-processing rights are verified.
+
 ## Artist matching
 
 Event feeds rarely carry Spotify artist IDs, so matching needs its own auditable layer:
@@ -152,3 +197,23 @@ Never fuzzy-match a short artist name automatically. A wrong identity match crea
 4. `events:match` links lineup names to Spotify seeds and emits a review queue.
 5. `brief:generate --weekend` produces Markdown with matched artist evidence, genre adjacency, hassle placeholders, confidence, and negative filtering.
 6. The reviewed Brief 001 becomes the golden test for future scoring changes.
+
+## Revision follow-up source gates
+
+The source-grounded enrichment follow-up proceeds in this order:
+
+1. Inventory actual Ticketmaster and Framework response fields and terms before
+   retaining descriptions, classifications, performer roles, doors, end times,
+   or venue policy.
+2. Preserve those fields as per-fact evidence before projection flattening;
+   derive model/display serializers from the permissions on each fact.
+3. Keep SeatGeek-only occurrences deterministic and unnamed to the model. A
+   merged occurrence can use only the independently permitted provider's
+   normalized fields.
+4. Keep Insomniac unavailable until a permitted fixture, observable failure
+   states, and a real candidate test prove the parser works.
+5. Measure useful enrichment and rights-safe coverage against the synthetic
+   24-case gate in
+   `test/fixtures/nightlife/enrichment-gold.json` before considering any new
+   venue, JamBase, Bandsintown, Places, or other adapter. No source is added
+   merely to make an inference call return a more confident answer.

@@ -1,4 +1,6 @@
 import { classifyEventType } from './eventEnhancement.js';
+import { buildEventEvidence, serializeEventEvidenceForDisplay } from './eventEvidence.js';
+import { buildSemanticEventInsight } from './nightlife/cardInsight.js';
 import { nightlifeEvidenceFor } from './nightlife/semanticInput.js';
 import { resolveMusicVisual, resolveSportsVisual } from './visuals.js';
 
@@ -31,6 +33,10 @@ export function toDisplayEvent(candidate, localEnhancement = null) {
     // that needs to know what a candidate may contribute reads this instead of
     // guessing from the canonical fields.
     nightlifeEvidence: nightlifeEvidenceFor(candidate),
+    eventEvidence: serializeEventEvidenceForDisplay(buildEventEvidence(candidate)),
+    // This object is optional and advisory only. It is intentionally copied
+    // through as typed facts/claims; it never changes ranking or eligibility.
+    semanticInsight: candidate.semanticInsight ?? buildSemanticEventInsight(candidate, candidate.semanticAssessment ?? null),
     localEnhancement
   };
 }

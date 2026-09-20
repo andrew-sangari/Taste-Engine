@@ -26,7 +26,9 @@
     "taste:feedback:simulate": "node src/cli/taste-feedback.js simulate",
     "taste:feedback:import": "node src/cli/taste-feedback.js import",
     "evaluation:fixtures": "node scripts/evaluate-fixtures.js",
+    "evaluation:nightlife": "node scripts/evaluate-nightlife-enrichment.js",
     "nightlife:probe": "node src/cli/nightlife-probe.js",
+    "nightlife:cards": "node src/cli/nightlife-cards.js",
     "nightlife:shadow": "node src/cli/nightlife-shadow.js",
     "projection:diff": "node scripts/projection-diff.js",
     "taste:explain": "node scripts/taste-explain.js",
@@ -35,5 +37,8 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "ai": "^7.0.107"
   }
 }

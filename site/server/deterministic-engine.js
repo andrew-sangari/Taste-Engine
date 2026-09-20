@@ -318,13 +318,21 @@ function mergeInto(target, incoming) {
   if (target.ticketObservation.lowestPriceUsd == null) target.ticketObservation.lowestPriceUsd = incoming.ticketObservation.lowestPriceUsd;
 }
 function sourceOccurrencesFor(candidate) {
-  const existing = Array.isArray(candidate.sourceOccurrences) && candidate.sourceOccurrences.length ? candidate.sourceOccurrences : [{ source: candidate.source, sourceEventId: candidate.sourceEventId, sourceUrl: candidate.sourceUrl }];
+  const existing = Array.isArray(candidate.sourceOccurrences) && candidate.sourceOccurrences.length ? candidate.sourceOccurrences : [{
+    source: candidate.source,
+    sourceEventId: candidate.sourceEventId,
+    sourceUrl: candidate.sourceUrl,
+    retrievedAt: candidate.retrievedAt,
+    evidence: candidate.eventEvidence
+  }];
   return existing.map((occurrence) => ({
     ...occurrence,
     title: occurrence.title ?? candidate.title,
     startLocal: occurrence.startLocal ?? candidate.startLocal,
     venue: occurrence.venue ?? candidate.venue,
-    performerNames: occurrence.performerNames ?? (candidate.performers ?? []).map((performer) => performer.name)
+    performerNames: occurrence.performerNames ?? (candidate.performers ?? []).map((performer) => performer.name),
+    retrievedAt: occurrence.retrievedAt ?? candidate.retrievedAt,
+    evidence: occurrence.evidence ?? occurrence.eventEvidence ?? (!occurrence.source || occurrence.source === candidate.source ? candidate.eventEvidence : null)
   }));
 }
 function localDate(value) {
@@ -1513,6 +1521,279 @@ async function seatGeekJson(url, fetchImpl, context, maxRetries = 3) {
   throw new Error(`SeatGeek ${context} failed after retries.`);
 }
 
+// ../src/eventEvidence.js
+var EVENT_EVIDENCE_SCHEMA_VERSION = 1;
+var EVIDENCE_FIELDS = [
+  "title",
+  "description",
+  "classification",
+  "namedLineup",
+  "format",
+  "doorTime",
+  "startTime",
+  "endTime",
+  "venueInfo",
+  "agePolicy"
+];
+var EVIDENCE_ASSERTION_KINDS = ["published-fact", "descriptive-copy", "derived-estimate"];
+var EVIDENCE_CONFIDENCE = ["verified", "partial", "unknown"];
+var PERMITTED_EVIDENCE_PROVIDERS = ["ticketmaster", "framework"];
+var DEFAULT_PERMISSION = Object.freeze({
+  internalUse: true,
+  display: false,
+  modelInput: false,
+  persist: true
+});
+var STRUCTURED_MODEL_FIELDS = /* @__PURE__ */ new Set([
+  "title",
+  "classification",
+  "namedLineup",
+  "format",
+  "doorTime",
+  "startTime",
+  "endTime",
+  "venueInfo",
+  "agePolicy"
+]);
+function createEvidenceFact({
+  value,
+  field,
+  provider,
+  sourceEventId = null,
+  sourceUrl = null,
+  retrievedAt = null,
+  assertionKind = "published-fact",
+  permission = {},
+  confidence = "verified"
+} = {}) {
+  if (!EVIDENCE_FIELDS.includes(field)) throw new Error(`Unknown evidence field: ${field}`);
+  if (!PERMITTED_EVIDENCE_PROVIDERS.includes(provider)) return null;
+  if (value == null || value === "" || Array.isArray(value) && value.length === 0) return null;
+  if (!EVIDENCE_ASSERTION_KINDS.includes(assertionKind)) throw new Error(`Unknown evidence assertion kind: ${assertionKind}`);
+  if (!EVIDENCE_CONFIDENCE.includes(confidence)) throw new Error(`Unknown evidence confidence: ${confidence}`);
+  const normalized = normalizeFactValue(value, field);
+  if (normalized == null || normalized === "" || Array.isArray(normalized) && normalized.length === 0 || typeof normalized === "object" && !Array.isArray(normalized) && Object.keys(normalized).length === 0) return null;
+  const rights = {
+    ...DEFAULT_PERMISSION,
+    ...permission
+  };
+  return {
+    value: normalized,
+    field,
+    provider,
+    ...sourceEventId ? { sourceEventId: String(sourceEventId) } : {},
+    ...sourceUrl ? { sourceUrl: String(sourceUrl) } : {},
+    ...retrievedAt ? { retrievedAt: new Date(retrievedAt).toISOString() } : {},
+    assertionKind,
+    permission: {
+      internalUse: Boolean(rights.internalUse),
+      display: Boolean(rights.display),
+      modelInput: Boolean(rights.modelInput),
+      persist: Boolean(rights.persist)
+    },
+    confidence
+  };
+}
+function createEventEvidence({
+  eventRef,
+  provider,
+  sourceEventId = null,
+  sourceUrl = null,
+  retrievedAt = null,
+  facts = {},
+  withheldOrMissing = []
+} = {}) {
+  const permittedFacts = {};
+  for (const field of EVIDENCE_FIELDS) {
+    const fact = facts[field];
+    if (!fact) continue;
+    const normalized = fact.field ? fact : createEvidenceFact({
+      value: fact,
+      field,
+      provider,
+      sourceEventId,
+      sourceUrl,
+      retrievedAt,
+      permission: defaultPermissionFor(provider, field)
+    });
+    if (normalized) permittedFacts[field] = normalized;
+  }
+  const missing = new Set(withheldOrMissing.filter(Boolean));
+  for (const field of EVIDENCE_FIELDS) {
+    if (!permittedFacts[field]) missing.add(field);
+  }
+  return {
+    schemaVersion: EVENT_EVIDENCE_SCHEMA_VERSION,
+    ...eventRef ? { eventRef: String(eventRef) } : {},
+    ...provider ? { provider } : {},
+    ...sourceEventId ? { sourceEventId: String(sourceEventId) } : {},
+    ...sourceUrl ? { sourceUrl: String(sourceUrl) } : {},
+    ...retrievedAt ? { retrievedAt: new Date(retrievedAt).toISOString() } : {},
+    permittedFacts,
+    withheldOrMissing: [...missing]
+  };
+}
+function evidenceForOccurrence(occurrence) {
+  return occurrence?.evidence ?? occurrence?.eventEvidence ?? null;
+}
+function buildEventEvidence(candidate) {
+  const evidenceItems = [];
+  if (candidate?.eventEvidence) evidenceItems.push(candidate.eventEvidence);
+  for (const occurrence of candidate?.sourceOccurrences ?? []) {
+    const evidence = evidenceForOccurrence(occurrence);
+    if (evidence) evidenceItems.push(evidence);
+  }
+  const facts = {};
+  const conflicts = {};
+  for (const evidence of evidenceItems) {
+    for (const [field, fact] of Object.entries(evidence.permittedFacts ?? {})) {
+      if (!fact || !fact.permission?.internalUse) continue;
+      const current = facts[field];
+      if (!current || factPreference(fact) > factPreference(current)) {
+        if (current && !sameFactValue(current, fact)) conflicts[field] = [...conflicts[field] ?? [], current];
+        facts[field] = fact;
+      } else if (!sameFactValue(current, fact)) {
+        conflicts[field] = [...conflicts[field] ?? [], fact];
+      }
+    }
+  }
+  const missing = /* @__PURE__ */ new Set();
+  for (const evidence of evidenceItems) {
+    for (const field of evidence.withheldOrMissing ?? []) missing.add(field);
+  }
+  for (const field of EVIDENCE_FIELDS) {
+    if (!facts[field]) missing.add(field);
+  }
+  return {
+    schemaVersion: EVENT_EVIDENCE_SCHEMA_VERSION,
+    eventRef: candidate?.id ?? null,
+    permittedFacts: facts,
+    conflicts,
+    withheldOrMissing: [...missing]
+  };
+}
+function serializeEventEvidenceForModel(evidence) {
+  const publishedFacts = {};
+  const evidenceRefs = {};
+  const knownUnknowns = new Set(evidence?.withheldOrMissing ?? []);
+  for (const [field, fact] of Object.entries(evidence?.permittedFacts ?? {})) {
+    if (!fact.permission?.modelInput) {
+      knownUnknowns.add(field);
+      continue;
+    }
+    publishedFacts[field] = fact.value;
+    evidenceRefs[field] = opaqueEvidenceRef(evidence, field);
+  }
+  return {
+    publishedFacts,
+    evidenceRefs,
+    knownUnknowns: [...knownUnknowns]
+  };
+}
+function serializeEventEvidenceForDisplay(evidence) {
+  const facts = {};
+  for (const [field, fact] of Object.entries(evidence?.permittedFacts ?? {})) {
+    if (!fact.permission?.display) continue;
+    facts[field] = {
+      value: fact.value,
+      provider: fact.provider,
+      ...fact.sourceUrl ? { sourceUrl: fact.sourceUrl } : {},
+      ...fact.retrievedAt ? { retrievedAt: fact.retrievedAt } : {},
+      assertionKind: fact.assertionKind,
+      confidence: fact.confidence
+    };
+  }
+  return {
+    schemaVersion: EVENT_EVIDENCE_SCHEMA_VERSION,
+    facts,
+    withheldOrMissing: [...new Set(evidence?.withheldOrMissing ?? [])]
+  };
+}
+var PLACEHOLDER_CLASSIFICATIONS = /* @__PURE__ */ new Set([
+  "undefined",
+  "unknown",
+  "uncategorized",
+  "uncategorised",
+  "other",
+  "general",
+  "miscellaneous",
+  "misc",
+  "events",
+  "event",
+  "n/a",
+  "none"
+]);
+function meaningfulClassifications(values = [], { provider = null } = {}) {
+  const promoter = String(provider ?? "").trim().toLowerCase();
+  const output = [];
+  for (const value of values) {
+    const text3 = String(value ?? "").trim();
+    if (!text3) continue;
+    const normalized = text3.toLowerCase();
+    if (PLACEHOLDER_CLASSIFICATIONS.has(normalized)) continue;
+    if (promoter && normalized === promoter) continue;
+    if (!output.some((existing) => existing.toLowerCase() === normalized)) output.push(text3);
+  }
+  return output;
+}
+function defaultPermissionFor(provider, field) {
+  return {
+    internalUse: true,
+    display: true,
+    modelInput: provider !== "insomniac" && (STRUCTURED_MODEL_FIELDS.has(field) && field !== "title" ? true : field === "title"),
+    persist: true
+  };
+}
+function summarizeEvidenceCoverage(items = []) {
+  const counts = Object.fromEntries(EVIDENCE_FIELDS.map((field) => [field, 0]));
+  let modelEligibleCount = 0;
+  let evidenceCount = 0;
+  for (const item of items) {
+    const evidence = item?.eventEvidence ?? buildEventEvidence(item);
+    const facts = evidence?.permittedFacts ?? {};
+    if (Object.keys(facts).length) evidenceCount += 1;
+    if (Object.values(facts).some((fact) => fact?.permission?.modelInput)) modelEligibleCount += 1;
+    for (const field of EVIDENCE_FIELDS) {
+      if (facts[field]) counts[field] += 1;
+    }
+  }
+  const fieldCoverage = Object.fromEntries(EVIDENCE_FIELDS.map((field) => [field, {
+    count: counts[field],
+    rate: items.length ? Number((counts[field] / items.length).toFixed(3)) : 0
+  }]));
+  for (const [alias, field] of Object.entries({ genre: "classification", blurb: "description", doors: "doorTime", end: "endTime", venuePolicy: "agePolicy" })) {
+    fieldCoverage[alias] = fieldCoverage[field];
+  }
+  return {
+    evidenceCount,
+    modelEligibleCount,
+    fieldCoverage
+  };
+}
+function normalizeFactValue(value, field) {
+  if (Array.isArray(value)) {
+    const values = value.flatMap((item) => Array.isArray(item) ? item : [item]).map((item) => normalizeFactValue(item, "text")).filter(Boolean);
+    return [...new Set(values)];
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => item != null && item !== "").map(([key, item]) => [key, typeof item === "string" ? cleanText(item, 500) : item]));
+  }
+  if (typeof value === "string") return cleanText(value, field === "description" ? 280 : 300);
+  return value;
+}
+function cleanText(value, maxLength) {
+  return String(value ?? "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+function factPreference(fact) {
+  return (fact.confidence === "verified" ? 3 : fact.confidence === "partial" ? 2 : 1) + (fact.permission?.modelInput ? 1 : 0) + (fact.permission?.display ? 0.25 : 0);
+}
+function sameFactValue(left, right) {
+  return JSON.stringify(left?.value) === JSON.stringify(right?.value);
+}
+function opaqueEvidenceRef(evidence, field) {
+  return `event/${field}`;
+}
+
 // ../src/ticketmaster.js
 var API_URL = "https://app.ticketmaster.com/discovery/v2/events.json";
 async function fetchTicketmasterEvents({
@@ -1605,32 +1886,172 @@ function normalizeTicketmasterEvent(event, retrievedAt = /* @__PURE__ */ new Dat
   const attractions = event._embedded?.attractions ?? [];
   const localDate4 = event.dates?.start?.localDate ?? null;
   const localTime = event.dates?.start?.localTime ?? null;
+  const retrieved = new Date(retrievedAt).toISOString();
+  const sourceEventId = String(event.id);
+  const sourceUrl = String(event.url ?? "");
+  const title = cleanText2(event.name);
+  const startLocal = localDate4 ? `${localDate4}T${localTime || "00:00:00"}` : null;
+  const startUtc = event.dates?.start?.dateTime ?? null;
+  const doorsUtc = event.dates?.start?.doorsDateTime ?? null;
+  const endUtc = event.dates?.end?.dateTime ?? null;
+  const doorsLocal = event.dates?.start?.doorsLocalDate && event.dates?.start?.doorsLocalTime ? `${event.dates.start.doorsLocalDate}T${event.dates.start.doorsLocalTime}` : null;
+  const endLocal = event.dates?.end?.localDate ? `${event.dates.end.localDate}T${event.dates.end.localTime || "00:00:00"}` : null;
+  const classifications = ticketmasterClassifications(event);
+  const namedLineup = attractions.map((attraction) => cleanText2(attraction.name)).filter(Boolean);
+  const description = [event.info, event.pleaseNote].map(cleanText2).filter(Boolean).join(" ");
+  const venueInfo = {
+    name: cleanText2(venue.name),
+    city: cleanText2(venue.city?.name),
+    state: cleanText2(venue.state?.stateCode ?? venue.state?.name),
+    accessibility: cleanText2(venue.accessibility?.info ?? venue.accessibility?.ticketLimit)
+  };
+  const eventEvidence = createEventEvidence({
+    eventRef: `ticketmaster:${sourceEventId}`,
+    provider: "ticketmaster",
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    facts: {
+      title: createEvidenceFact({
+        value: title,
+        field: "title",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      description: createEvidenceFact({
+        value: description,
+        field: "description",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        assertionKind: "descriptive-copy",
+        permission: { internalUse: true, display: true, modelInput: false, persist: true }
+      }),
+      classification: createEvidenceFact({
+        value: classifications,
+        field: "classification",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      namedLineup: createEvidenceFact({
+        value: namedLineup,
+        field: "namedLineup",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      format: createEvidenceFact({
+        value: event.eventType ?? event.format ?? null,
+        field: "format",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      doorTime: createEvidenceFact({
+        value: doorsLocal ?? doorsUtc,
+        field: "doorTime",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      startTime: createEvidenceFact({
+        value: { local: startLocal, utc: startUtc },
+        field: "startTime",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      endTime: createEvidenceFact({
+        value: endLocal ?? endUtc,
+        field: "endTime",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      venueInfo: createEvidenceFact({
+        value: venueInfo,
+        field: "venueInfo",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      agePolicy: createEvidenceFact({
+        value: event.ageRestrictions?.legalAge ?? event.ageRestrictions?.description ?? null,
+        field: "agePolicy",
+        provider: "ticketmaster",
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      })
+    }
+  });
+  const sourceOccurrence = {
+    source: "ticketmaster",
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    title,
+    startLocal,
+    venue: {
+      sourceId: venue.id ? String(venue.id) : null,
+      name: cleanText2(venue.name),
+      city: cleanText2(venue.city?.name),
+      state: cleanText2(venue.state?.stateCode ?? venue.state?.name),
+      lat: numberOrNull4(venue.location?.latitude),
+      lon: numberOrNull4(venue.location?.longitude)
+    },
+    performerNames: namedLineup,
+    evidence: eventEvidence
+  };
   return {
     schemaVersion: 1,
-    id: `ticketmaster:${event.id}`,
+    id: `ticketmaster:${sourceEventId}`,
     source: "ticketmaster",
-    sourceEventId: String(event.id),
-    sourceUrl: String(event.url ?? ""),
-    sourceOccurrences: [{ source: "ticketmaster", sourceEventId: String(event.id), sourceUrl: String(event.url ?? "") }],
-    retrievedAt: new Date(retrievedAt).toISOString(),
-    title: String(event.name ?? "").trim(),
+    sourceEventId,
+    sourceUrl,
+    sourceOccurrences: [sourceOccurrence],
+    eventEvidence,
+    retrievedAt: retrieved,
+    title,
     type: "concert",
-    startLocal: localDate4 ? `${localDate4}T${localTime || "00:00:00"}` : null,
-    startUtc: event.dates?.start?.dateTime ?? null,
+    startLocal,
+    startUtc,
+    doorsLocal,
+    endLocal,
     timeTbd: Boolean(event.dates?.start?.timeTBA || !localTime),
     dateTbd: Boolean(event.dates?.start?.dateTBA || !localDate4),
     status: event.dates?.status?.code ?? "scheduled",
     venue: {
       sourceId: venue.id ? String(venue.id) : null,
-      name: String(venue.name ?? "").trim(),
-      city: String(venue.city?.name ?? "").trim(),
-      state: String(venue.state?.stateCode ?? venue.state?.name ?? "").trim(),
+      name: cleanText2(venue.name),
+      city: cleanText2(venue.city?.name),
+      state: cleanText2(venue.state?.stateCode ?? venue.state?.name),
       lat: numberOrNull4(venue.location?.latitude),
       lon: numberOrNull4(venue.location?.longitude)
     },
     performers: attractions.map((attraction, index) => ({
       sourceId: attraction.id ? String(attraction.id) : null,
-      name: String(attraction.name ?? "").trim(),
+      name: cleanText2(attraction.name),
       primary: index === 0,
       spotifyId: null
     })).filter((performer) => performer.name),
@@ -1641,6 +2062,19 @@ function normalizeTicketmasterEvent(event, retrievedAt = /* @__PURE__ */ new Dat
       observedAt: new Date(retrievedAt).toISOString()
     }
   };
+}
+function ticketmasterClassifications(event) {
+  const values = [];
+  for (const classification of event.classifications ?? []) {
+    for (const key of ["segment", "genre", "subGenre", "type", "subType"]) {
+      const value = cleanText2(classification?.[key]?.name);
+      if (value) values.push(value);
+    }
+  }
+  return meaningfulClassifications(values, { provider: "ticketmaster" });
+}
+function cleanText2(value) {
+  return String(value ?? "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/\s+/g, " ").trim().slice(0, 1200);
 }
 async function requestJson4(url, fetchImpl) {
   const response = await fetchImpl(url);
@@ -1707,19 +2141,85 @@ function parseFrameworkArtists(html) {
 function normalizeFrameworkEvent(event, retrievedAt = /* @__PURE__ */ new Date()) {
   const title = decodeText(event.title);
   const venue = event.venue ?? {};
+  const retrieved = new Date(retrievedAt).toISOString();
+  const sourceEventId = String(event.id);
+  const sourceUrl = String(event.url ?? event.website ?? "");
+  const allDay = isAllDay(event);
+  const startLocal = normalizeLocalDate(event.start_date ?? event.startDate ?? event.start);
+  const rawEndLocal = normalizeLocalDate(event.end_date ?? event.endDate ?? event.end);
+  const endLocal = allDay || isEndOfDaySentinel(rawEndLocal, startLocal) ? null : rawEndLocal;
+  const doorsLocal = allDay ? null : normalizeLocalDate(event.doors_date ?? event.doorsDate ?? event.doors);
+  const publishedStartLocal = allDay ? null : startLocal;
+  const description = decodeText(event.description ?? event.excerpt ?? event.summary ?? event.content);
+  const classifications = frameworkClassifications(event);
+  const performers = frameworkPerformersFromEvent(event, title);
+  const hasExplicitLineup = hasExplicitFrameworkPerformers(event);
+  const venueInfo = {
+    name: decodeText(venue.venue),
+    city: decodeText(venue.city),
+    state: decodeText(venue.stateprovince ?? ""),
+    address: decodeText(venue.address ?? venue.address_line_1 ?? venue.street)
+  };
+  const eventEvidence = createEventEvidence({
+    eventRef: `framework:${sourceEventId}`,
+    provider: "framework",
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    facts: {
+      title: frameworkFact(title, "title", { sourceEventId, sourceUrl, retrieved }),
+      description: frameworkFact(description, "description", {
+        sourceEventId,
+        sourceUrl,
+        retrieved,
+        assertionKind: "descriptive-copy",
+        permission: { internalUse: true, display: true, modelInput: false, persist: true }
+      }),
+      classification: frameworkFact(classifications, "classification", { sourceEventId, sourceUrl, retrieved }),
+      namedLineup: hasExplicitLineup ? frameworkFact(performers.map((performer) => performer.name), "namedLineup", { sourceEventId, sourceUrl, retrieved }) : null,
+      format: frameworkFact(event.format ?? event.event_type ?? null, "format", { sourceEventId, sourceUrl, retrieved }),
+      doorTime: frameworkFact(doorsLocal, "doorTime", { sourceEventId, sourceUrl, retrieved }),
+      startTime: frameworkFact(publishedStartLocal, "startTime", { sourceEventId, sourceUrl, retrieved }),
+      endTime: frameworkFact(endLocal, "endTime", { sourceEventId, sourceUrl, retrieved }),
+      venueInfo: frameworkFact(venueInfo, "venueInfo", { sourceEventId, sourceUrl, retrieved }),
+      agePolicy: frameworkFact(event.age_policy ?? event.ageRestriction ?? event.age_restrictions, "agePolicy", { sourceEventId, sourceUrl, retrieved })
+    }
+  });
+  const sourceOccurrence = {
+    source: "framework",
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    title,
+    startLocal,
+    venue: {
+      sourceId: venue.id ? String(venue.id) : null,
+      name: decodeText(venue.venue),
+      city: decodeText(venue.city),
+      state: decodeText(venue.stateprovince ?? ""),
+      lat: numberOrNull5(venue.geo_lat),
+      lon: numberOrNull5(venue.geo_lng)
+    },
+    performerNames: performers.map((performer) => performer.name),
+    evidence: eventEvidence
+  };
   return {
     schemaVersion: 1,
-    id: `framework:${event.id}`,
+    id: `framework:${sourceEventId}`,
     source: "framework",
-    sourceEventId: String(event.id),
-    sourceUrl: String(event.url ?? event.website ?? ""),
-    sourceOccurrences: [{ source: "framework", sourceEventId: String(event.id), sourceUrl: String(event.url ?? event.website ?? "") }],
-    retrievedAt: new Date(retrievedAt).toISOString(),
+    sourceEventId,
+    sourceUrl,
+    sourceOccurrences: [sourceOccurrence],
+    eventEvidence,
+    retrievedAt: retrieved,
     title,
     type: "concert",
-    startLocal: normalizeLocalDate(event.start_date),
+    startLocal,
     startUtc: event.utc_start_date ? `${String(event.utc_start_date).replace(" ", "T")}Z` : null,
-    timeTbd: false,
+    doorsLocal,
+    endLocal,
+    // An all-day listing has a date but no published clock time.
+    timeTbd: allDay,
     dateTbd: false,
     status: event.status ?? "scheduled",
     venue: {
@@ -1730,7 +2230,7 @@ function normalizeFrameworkEvent(event, retrievedAt = /* @__PURE__ */ new Date()
       lat: numberOrNull5(venue.geo_lat),
       lon: numberOrNull5(venue.geo_lng)
     },
-    performers: frameworkPerformers(title),
+    performers,
     ticketObservation: {
       listingCount: null,
       lowestPriceUsd: firstPrice(event.cost),
@@ -1738,6 +2238,58 @@ function normalizeFrameworkEvent(event, retrievedAt = /* @__PURE__ */ new Date()
       observedAt: new Date(retrievedAt).toISOString()
     }
   };
+}
+function frameworkFact(value, field, { sourceEventId, sourceUrl, retrieved, assertionKind = "published-fact", permission } = {}) {
+  return createEvidenceFact({
+    value,
+    field,
+    provider: "framework",
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    assertionKind,
+    permission: permission ?? { internalUse: true, display: true, modelInput: true, persist: true }
+  });
+}
+function isAllDay(event) {
+  const flag = event.all_day ?? event.allDay;
+  if (flag === true || flag === "true" || flag === 1 || flag === "1") return true;
+  const start = String(event.start_date ?? event.startDate ?? event.start ?? "");
+  const end = String(event.end_date ?? event.endDate ?? event.end ?? "");
+  return /\b00:00(:00)?$/.test(start) && /\b23:59(:\d{2})?$/.test(end);
+}
+function isEndOfDaySentinel(endLocal, startLocal) {
+  if (!endLocal) return true;
+  if (/T23:59(:\d{2})?$/.test(endLocal)) return true;
+  return /T00:00(:00)?$/.test(endLocal) && endLocal.slice(0, 10) === String(startLocal ?? "").slice(0, 10);
+}
+function frameworkClassifications(event) {
+  const values = [];
+  for (const source of [event.tags, event.categories, event.category, event.genre]) {
+    const items = Array.isArray(source) ? source : source == null ? [] : [source];
+    for (const item of items) {
+      const value = typeof item === "object" ? item.name ?? item.title ?? item.slug : item;
+      const normalized = decodeText(value);
+      if (normalized) values.push(normalized);
+    }
+  }
+  return meaningfulClassifications(values, { provider: "framework" });
+}
+function frameworkPerformersFromEvent(event, title) {
+  const raw = event.performers ?? event.artists ?? event.artistNames ?? event.lineup;
+  if (!raw) return frameworkPerformers(title);
+  const values = Array.isArray(raw) ? raw : [raw];
+  const performers = values.map((item, index) => {
+    const name = decodeText(typeof item === "object" ? item.name ?? item.title : item);
+    return { sourceId: typeof item === "object" && item.id ? String(item.id) : null, name, primary: index === 0, spotifyId: null };
+  }).filter((performer) => performer.name);
+  return performers.length ? performers : frameworkPerformers(title);
+}
+function hasExplicitFrameworkPerformers(event) {
+  const raw = event.performers ?? event.artists ?? event.artistNames ?? event.lineup;
+  if (raw == null) return false;
+  if (Array.isArray(raw)) return raw.some((item) => decodeText(typeof item === "object" ? item.name ?? item.title : item));
+  return Boolean(decodeText(raw));
 }
 function frameworkPerformers(title) {
   const cleaned = decodeText(title).replace(/^framework\s+presents\s*/i, "").replace(/\([^)]*(?:show added|open\s+to\s+close)[^)]*\)/gi, "").trim();
@@ -1801,6 +2353,7 @@ function numberOrNull5(value) {
 
 // ../src/insomniac.js
 var EVENTS_URL2 = "https://www.insomniac.com/events/los-angeles-ca/";
+var INSOMNIAC_ADAPTER_VERIFIED = false;
 async function fetchInsomniacEvents({
   startDate,
   endDate,
@@ -1814,7 +2367,7 @@ async function fetchInsomniacEvents({
   const html = await response.text();
   if (isChallengePage(html)) throw new Error("Insomniac event page returned an access challenge.");
   const events = parseInsomniacEvents(html, { pageUrl });
-  if (!events.length && /events found|upcoming events|load more/i.test(html)) {
+  if (!events.length) {
     throw new Error("Insomniac event page shape was not recognized.");
   }
   return events.filter((event) => inDateWindow(event.startDate ?? event.startLocal, startDate, endDate));
@@ -1853,34 +2406,83 @@ function parseInsomniacEvents(html, { pageUrl = EVENTS_URL2 } = {}) {
   return events;
 }
 function normalizeInsomniacEvent(event, retrievedAt = /* @__PURE__ */ new Date()) {
-  const title = cleanText(event.title ?? event.name ?? event.eventName ?? "");
+  const title = cleanText3(event.title ?? event.name ?? event.eventName ?? "");
   const startLocal = normalizeStartLocal(event.startLocal ?? event.startDate ?? event.start_date ?? event.date);
   const sourceUrl = String(event.sourceUrl ?? event.url ?? event.link ?? EVENTS_URL2).trim();
   const sourceEventId = String(event.sourceEventId ?? event.id ?? stableId(`${title}|${startLocal}|${sourceUrl}`));
   const performers = normalizePerformers(event.performers ?? event.performer ?? event.artistNames ?? event.artists, title);
   const venue = event.venue ?? event.location ?? {};
-  const status = cleanText(event.status ?? event.availability ?? "scheduled").toLowerCase() || "scheduled";
+  const status = cleanText3(event.status ?? event.availability ?? "scheduled").toLowerCase() || "scheduled";
   const retrieved = new Date(retrievedAt).toISOString();
+  const endLocal = normalizeStartLocal(event.endLocal ?? event.endDate ?? event.end_date ?? event.endTime);
+  const doorsLocal = normalizeStartLocal(event.doorsLocal ?? event.doorsDate ?? event.doors_date ?? event.doors);
+  const classifications = [event.genre, event.category, event.type, event.format].flatMap((value) => Array.isArray(value) ? value : [value]).map((value) => cleanText3(typeof value === "object" ? value?.name : value)).filter(Boolean);
+  const eventEvidence = createEventEvidence({
+    eventRef: `insomniac:${sourceEventId}`,
+    provider: "insomniac",
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    facts: {
+      title: insomniacFact(title, "title", sourceEventId, sourceUrl, retrieved),
+      description: insomniacFact(event.description ?? event.summary ?? null, "description", sourceEventId, sourceUrl, retrieved, {
+        assertionKind: "descriptive-copy",
+        permission: { internalUse: true, display: true, modelInput: false, persist: true }
+      }),
+      classification: insomniacFact([...new Set(classifications)], "classification", sourceEventId, sourceUrl, retrieved),
+      namedLineup: insomniacFact(performers.map((performer) => performer.name), "namedLineup", sourceEventId, sourceUrl, retrieved),
+      format: insomniacFact(event.format ?? event.eventType ?? null, "format", sourceEventId, sourceUrl, retrieved),
+      doorTime: insomniacFact(doorsLocal, "doorTime", sourceEventId, sourceUrl, retrieved),
+      startTime: insomniacFact(startLocal, "startTime", sourceEventId, sourceUrl, retrieved),
+      endTime: insomniacFact(endLocal, "endTime", sourceEventId, sourceUrl, retrieved),
+      venueInfo: insomniacFact({
+        name: cleanText3(venue.name ?? venue.venue ?? event.venueName),
+        city: cleanText3(venue.city ?? event.city),
+        state: cleanText3(venue.state ?? venue.stateCode ?? event.state)
+      }, "venueInfo", sourceEventId, sourceUrl, retrieved),
+      agePolicy: insomniacFact(event.agePolicy ?? event.ageRestriction ?? event.age_restrictions, "agePolicy", sourceEventId, sourceUrl, retrieved)
+    }
+  });
   return {
     schemaVersion: 1,
     id: `insomniac:${sourceEventId}`,
     source: "insomniac",
     sourceEventId,
     sourceUrl,
-    sourceOccurrences: [{ source: "insomniac", sourceEventId, sourceUrl }],
+    sourceOccurrences: [{
+      source: "insomniac",
+      sourceEventId,
+      sourceUrl,
+      retrievedAt: retrieved,
+      title,
+      startLocal,
+      venue: {
+        sourceId: event.venueId ?? venue.id ? String(event.venueId ?? venue.id) : null,
+        name: cleanText3(venue.name ?? venue.venue ?? event.venueName),
+        city: cleanText3(venue.city ?? event.city),
+        state: cleanText3(venue.state ?? venue.stateCode ?? event.state),
+        lat: numberOrNull6(venue.lat ?? venue.latitude),
+        lon: numberOrNull6(venue.lon ?? venue.longitude)
+      },
+      performerNames: performers.map((performer) => performer.name),
+      evidence: eventEvidence
+    }],
+    eventEvidence,
     retrievedAt: retrieved,
     title,
     type: isFestival(title, event.type) ? "music_festival" : "concert",
     startLocal,
     startUtc: event.startUtc ?? event.startDateTime ?? null,
+    doorsLocal,
+    endLocal,
     timeTbd: !hasTime(startLocal),
     dateTbd: !startLocal,
     status,
     venue: {
       sourceId: event.venueId ?? venue.id ? String(event.venueId ?? venue.id) : null,
-      name: cleanText(venue.name ?? venue.venue ?? event.venueName ?? "Los Angeles"),
-      city: cleanText(venue.city ?? event.city ?? "Los Angeles"),
-      state: cleanText(venue.state ?? venue.stateCode ?? event.state ?? "CA"),
+      name: cleanText3(venue.name ?? venue.venue ?? event.venueName ?? "Los Angeles"),
+      city: cleanText3(venue.city ?? event.city ?? "Los Angeles"),
+      state: cleanText3(venue.state ?? venue.stateCode ?? event.state ?? "CA"),
       lat: numberOrNull6(venue.lat ?? venue.latitude),
       lon: numberOrNull6(venue.lon ?? venue.longitude)
     },
@@ -1892,6 +2494,18 @@ function normalizeInsomniacEvent(event, retrievedAt = /* @__PURE__ */ new Date()
       observedAt: retrieved
     }
   };
+}
+function insomniacFact(value, field, sourceEventId, sourceUrl, retrieved, extra = {}) {
+  return createEvidenceFact({
+    value,
+    field,
+    provider: "insomniac",
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    permission: { internalUse: true, display: true, modelInput: false, persist: true },
+    ...extra
+  });
 }
 function coerceEvent(event, pageUrl) {
   if (!event || typeof event !== "object") return null;
@@ -1941,10 +2555,10 @@ function uniquePerformers(names) {
   }).map((name, index) => ({ sourceId: null, name, primary: index === 0, spotifyId: null }));
 }
 function cleanPerformer(value) {
-  return cleanText(value).replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  return cleanText3(value).replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
 }
 function normalizeStartLocal(value) {
-  const text3 = cleanText(value);
+  const text3 = cleanText3(value);
   if (!text3) return null;
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text3)) return text3.replace(/([+-]\d{2}:?\d{2}|Z)$/, "");
   if (/^\d{4}-\d{2}-\d{2}$/.test(text3)) return `${text3}T00:00:00`;
@@ -1968,7 +2582,7 @@ function isFestival(title, type) {
 function isChallengePage(html) {
   return /Just a moment|challenge-platform|Enable JavaScript and cookies to continue/i.test(String(html ?? ""));
 }
-function cleanText(value) {
+function cleanText3(value) {
   return decodeHtml(String(value ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
 }
 function decodeHtml(value) {
@@ -2275,6 +2889,7 @@ function buildCandidates(events = [], sports = []) {
     reason: event.ranking.whyYou,
     call: event.ranking.call ?? event.call ?? callLabel(event.ranking.utility),
     localEnhancement: event.localEnhancement,
+    semanticInsight: event.semanticInsight ?? null,
     sources: event.sources,
     eventType: event.eventType,
     visual: event.visual ?? resolveMusicVisual(event),
@@ -2646,7 +3261,8 @@ function classifyEventType(event) {
 }
 
 // ../src/nightlife/semanticInput.js
-var PERMITTED_EVIDENCE_PROVIDERS = ["ticketmaster", "framework", "insomniac"];
+var SEMANTIC_INPUT_SCHEMA_VERSION = 2;
+var PERMITTED_EVIDENCE_PROVIDERS2 = ["ticketmaster", "framework"];
 var FIELD_PROVENANCE = {
   ref: "derived",
   eventType: "derived",
@@ -2661,6 +3277,7 @@ var FIELD_PROVENANCE = {
   city: "permitted-provider",
   namedPerformerCount: "permitted-provider",
   advertisedPriceUsd: "permitted-provider",
+  publishedFacts: "permitted-provider",
   travelMinutesEstimate: "derived",
   adjacentEvidence: "derived",
   knownUnknowns: "derived"
@@ -2673,17 +3290,27 @@ function nightlifeEvidenceFor(candidate) {
   const occurrences = candidate.sourceOccurrences ?? [];
   if (!occurrences.length && Array.isArray(candidate.sources)) return evidenceFromPublishedRow(candidate);
   const sources = new Set(occurrences.map((occurrence) => occurrence.source));
-  const permitted = occurrences.find((occurrence) => PERMITTED_EVIDENCE_PROVIDERS.includes(occurrence.source)) ?? null;
-  const venue = permitted?.venue ?? null;
+  const evidence = buildEventEvidence(candidate);
+  const facts = evidence.permittedFacts ?? {};
+  const permittedProviders = [...new Set(Object.values(facts).map((fact) => fact?.provider).filter((provider) => PERMITTED_EVIDENCE_PROVIDERS2.includes(provider)))];
+  for (const occurrence of occurrences) {
+    if (PERMITTED_EVIDENCE_PROVIDERS2.includes(occurrence.source)) permittedProviders.push(occurrence.source);
+  }
+  const uniquePermittedProviders = [...new Set(permittedProviders)];
+  const permitted = occurrences.find((occurrence) => uniquePermittedProviders.includes(occurrence.source)) ?? null;
+  const venueFact = facts.venueInfo?.value;
+  const venue = permitted?.venue ?? (venueFact && typeof venueFact === "object" ? venueFact : null);
+  const title = facts.title?.value ?? permitted?.title ?? null;
+  const namedLineup = Array.isArray(facts.namedLineup?.value) ? facts.namedLineup.value : permitted?.performerNames ?? [];
   const price = candidate.ticketObservation?.lowestPriceUsd;
   return {
-    restricted: !permitted,
-    provider: permitted?.source ?? null,
-    title: permitted?.title ?? null,
+    restricted: !uniquePermittedProviders.length,
+    provider: uniquePermittedProviders[0] ?? permitted?.source ?? null,
+    title,
     venueName: venue?.name ?? null,
     city: venue?.city ?? null,
     venuePoint: Number.isFinite(venue?.lat) && Number.isFinite(venue?.lon) ? { lat: venue.lat, lon: venue.lon } : null,
-    namedPerformerCount: (permitted?.performerNames ?? []).filter(Boolean).length,
+    namedPerformerCount: namedLineup.filter(Boolean).length,
     // Quoted only when no restricted provider contributed to the merged
     // ticket observation at all.
     advertisedPriceUsd: !sources.has("seatgeek") && Number.isFinite(price) ? Math.round(price) : null,
@@ -2692,7 +3319,7 @@ function nightlifeEvidenceFor(candidate) {
 }
 function evidenceFromPublishedRow(candidate) {
   const sources = new Set(candidate.sources ?? []);
-  const permitted = PERMITTED_EVIDENCE_PROVIDERS.find((source) => sources.has(source));
+  const permitted = PERMITTED_EVIDENCE_PROVIDERS2.find((source) => sources.has(source));
   const restricted = sources.has("seatgeek") || !permitted;
   const price = candidate.ticketObservation?.lowestPriceUsd;
   return {
@@ -2714,6 +3341,9 @@ function permittedVenuePoint(candidate) {
 function buildSemanticCandidateInput(candidate, { ref, now = /* @__PURE__ */ new Date(), startArea = null, transport = "drive" } = {}) {
   if (!ref) throw new SourcePolicyError("A candidate input requires an opaque ref.");
   const evidence = candidate.nightlifeEvidence ?? nightlifeEvidenceFor(candidate);
+  const fullEvidence = evidence.eventEvidence ?? buildEventEvidence(candidate);
+  const serializedModelEvidence = serializeEventEvidenceForModel(fullEvidence);
+  const modelPublishedFacts = evidence.publishedFacts ?? serializedModelEvidence.publishedFacts;
   const restricted = evidence.restricted;
   const start = candidate.startLocal ? new Date(candidate.startLocal) : null;
   const hasTime2 = Boolean(start && !Number.isNaN(start.getTime()) && !candidate.timeTbd);
@@ -2724,6 +3354,9 @@ function buildSemanticCandidateInput(candidate, { ref, now = /* @__PURE__ */ new
     dayOfWeek: start ? weekday(start) : "unknown",
     startPeriod: startPeriodFor(start, candidate.timeTbd)
   };
+  if (!restricted && Object.keys(modelPublishedFacts).length) {
+    fields.publishedFacts = modelPublishedFacts;
+  }
   if (!restricted) {
     if (hasTime2) fields.startClock = clock(start);
     fields.providerContext = evidence.provider;
@@ -2738,12 +3371,18 @@ function buildSemanticCandidateInput(candidate, { ref, now = /* @__PURE__ */ new
     if (travel != null) fields.travelMinutesEstimate = travel;
   }
   fields.adjacentEvidence = evidence.adjacentEvidence ?? [];
-  fields.knownUnknowns = knownUnknownsFor({ restricted, hasTime: hasTime2, evidence, fields });
+  fields.knownUnknowns = [.../* @__PURE__ */ new Set([
+    ...knownUnknownsFor({ restricted, hasTime: hasTime2, evidence, fields }),
+    ...serializedModelEvidence.knownUnknowns
+  ])];
   const input = {
     ref,
     restricted,
     fields,
-    evidenceRefs: Object.keys(fields).filter((key) => key !== "ref" && key !== "knownUnknowns").map((key) => `${ref}/${key}`)
+    evidenceRefs: [
+      ...Object.keys(fields).filter((key) => key !== "ref" && key !== "knownUnknowns").filter((key) => key !== "publishedFacts").map((key) => `${ref}/${key}`),
+      ...Object.keys(fields.publishedFacts ?? {}).map((field) => `${ref}/publishedFacts/${field}`)
+    ]
   };
   assertFieldProvenance(fields);
   return input;
@@ -2755,10 +3394,23 @@ function buildSemanticRequest(candidates, context, { now = /* @__PURE__ */ new D
     startArea: context?.startArea ?? null,
     transport: context?.transport ?? "drive"
   }));
+  const evidenceOnly = inputs.length > 0 && inputs.every((input) => Object.keys(input.fields?.publishedFacts ?? {}).length > 0);
   const payload = {
-    schemaVersion: 1,
-    context: serializeContext(context),
-    candidates: inputs.map(({ ref, restricted, fields }) => ({ ref, restricted, ...omitRef(fields) }))
+    schemaVersion: SEMANTIC_INPUT_SCHEMA_VERSION,
+    ...evidenceOnly ? {} : { context: serializeContext(context) },
+    candidates: inputs.map((input) => {
+      const { ref, restricted, fields } = input;
+      if (Object.keys(fields?.publishedFacts ?? {}).length) {
+        return {
+          event: {
+            ref,
+            published: fields.publishedFacts,
+            missing: fields.knownUnknowns ?? []
+          }
+        };
+      }
+      return { ref, restricted, ...omitRef(fields) };
+    })
   };
   assertNoRestrictedEvidence(payload);
   return { payload, inputs };
@@ -2812,12 +3464,15 @@ function assertFieldProvenance(fields) {
 }
 function knownUnknownsFor({ restricted, hasTime: hasTime2, evidence, fields }) {
   const unknowns = [];
-  unknowns.push("end-time", "closing-hours", "after-hours");
+  if (!fields.publishedFacts?.endTime) unknowns.push("end-time");
+  unknowns.push("closing-hours", "after-hours");
   if (!hasTime2) unknowns.push("capacity");
   if (restricted || !fields.namedPerformerCount) unknowns.push("lineup");
   if (restricted) unknowns.push("genre", "neighborhood");
+  else if (!fields.publishedFacts?.classification && !fields.publishedFacts?.description) unknowns.push("genre");
   else if (!evidence?.city) unknowns.push("neighborhood");
-  unknowns.push("age-policy", "ticket-availability");
+  if (!fields.publishedFacts?.agePolicy) unknowns.push("age-policy");
+  unknowns.push("ticket-availability");
   if (fields.advertisedPriceUsd == null) unknowns.push("cover-price");
   return [...new Set(unknowns)];
 }
@@ -2878,6 +3533,444 @@ function cappedText(value, max) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim().replace(/\s+/g, " ");
   return trimmed ? trimmed.slice(0, max) : null;
+}
+
+// ../src/nightlife/cardInsight.js
+var UNINFORMATIVE_CLASSIFICATIONS = /* @__PURE__ */ new Set([
+  "music",
+  "event style",
+  "concert",
+  "live",
+  "undefined",
+  // Ticketmaster attraction types: they describe the act's shape, not its sound.
+  "individual",
+  "group",
+  "other"
+]);
+function buildSemanticEventInsight(candidate, assessment = null) {
+  const display = serializeEventEvidenceForDisplay(candidate?.eventEvidence ?? buildEventEvidence(candidate));
+  const facts = display.facts ?? {};
+  const claims = {};
+  const format = factText(facts.format);
+  const classifications = factList(facts.classification);
+  const informative = classifications.filter((value) => !UNINFORMATIVE_CLASSIFICATIONS.has(value.toLowerCase()));
+  if (format) {
+    claims.whatToExpect = claim(`Published format: ${format}.`, "verified", facts.format);
+  } else if (informative.length) {
+    claims.whatToExpect = claim(`Published classification: ${informative.slice(0, 2).join(" \xB7 ")}.`, "verified", facts.classification);
+  } else {
+    const inferred = experienceText(assessment?.experienceCharacter);
+    const support = facts.description ?? facts.venueInfo;
+    if (inferred && support) claims.whatToExpect = claim(inferred, "inferred", support);
+  }
+  if (!claims.whatToExpect && assessment?.musicCharacter && facts.description) {
+    const music = musicText(assessment.musicCharacter);
+    if (music) claims.whatToExpect = claim(music, "inferred", facts.description);
+  }
+  const endTime = factText(facts.endTime);
+  const doorTime = factText(facts.doorTime);
+  const startTime = factText(facts.startTime);
+  if (endTime) {
+    claims.worthPlanning = claim(`A published end time (${friendlyTime(endTime)}) makes the event window concrete.`, "verified", facts.endTime);
+  } else if (doorTime && startTime) {
+    claims.worthPlanning = claim(`Published doors (${friendlyTime(doorTime)}) and start (${friendlyTime(startTime)}) make arrival planning concrete.`, "verified", facts.doorTime, facts.startTime);
+  }
+  const agePolicy = factText(facts.agePolicy);
+  if (agePolicy) {
+    claims.worthChecking = claim(`Entry policy: ${agePolicy}.`, "verified", facts.agePolicy);
+  } else if (claims.whatToExpect || claims.worthPlanning) {
+    claims.worthChecking = {
+      text: endTime ? "No additional entry restriction is verified in the available event evidence." : "No verified event end time is published; confirm the schedule before planning around a late finish.",
+      status: "not known",
+      evidence: evidenceFor(...Object.values(facts).slice(0, 1))
+    };
+  }
+  const useful = [claims.whatToExpect, claims.worthPlanning].find((entry) => entry && entry.status !== "not known");
+  if (!useful) return null;
+  return { summary: useful.text, ...claims };
+}
+function claim(text3, status, ...facts) {
+  return { text: text3, status, evidence: evidenceFor(...facts) };
+}
+function evidenceFor(...facts) {
+  return facts.filter(Boolean).map((fact) => ({
+    source: providerLabel(fact.provider),
+    url: safeHttpUrl(fact.sourceUrl),
+    retrievedAt: fact.retrievedAt ?? null,
+    status: fact.confidence === "verified" ? "verified" : "inferred"
+  }));
+}
+function factText(fact) {
+  if (!fact || fact.value == null) return null;
+  if (typeof fact.value === "string" || typeof fact.value === "number") return String(fact.value).trim() || null;
+  if (Array.isArray(fact.value)) return fact.value.map(String).map((value) => value.trim()).filter(Boolean).join(" \xB7 ") || null;
+  const local = fact.value.local ?? fact.value.value ?? null;
+  return local == null ? null : String(local).trim() || null;
+}
+function factList(fact) {
+  if (!fact) return [];
+  const values = Array.isArray(fact.value) ? fact.value : [fact.value];
+  return [...new Set(values.map(String).map((value) => value.trim()).filter(Boolean))];
+}
+function experienceText(value) {
+  return {
+    dance_floor: "Source details point to a dance-floor-oriented program.",
+    live_performance: "Source details point to a live-performance program.",
+    seated_listening: "Source details point to a seated listening program.",
+    festival_multi_stage: "Source details point to a festival or multi-stage program.",
+    mixed_or_other: "Source details point to a mixed event format."
+  }[value] ?? null;
+}
+function musicText(value) {
+  return {
+    electronic_dance: "Source details point to an electronic or dance-music program.",
+    band_or_live: "Source details point to a band or live-music program.",
+    mixed_lineup: "Source details point to a mixed musical lineup.",
+    named_style: "Source details identify a specific musical style."
+  }[value] ?? null;
+}
+function friendlyTime(value) {
+  const match = String(value).match(/(?:T|\s)(\d{2}):(\d{2})/);
+  if (!match) return value;
+  const hour = Number(match[1]);
+  return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? "PM" : "AM"}`;
+}
+function providerLabel(value) {
+  return { ticketmaster: "Ticketmaster", framework: "Framework", insomniac: "Insomniac" }[value] ?? String(value ?? "Source");
+}
+function safeHttpUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(String(value));
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+// ../src/nightlife/assessmentCache.js
+function candidateRevision(candidate) {
+  return digestValue({
+    startLocal: candidate.startLocal ?? null,
+    timeTbd: Boolean(candidate.timeTbd),
+    status: candidate.status ?? null,
+    venue: candidate.venue?.name ?? null,
+    sources: [...new Set((candidate.sourceOccurrences ?? []).map((occurrence) => occurrence.source))].sort(),
+    sourceEventIds: (candidate.sourceOccurrences ?? []).map((occurrence) => occurrence.sourceEventId ?? null).sort(),
+    evidence: (candidate.sourceOccurrences ?? []).map((occurrence) => ({
+      source: occurrence.source ?? null,
+      sourceEventId: occurrence.sourceEventId ?? null,
+      retrievedAt: occurrence.retrievedAt ?? occurrence.evidence?.retrievedAt ?? null,
+      evidenceSchemaVersion: occurrence.evidence?.schemaVersion ?? null,
+      fields: Object.keys(occurrence.evidence?.permittedFacts ?? {}).sort()
+    })).sort((left, right) => `${left.source}|${left.sourceEventId}`.localeCompare(`${right.source}|${right.sourceEventId}`)),
+    candidateEvidence: candidate.eventEvidence ? {
+      schemaVersion: candidate.eventEvidence.schemaVersion ?? null,
+      retrievedAt: candidate.eventEvidence.retrievedAt ?? null,
+      fields: Object.entries(candidate.eventEvidence.permittedFacts ?? {}).map(([field, fact]) => [field, fact?.value ?? null, fact?.permission?.modelInput === true]).sort(([left], [right]) => left.localeCompare(right))
+    } : null
+  });
+}
+function assessmentCacheKey({
+  candidateRevision: revision,
+  input,
+  context,
+  schemaVersion,
+  promptVersion,
+  questionIds = [],
+  evidenceSchemaVersion = null,
+  criteriaVersion = null,
+  provider,
+  model
+}) {
+  return digestValue({
+    revision,
+    input,
+    context,
+    schemaVersion,
+    promptVersion,
+    questionIds: [...questionIds].sort(),
+    evidenceSchemaVersion,
+    criteriaVersion,
+    provider,
+    model
+  });
+}
+function createAssessmentCache({ maxEntries = 500 } = {}) {
+  const entries = /* @__PURE__ */ new Map();
+  return {
+    get(key) {
+      if (!entries.has(key)) return null;
+      const value = entries.get(key);
+      entries.delete(key);
+      entries.set(key, value);
+      return value;
+    },
+    set(key, value) {
+      if (entries.has(key)) entries.delete(key);
+      entries.set(key, value);
+      while (entries.size > maxEntries) entries.delete(entries.keys().next().value);
+      return value;
+    },
+    invalidate(key) {
+      return entries.delete(key);
+    },
+    clear() {
+      entries.clear();
+    },
+    get size() {
+      return entries.size;
+    }
+  };
+}
+
+// ../src/nightlife/questions.js
+var QUESTION_SET_VERSION = 2;
+var DEFAULT_CERTAINTY_THRESHOLDS = { high: 0.75, moderate: 0.5 };
+var DEFAULT_NOUL_THRESHOLDS = { flag: 0.65, clear: 0.35 };
+var SHARED_PREFACE = "You are judging one Los Angeles nightlife candidate for one private person. Some evidence is intentionally withheld by source policy; absent detail is uncertainty, not a negative. Judge only from the supplied state.";
+var CHOICE_QUESTIONS = {
+  context_fit: {
+    field: "contextFit",
+    type: "choice",
+    instructions: `${SHARED_PREFACE} How well does this candidate match the kind of night the person described in request.goal and the rest of the request?`,
+    criteria: {
+      strong: "Clearly the kind of night described, on the supplied evidence.",
+      possible: "Plausibly matches, with some part of the described night unaddressed.",
+      exploratory: "A stretch from what was described, but a reasonable risk worth surfacing.",
+      poor: "Contradicts something the person explicitly asked for, such as the wrong night, the wrong energy, or the wrong part of town."
+    }
+  },
+  music_fit: {
+    field: "musicAtmosphereFit",
+    type: "choice",
+    instructions: `${SHARED_PREFACE} How well does the likely music and room atmosphere match request.preferredMusic and request.energy? Judge from the event title, venue, event type and lineup size only. If the lineup or genre was withheld, that is uncertainty.`,
+    criteria: {
+      strong: "The supplied title, venue or event type points clearly at the music and energy asked for.",
+      possible: "Consistent with what was asked for, without direct evidence of the specific sound.",
+      weak: "The supplied evidence points at a different sound or a different kind of room."
+    }
+  },
+  late_night_fit: {
+    field: "lateNightFit",
+    type: "choice",
+    instructions: `${SHARED_PREFACE} Does this candidate support staying out as late as request.lateNightIntent describes? No source here publishes an end time or a venue's closing hour, so "confirmed" requires the supplied evidence itself to establish a late schedule.`,
+    criteria: {
+      confirmed: "The supplied schedule evidence itself establishes a late-running event.",
+      possible: "The start time and event type are consistent with a late night, without confirming it.",
+      unlikely: "The supplied start time or event type points at an early finish."
+    }
+  },
+  novelty: {
+    field: "novelty",
+    type: "choice",
+    instructions: `${SHARED_PREFACE} How novel is this candidate relative to the person's established taste? candidate.adjacentEvidence lists how it reached the shortlist: "similar" and "tag" mean it came from a neighbouring-taste expansion rather than a direct match, and "promoter" means it came from a followed promoter.`,
+    criteria: {
+      familiar: "Squarely inside the established taste, on the supplied discovery evidence.",
+      adjacent: "One step out: a neighbouring sound, scene or promoter.",
+      exploratory: "Genuinely outside the established pattern."
+    }
+  }
+};
+var NOUL_QUESTIONS = {
+  friction_travel: {
+    flag: "long-travel",
+    type: "noul",
+    instructions: `${SHARED_PREFACE} Getting to this candidate from request.startArea and home again inside the stated window is a real logistical burden, given candidate.travelMinutesEstimate and request.transport.`,
+    criteria: {
+      true: "The journey is a meaningful cost of the evening.",
+      false: "The journey is unremarkable for a night out in Los Angeles."
+    }
+  },
+  friction_timing: {
+    flag: "late-start",
+    type: "noul",
+    instructions: `${SHARED_PREFACE} The start time sits awkwardly against the window the person described, for example starting so late that the earlier part of the evening is wasted, or so early that it conflicts with the stated earliest start.`,
+    criteria: {
+      true: "The timing works against the described night.",
+      false: "The timing fits the described night."
+    }
+  },
+  friction_coordination: {
+    flag: "group-coordination",
+    type: "noul",
+    instructions: `${SHARED_PREFACE} This candidate takes meaningful coordination for the party described in request.party, for example a group needing tickets together or a plan that is awkward to do solo.`,
+    criteria: {
+      true: "It needs real coordination for the stated party.",
+      false: "It is straightforward for the stated party."
+    }
+  }
+};
+var EVENT_CHARACTERIZATION_QUESTIONS = {
+  event_experience: {
+    field: "experienceCharacter",
+    requires: ["format", "description", "classification"],
+    type: "choice",
+    instructions: `${SHARED_PREFACE} Characterize the documented event experience using only the published event facts. Do not infer an experience from the start time alone and do not fill gaps with common knowledge about the venue or promoter.`,
+    criteria: {
+      dance_floor: "The supplied facts describe a dance-floor or club-oriented experience.",
+      live_performance: "The supplied facts describe a live performance or concert experience.",
+      seated_listening: "The supplied facts explicitly describe seated, reserved, or listening-room participation.",
+      festival_multi_stage: "The supplied facts describe a festival or multi-stage program.",
+      mixed_or_other: "The supplied facts describe an experience that does not fit the other categories.",
+      unknown: "The supplied facts are insufficient or inconclusive."
+    }
+  },
+  music_character: {
+    field: "musicCharacter",
+    requires: ["classification", "description", "namedLineup"],
+    type: "choice",
+    instructions: `${SHARED_PREFACE} Characterize the music evidence that is explicitly published for this event. A missing genre or lineup is uncertainty, not evidence against a style.`,
+    criteria: {
+      electronic_dance: "The supplied classification or description explicitly points to electronic or dance music.",
+      band_or_live: "The supplied classification, description, or named lineup points to a band or live music program.",
+      mixed_lineup: "The supplied facts explicitly describe multiple contrasting music formats or a mixed lineup.",
+      named_style: "The supplied facts publish a specific music style that is not covered by the other options.",
+      unknown: "The supplied facts are insufficient or inconclusive."
+    }
+  },
+  participation_format: {
+    field: "participationFormat",
+    requires: ["format", "description"],
+    type: "choice",
+    instructions: `${SHARED_PREFACE} Characterize how a person participates in the event only when the supplied event or venue facts state it. Do not infer standing, seating, or access from a venue name alone.`,
+    criteria: {
+      standing_or_floor: "The supplied facts explicitly describe standing, floor, or dance-floor participation.",
+      seated: "The supplied facts explicitly describe reserved or seated participation.",
+      mixed: "The supplied facts explicitly describe both seated and standing/floor participation.",
+      not_published: "The supplied facts do not establish a participation format.",
+      unknown: "The supplied facts are insufficient or inconclusive."
+    }
+  },
+  schedule_character: {
+    field: "scheduleCharacter",
+    requires: ["endTime"],
+    type: "choice",
+    instructions: `${SHARED_PREFACE} Characterize the published event schedule from its door, start, and end facts. Do not infer a late-running event from a late start, event type, or venue reputation.`,
+    criteria: {
+      published_late_window: "The published event times establish a late-running window.",
+      published_early_window: "The published event times establish an early-evening window.",
+      published_event_window: "The event publishes a bounded window without establishing an especially early or late character.",
+      unknown: "The published times are insufficient or inconclusive."
+    }
+  },
+  entry_policy: {
+    field: "entryPolicy",
+    requires: ["agePolicy"],
+    type: "choice",
+    instructions: `${SHARED_PREFACE} Characterize the published age or entry policy. Do not infer age access from the event type, venue, or title.`,
+    criteria: {
+      age_restricted: "The supplied policy explicitly restricts entry by age.",
+      all_ages: "The supplied policy explicitly says the event is all ages or otherwise open by age.",
+      policy_other: "The supplied policy is published but does not fit the other options.",
+      unknown: "The supplied policy is insufficient or inconclusive."
+    }
+  },
+  venue_character: {
+    field: "venueCharacter",
+    requires: ["venueInfo", "format"],
+    type: "choice",
+    instructions: `${SHARED_PREFACE} Characterize the venue or room only from explicit venue metadata and event-format facts. A venue name alone is not enough to assert a room type.`,
+    criteria: {
+      club_or_dance_room: "The supplied metadata explicitly describes a club or dance-room setting.",
+      concert_hall: "The supplied metadata explicitly describes a concert hall or live-room setting.",
+      outdoor_or_festival: "The supplied metadata explicitly describes an outdoor or festival setting.",
+      other_published: "The supplied metadata establishes a venue character not covered above.",
+      unknown: "The supplied metadata is insufficient or inconclusive."
+    }
+  }
+};
+function buildQuestionSet({ input = null, legacy = false } = {}) {
+  if (legacy) return buildLegacyQuestionSet();
+  if (input && Object.keys(input?.fields?.publishedFacts ?? {}).length) {
+    return buildEvidenceQuestionSet(input);
+  }
+  return {};
+}
+function buildEvidenceQuestionSet(input) {
+  const available = new Set(Object.keys(input?.fields?.publishedFacts ?? {}));
+  const questions = {};
+  for (const [id, definition] of Object.entries(EVENT_CHARACTERIZATION_QUESTIONS)) {
+    if (!definition.requires.some((field) => available.has(field))) continue;
+    if (id === "schedule_character" && !available.has("endTime")) continue;
+    if (id === "venue_character" && !hasExplicitVenueCharacterEvidence(input.fields.publishedFacts?.venueInfo)) continue;
+    questions[id] = {
+      type: definition.type,
+      field: definition.field,
+      instructions: definition.instructions,
+      criteria: definition.criteria
+    };
+  }
+  return questions;
+}
+function hasExplicitVenueCharacterEvidence(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return ["type", "venueType", "setting", "roomType", "generalInfo", "rules", "accessibility"].some((key) => {
+    const item = value[key];
+    return typeof item === "string" && item.trim() || Array.isArray(item) && item.length;
+  });
+}
+function buildLegacyQuestionSet() {
+  const questions = {};
+  for (const [id, definition] of Object.entries(CHOICE_QUESTIONS)) {
+    questions[id] = { type: "choice", instructions: definition.instructions, criteria: definition.criteria };
+  }
+  for (const [id, definition] of Object.entries(NOUL_QUESTIONS)) {
+    questions[id] = { type: "noul", instructions: definition.instructions, criteria: definition.criteria };
+  }
+  return questions;
+}
+function certaintyBand(confidence, thresholds = DEFAULT_CERTAINTY_THRESHOLDS) {
+  if (!Number.isFinite(confidence)) return "low";
+  if (confidence >= thresholds.high) return "high";
+  if (confidence >= thresholds.moderate) return "moderate";
+  return "low";
+}
+function nulBand(noul, thresholds = DEFAULT_NOUL_THRESHOLDS) {
+  if (!Number.isFinite(noul)) return "unknown";
+  if (noul >= thresholds.flag) return "yes";
+  if (noul <= thresholds.clear) return "no";
+  return "unknown";
+}
+
+// ../src/nightlife/cardEnrichment.js
+async function enrichSemanticEventCards(events = [], {
+  provider,
+  now = /* @__PURE__ */ new Date(),
+  requiredIds = [],
+  maxCandidates = 24
+} = {}) {
+  const required = new Set(requiredIds.map(String));
+  const ordered = [...events].sort((left, right) => {
+    const requiredDelta = Number(required.has(String(right.id))) - Number(required.has(String(left.id)));
+    return requiredDelta || Number(right.ranking?.utility ?? 0) - Number(left.ranking?.utility ?? 0);
+  });
+  const selected = ordered.slice(0, Math.max(required.size, maxCandidates));
+  const { inputs } = buildSemanticRequest(selected, {}, { now });
+  inputs.forEach((input, index) => {
+    input.revision = candidateRevision(selected[index]);
+  });
+  const modelEligibleCandidateCount = inputs.filter((input) => Object.keys(buildQuestionSet({ input })).length > 0).length;
+  const result = provider ? await provider.assessCandidates(inputs, {}) : { assessments: /* @__PURE__ */ new Map(), telemetry: { status: "not configured", coverage: { requested: inputs.length, covered: 0, uncovered: inputs.map((input) => input.ref) } } };
+  const assessmentById = /* @__PURE__ */ new Map();
+  inputs.forEach((input, index) => {
+    const assessment = result.assessments.get(input.ref) ?? null;
+    if (assessment) assessmentById.set(String(selected[index].id), assessment);
+  });
+  const byId = /* @__PURE__ */ new Map();
+  for (const event of events) {
+    const insight = buildSemanticEventInsight(event, assessmentById.get(String(event.id)) ?? null);
+    if (insight) byId.set(String(event.id), insight);
+  }
+  return {
+    byId,
+    assessmentById,
+    assessedCandidateCount: assessmentById.size,
+    enrichedCandidateCount: byId.size,
+    modelEligibleCandidateCount,
+    selectedCandidateCount: selected.length,
+    telemetry: result.telemetry
+  };
 }
 
 // ../src/nightlife/context.js
@@ -2980,56 +4073,6 @@ function boundedInteger(value, min, max, fallback) {
   const number = Number(value);
   if (!Number.isInteger(number)) return fallback;
   return Math.min(max, Math.max(min, number));
-}
-
-// ../src/nightlife/assessmentCache.js
-function candidateRevision(candidate) {
-  return digestValue({
-    startLocal: candidate.startLocal ?? null,
-    timeTbd: Boolean(candidate.timeTbd),
-    status: candidate.status ?? null,
-    venue: candidate.venue?.name ?? null,
-    sources: [...new Set((candidate.sourceOccurrences ?? []).map((occurrence) => occurrence.source))].sort(),
-    sourceEventIds: (candidate.sourceOccurrences ?? []).map((occurrence) => occurrence.sourceEventId ?? null).sort()
-  });
-}
-function assessmentCacheKey({
-  candidateRevision: revision,
-  input,
-  context,
-  schemaVersion,
-  promptVersion,
-  provider,
-  model
-}) {
-  return digestValue({ revision, input, context, schemaVersion, promptVersion, provider, model });
-}
-function createAssessmentCache({ maxEntries = 500 } = {}) {
-  const entries = /* @__PURE__ */ new Map();
-  return {
-    get(key) {
-      if (!entries.has(key)) return null;
-      const value = entries.get(key);
-      entries.delete(key);
-      entries.set(key, value);
-      return value;
-    },
-    set(key, value) {
-      if (entries.has(key)) entries.delete(key);
-      entries.set(key, value);
-      while (entries.size > maxEntries) entries.delete(entries.keys().next().value);
-      return value;
-    },
-    invalidate(key) {
-      return entries.delete(key);
-    },
-    clear() {
-      entries.clear();
-    },
-    get size() {
-      return entries.size;
-    }
-  };
 }
 
 // ../src/nightlife/itinerary.js
@@ -3371,108 +4414,8 @@ function wallClock(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-// ../src/nightlife/questions.js
-var QUESTION_SET_VERSION = 1;
-var DEFAULT_CERTAINTY_THRESHOLDS = { high: 0.75, moderate: 0.5 };
-var DEFAULT_NOUL_THRESHOLDS = { flag: 0.65, clear: 0.35 };
-var SHARED_PREFACE = "You are judging one Los Angeles nightlife candidate for one private person. Some evidence is intentionally withheld by source policy; absent detail is uncertainty, not a negative. Judge only from the supplied state.";
-var CHOICE_QUESTIONS = {
-  context_fit: {
-    field: "contextFit",
-    type: "choice",
-    instructions: `${SHARED_PREFACE} How well does this candidate match the kind of night the person described in request.goal and the rest of the request?`,
-    criteria: {
-      strong: "Clearly the kind of night described, on the supplied evidence.",
-      possible: "Plausibly matches, with some part of the described night unaddressed.",
-      exploratory: "A stretch from what was described, but a reasonable risk worth surfacing.",
-      poor: "Contradicts something the person explicitly asked for, such as the wrong night, the wrong energy, or the wrong part of town."
-    }
-  },
-  music_fit: {
-    field: "musicAtmosphereFit",
-    type: "choice",
-    instructions: `${SHARED_PREFACE} How well does the likely music and room atmosphere match request.preferredMusic and request.energy? Judge from the event title, venue, event type and lineup size only. If the lineup or genre was withheld, that is uncertainty.`,
-    criteria: {
-      strong: "The supplied title, venue or event type points clearly at the music and energy asked for.",
-      possible: "Consistent with what was asked for, without direct evidence of the specific sound.",
-      weak: "The supplied evidence points at a different sound or a different kind of room."
-    }
-  },
-  late_night_fit: {
-    field: "lateNightFit",
-    type: "choice",
-    instructions: `${SHARED_PREFACE} Does this candidate support staying out as late as request.lateNightIntent describes? No source here publishes an end time or a venue's closing hour, so "confirmed" requires the supplied evidence itself to establish a late schedule.`,
-    criteria: {
-      confirmed: "The supplied schedule evidence itself establishes a late-running event.",
-      possible: "The start time and event type are consistent with a late night, without confirming it.",
-      unlikely: "The supplied start time or event type points at an early finish."
-    }
-  },
-  novelty: {
-    field: "novelty",
-    type: "choice",
-    instructions: `${SHARED_PREFACE} How novel is this candidate relative to the person's established taste? candidate.adjacentEvidence lists how it reached the shortlist: "similar" and "tag" mean it came from a neighbouring-taste expansion rather than a direct match, and "promoter" means it came from a followed promoter.`,
-    criteria: {
-      familiar: "Squarely inside the established taste, on the supplied discovery evidence.",
-      adjacent: "One step out: a neighbouring sound, scene or promoter.",
-      exploratory: "Genuinely outside the established pattern."
-    }
-  }
-};
-var NOUL_QUESTIONS = {
-  friction_travel: {
-    flag: "long-travel",
-    type: "noul",
-    instructions: `${SHARED_PREFACE} Getting to this candidate from request.startArea and home again inside the stated window is a real logistical burden, given candidate.travelMinutesEstimate and request.transport.`,
-    criteria: {
-      true: "The journey is a meaningful cost of the evening.",
-      false: "The journey is unremarkable for a night out in Los Angeles."
-    }
-  },
-  friction_timing: {
-    flag: "late-start",
-    type: "noul",
-    instructions: `${SHARED_PREFACE} The start time sits awkwardly against the window the person described, for example starting so late that the earlier part of the evening is wasted, or so early that it conflicts with the stated earliest start.`,
-    criteria: {
-      true: "The timing works against the described night.",
-      false: "The timing fits the described night."
-    }
-  },
-  friction_coordination: {
-    flag: "group-coordination",
-    type: "noul",
-    instructions: `${SHARED_PREFACE} This candidate takes meaningful coordination for the party described in request.party, for example a group needing tickets together or a plan that is awkward to do solo.`,
-    criteria: {
-      true: "It needs real coordination for the stated party.",
-      false: "It is straightforward for the stated party."
-    }
-  }
-};
-function buildQuestionSet() {
-  const questions = {};
-  for (const [id, definition] of Object.entries(CHOICE_QUESTIONS)) {
-    questions[id] = { type: "choice", instructions: definition.instructions, criteria: definition.criteria };
-  }
-  for (const [id, definition] of Object.entries(NOUL_QUESTIONS)) {
-    questions[id] = { type: "noul", instructions: definition.instructions, criteria: definition.criteria };
-  }
-  return questions;
-}
-function certaintyBand(confidence, thresholds = DEFAULT_CERTAINTY_THRESHOLDS) {
-  if (!Number.isFinite(confidence)) return "low";
-  if (confidence >= thresholds.high) return "high";
-  if (confidence >= thresholds.moderate) return "moderate";
-  return "low";
-}
-function nulBand(noul, thresholds = DEFAULT_NOUL_THRESHOLDS) {
-  if (!Number.isFinite(noul)) return "unknown";
-  if (noul >= thresholds.flag) return "yes";
-  if (noul <= thresholds.clear) return "no";
-  return "unknown";
-}
-
 // ../src/nightlife/decisionSchema.js
-var DECISION_SCHEMA_VERSION = 1;
+var DECISION_SCHEMA_VERSION = 2;
 var CONTEXT_FIT = ["strong", "possible", "exploratory", "poor", "unknown"];
 var MUSIC_ATMOSPHERE_FIT = ["strong", "possible", "weak", "unknown"];
 var LATE_NIGHT_FIT = ["confirmed", "possible", "unlikely", "unknown"];
@@ -3493,6 +4436,14 @@ var DIMENSIONS = {
   lateNightFit: { allowed: LATE_NIGHT_FIT, questionId: "late_night_fit" },
   novelty: { allowed: NOVELTY, questionId: "novelty" }
 };
+var EVENT_DIMENSIONS = {
+  experienceCharacter: { allowed: ["dance_floor", "live_performance", "seated_listening", "festival_multi_stage", "mixed_or_other", "unknown"], questionId: "event_experience" },
+  musicCharacter: { allowed: ["electronic_dance", "band_or_live", "mixed_lineup", "named_style", "unknown"], questionId: "music_character" },
+  participationFormat: { allowed: ["standing_or_floor", "seated", "mixed", "not_published", "unknown"], questionId: "participation_format" },
+  scheduleCharacter: { allowed: ["published_late_window", "published_early_window", "published_event_window", "unknown"], questionId: "schedule_character" },
+  entryPolicy: { allowed: ["age_restricted", "all_ages", "policy_other", "unknown"], questionId: "entry_policy" },
+  venueCharacter: { allowed: ["club_or_dance_room", "concert_hall", "outdoor_or_festival", "other_published", "unknown"], questionId: "venue_character" }
+};
 function assessmentFromAnswers(answers, {
   candidateRef,
   input,
@@ -3503,6 +4454,9 @@ function assessmentFromAnswers(answers, {
   if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
     throw new DecisionSchemaError("Provider answers must be an object keyed by question id.");
   }
+  const evidenceMode = Object.keys(input?.fields?.publishedFacts ?? {}).length > 0;
+  const questionSet = buildQuestionSet({ input });
+  const dimensions = evidenceMode ? EVENT_DIMENSIONS : DIMENSIONS;
   const assessment = {
     candidateRef,
     schemaVersion: DECISION_SCHEMA_VERSION,
@@ -3511,14 +4465,19 @@ function assessmentFromAnswers(answers, {
   const certainty = {};
   const signals = {};
   let answeredCount = 0;
-  for (const [field, { allowed, questionId }] of Object.entries(DIMENSIONS)) {
+  for (const [field, { allowed, questionId }] of Object.entries(dimensions)) {
+    if (evidenceMode && !questionSet[questionId]) {
+      assessment[field] = "unknown";
+      certainty[field] = "low";
+      continue;
+    }
     const answer = answers[questionId];
     if (answer == null) {
       assessment[field] = "unknown";
       certainty[field] = "low";
       continue;
     }
-    const choice = validateChoiceAnswer(answer, questionId);
+    const choice = validateChoiceAnswer(answer, questionId, questionSet);
     const band = certaintyBand(choice.confidence, certaintyThresholds);
     const value = band === "low" ? "unknown" : choice.choice;
     if (!allowed.includes(value)) {
@@ -3530,7 +4489,7 @@ function assessmentFromAnswers(answers, {
     answeredCount += 1;
   }
   const frictionFlags = [];
-  for (const [questionId, definition] of Object.entries(NOUL_QUESTIONS)) {
+  for (const [questionId, definition] of Object.entries(evidenceMode ? {} : NOUL_QUESTIONS)) {
     const answer = answers[questionId];
     if (answer == null) continue;
     const noul = validateNoulAnswer(answer, questionId);
@@ -3542,6 +4501,7 @@ function assessmentFromAnswers(answers, {
   if (input?.fields) {
     if (input.fields.startPeriod === "unknown") frictionFlags.push("schedule-unconfirmed");
     if (input.fields.advertisedPriceUsd == null) frictionFlags.push("cost-unknown");
+    if (evidenceMode && !input.fields.publishedFacts?.endTime) frictionFlags.push("schedule-unconfirmed");
     frictionFlags.push("ticket-unknown");
   }
   assessment.frictionFlags = [...new Set(frictionFlags)].filter((flag) => FRICTION_FLAGS.includes(flag));
@@ -3559,6 +4519,7 @@ function assessmentFromAnswers(answers, {
 function composeReason(assessment, input) {
   const fields = input?.fields ?? {};
   const parts = [];
+  if (fields.publishedFacts) return composeEvidenceReason(assessment, fields);
   const fitClause = {
     strong: "Matches the night you described",
     possible: "Plausibly matches the night you described",
@@ -3582,6 +4543,53 @@ function composeReason(assessment, input) {
   if (assessment.frictionFlags.includes("group-coordination")) parts.push("it takes some coordination for your party");
   return `${sentence(parts)}.`;
 }
+function composeEvidenceReason(assessment, fields) {
+  const published = fields.publishedFacts ?? {};
+  const parts = [];
+  const experience = {
+    dance_floor: "Published details describe a dance-floor experience",
+    live_performance: "Published details describe a live-performance experience",
+    seated_listening: "Published details describe a seated listening experience",
+    festival_multi_stage: "Published details describe a festival or multi-stage program",
+    mixed_or_other: "Published details describe a mixed or other event format"
+  }[assessment.experienceCharacter];
+  if (experience && (published.format || published.description || published.classification || published.venueInfo)) parts.push(experience);
+  const music = {
+    electronic_dance: "published music details point to electronic dance music",
+    band_or_live: "published music details point to a band or live program",
+    mixed_lineup: "published music details describe a mixed lineup",
+    named_style: "published music details name a specific style"
+  }[assessment.musicCharacter];
+  if (music && (published.classification || published.description || published.namedLineup)) parts.push(music);
+  const participation = {
+    standing_or_floor: "the published format is standing or floor-oriented",
+    seated: "the published format is seated",
+    mixed: "the published format includes seated and floor participation",
+    not_published: "the event does not publish a participation format"
+  }[assessment.participationFormat];
+  if (participation && (published.format || published.venueInfo || published.description)) parts.push(participation);
+  const schedule = {
+    published_late_window: "published event times establish a late-running window",
+    published_early_window: "published event times establish an early-evening window",
+    published_event_window: "published event times establish a bounded event window"
+  }[assessment.scheduleCharacter];
+  if (schedule && published.endTime) parts.push(schedule);
+  const entry = {
+    age_restricted: "the published entry policy is age-restricted",
+    all_ages: "the published entry policy is all-ages",
+    policy_other: "the event publishes an entry policy"
+  }[assessment.entryPolicy];
+  if (entry && published.agePolicy) parts.push(entry);
+  const venue = {
+    club_or_dance_room: "published venue metadata describes a club or dance room",
+    concert_hall: "published venue metadata describes a concert hall",
+    outdoor_or_festival: "published venue metadata describes an outdoor or festival setting",
+    other_published: "published venue metadata establishes another room character"
+  }[assessment.venueCharacter];
+  if (venue && published.venueInfo) parts.push(venue);
+  if (!parts.length) return "Published event details were insufficient for a typed characterization.";
+  return `${parts[0]}${parts.length > 1 ? `; ${parts.slice(1).join(", ")}` : ""}.`;
+}
 function validateAnswerEnvelope(answers, { expectedQuestionIds } = {}) {
   if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
     throw new DecisionSchemaError("Provider response did not contain an answers map.");
@@ -3592,11 +4600,13 @@ function validateAnswerEnvelope(answers, { expectedQuestionIds } = {}) {
   }
   return answers;
 }
-function validateChoiceAnswer(answer, questionId) {
+function validateChoiceAnswer(answer, questionId, questionSet = null) {
   if (answer.type && answer.type !== "choice") {
     throw new DecisionSchemaError(`Question ${questionId} expected a choice answer.`);
   }
-  const allowed = Object.keys(CHOICE_QUESTIONS[questionId].criteria);
+  const definition = questionSet?.[questionId] ?? CHOICE_QUESTIONS[questionId];
+  if (!definition) throw new DecisionSchemaError(`Unknown choice question ${questionId}.`);
+  const allowed = Object.keys(definition.criteria);
   if (typeof answer.choice !== "string" || !allowed.includes(answer.choice)) {
     throw new DecisionSchemaError(`Question ${questionId} returned an option outside its criteria.`);
   }
@@ -3839,16 +4849,20 @@ function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch, cache
         return { assessments, telemetry };
       }
       const safeContext = serializeContext(context);
-      const questions = buildQuestionSet();
       const deadline = started + deadlineMs;
       const pending = [];
       for (const input of requested) {
+        const questions = buildQuestionSet({ input });
+        const evidenceMode = Object.keys(input.fields?.publishedFacts ?? {}).length > 0;
         const key = assessmentCacheKey({
           candidateRevision: input.revision ?? null,
-          input: input.fields,
-          context: safeContext,
+          input: evidenceMode ? { publishedFacts: input.fields.publishedFacts, knownUnknowns: input.fields.knownUnknowns } : input.fields,
+          context: evidenceMode ? null : safeContext,
           schemaVersion: DECISION_SCHEMA_VERSION,
           promptVersion: QUESTION_SET_VERSION,
+          questionIds: Object.keys(questions),
+          evidenceSchemaVersion: EVENT_EVIDENCE_SCHEMA_VERSION,
+          criteriaVersion: QUESTION_SET_VERSION,
           provider: adapter.name,
           model: adapter.model
         });
@@ -3858,9 +4872,10 @@ function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch, cache
           assessments.set(input.ref, { ...cached, cached: true });
           continue;
         }
-        pending.push({ input, key });
+        pending.push({ input, key, questions, evidenceMode });
       }
-      await runWithConcurrency(pending, concurrency, async ({ input, key }) => {
+      await runWithConcurrency(pending, concurrency, async ({ input, key, questions, evidenceMode }) => {
+        if (!Object.keys(questions).length) return;
         if (Date.now() >= deadline) {
           telemetry.deadlineSkipped += 1;
           return;
@@ -3869,7 +4884,13 @@ function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch, cache
           telemetry.budgetSkipped += 1;
           return;
         }
-        const state = { request: safeContext, candidate: { ref: input.ref, restricted: input.restricted, ...withoutRef(input.fields) } };
+        const state = evidenceMode ? {
+          event: {
+            ref: input.ref,
+            published: input.fields.publishedFacts,
+            missing: input.fields.knownUnknowns ?? []
+          }
+        } : { request: safeContext, candidate: { ref: input.ref, restricted: input.restricted, ...withoutRef(input.fields) } };
         assertNoRestrictedEvidence(state);
         let result = null;
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -4158,25 +5179,32 @@ function changedDimensions(previous, next) {
 export {
   DEFAULT_FOCAL_POINT,
   EDMTRAIN_API_BASE_URL,
+  EVENT_EVIDENCE_SCHEMA_VERSION,
+  INSOMNIAC_ADAPTER_VERIFIED,
   STAY_HOME_THRESHOLD,
   UNORDERED_URGENCIES,
   URGENCY_PRIORITY,
   applyPitcherStats,
   buildEdmtrainUrl,
+  buildEventEvidence,
   buildExpandedArtistSnapshot,
   buildOverview,
   buildOverviewBuckets,
   buildSemanticCandidateInput,
+  buildSemanticEventInsight,
   buildSemanticRequest,
   calculateHassle,
   canonicalEventTitle,
   createAssessmentCache,
   createDecisionInferenceProvider,
+  createEventEvidence,
+  createEvidenceFact,
   deduplicateCandidates,
   describeNightlifeConfig,
   discoverNightlife,
   enrichEventsWithEdmtrain,
   enrichMovieMetadata,
+  enrichSemanticEventCards,
   enrichSportsGames,
   eventWithinRadius,
   fetchDodgersHomeGames,
@@ -4236,9 +5264,12 @@ export {
   selectMovieCandidates,
   selectSeatGeekPerformer,
   serializeContext,
+  serializeEventEvidenceForDisplay,
+  serializeEventEvidenceForModel,
   splitDateWindows,
   sportsTicketUrgency,
   spotifyIdFromLinks,
+  summarizeEvidenceCoverage,
   ticketMatchesGame,
   ticketmasterEventMatchesArtist,
   topItemsAffinityFor,

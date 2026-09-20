@@ -77,6 +77,22 @@ test('overview carries declared vertical visual metadata', () => {
   assert.equal(item.visual.variant, 'music-crowd-silhouette');
 });
 
+test('overview carries an optional safe semantic insight without changing ranking fields', () => {
+  const festival = music('festival-insight', 'Festival Artist', 80, '2026-07-15T20:00:00');
+  festival.semanticInsight = {
+    summary: 'Published format: an open-air lineup.',
+    whatToExpect: {
+      text: 'A multi-artist festival setting.',
+      status: 'verified',
+      evidence: [{ source: 'Framework', status: 'verified' }]
+    }
+  };
+  const [item] = buildOverview([festival], []);
+  assert.equal(item.score, 80);
+  assert.equal(item.reason, 'Festival Artist fits.');
+  assert.deepEqual(item.semanticInsight, festival.semanticInsight);
+});
+
 test('does not admit movie candidates into the mixed overview', () => {
   const buckets = buildOverviewBuckets([], [], { now: '2026-07-11T12:00:00Z' });
   assert.deepEqual(buckets.current, []);

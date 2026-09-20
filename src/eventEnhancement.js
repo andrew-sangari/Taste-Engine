@@ -99,7 +99,7 @@ export async function enhanceEventsWithOllama(events, personalContext, {
     const ref = `candidate-${index + 1}`;
     refToId.set(ref, event.id);
     const sources = new Set((event.sourceOccurrences ?? []).map((occurrence) => occurrence.source));
-    const allowedOccurrence = (event.sourceOccurrences ?? []).find((occurrence) => ['ticketmaster', 'framework', 'insomniac'].includes(occurrence.source));
+    const allowedOccurrence = (event.sourceOccurrences ?? []).find((occurrence) => ['ticketmaster', 'framework'].includes(occurrence.source));
     const start = event.startLocal ? new Date(event.startLocal) : null;
     const safePerformers = Array.isArray(allowedOccurrence?.performerNames) ? allowedOccurrence.performerNames.filter(Boolean) : [];
     const adjacentEvidence = [...new Set((event.matchedArtists ?? [])

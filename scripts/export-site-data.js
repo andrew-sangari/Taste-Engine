@@ -7,7 +7,7 @@ import { buildEditorialCandidates, generateEditorialBrief } from '../src/editori
 import { enrichEventsWithEdmtrain, fetchEdmtrainEvents } from '../src/edmtrain.js';
 import { enhanceEventsWithOllama, enhanceSportsWithOllama, reusePreviousEnhancements } from '../src/eventEnhancement.js';
 import { fetchFrameworkArtists, fetchFrameworkEvents, normalizeFrameworkEvent } from '../src/framework.js';
-import { fetchInsomniacEvents, normalizeInsomniacEvent } from '../src/insomniac.js';
+import { fetchInsomniacEvents, INSOMNIAC_ADAPTER_VERIFIED, normalizeInsomniacEvent } from '../src/insomniac.js';
 import { applyPitcherStats, fetchDodgersHomeGames, fetchMlbPitcherStats, fetchMlbStandings } from '../src/mlb.js';
 import { selectMovieCandidates } from '../src/movieSelection.js';
 import { normalizeArtistName, rankCandidates } from '../src/ranking.js';
@@ -39,6 +39,10 @@ import {
   sanitizeErrorMessage
 } from '../src/diagnostics.js';
 import { enhancementFor, toDisplayEvent, toDisplaySportsGame } from '../src/projection.js';
+import { summarizeEvidenceCoverage } from '../src/eventEvidence.js';
+import { enrichSemanticEventCards } from '../src/nightlife/cardEnrichment.js';
+import { createDecisionInferenceProvider } from '../src/nightlife/inference.js';
+import { readNightlifeConfig } from '../src/nightlife/config.js';
 import { buildFeedbackSnapshot, mergeSnapshotIndex } from '../src/feedbackSnapshots.js';
 import { buildTasteProfile } from '../src/tasteProfile.js';
 import { DEFAULT_CHANGES_TOP_N, buildChangesSinceRefresh } from '../src/projectionChanges.js';
@@ -144,6 +148,7 @@ const framework = await optionalSource('framework', true, async () => {
   return { items: raw.map((event) => normalizeFrameworkEvent(event, generatedAt)), warnings: [] };
 });
 const insomniac = await optionalSource('insomniac', true, async () => {
+  if (!INSOMNIAC_ADAPTER_VERIFIED) throw new Error('Insomniac parser is unverified.');
   const raw = await fetchInsomniacEvents({ startDate, endDate });
   return { items: raw.map((event) => normalizeInsomniacEvent(event, generatedAt)), warnings: [] };
 });
@@ -294,6 +299,47 @@ const overviewMusicIds = deterministicOverview.filter((item) => item.vertical ==
 const overviewSportsIds = deterministicOverview.filter((item) => item.vertical === 'sports').map((item) => item.id);
 const overviewCurrentIds = deterministicOverviewBuckets.current.map((item) => item.id);
 const overviewPlanAheadIds = deterministicOverviewBuckets.planAhead.map((item) => item.id);
+const semanticEnrichment = await enrichSemanticEventCards(ranked, {
+  provider: createDecisionInferenceProvider(readNightlifeConfig(process.env)),
+  now: generatedAt,
+  requiredIds: overviewMusicIds,
+  maxCandidates: 24
+});
+sourceHealth.push({
+  source: 'jev-events',
+  status: semanticEnrichment.telemetry.status === 'assessed'
+    ? 'active'
+    : semanticEnrichment.assessedCandidateCount > 0 ? 'partial' : 'unavailable',
+  itemCount: semanticEnrichment.enrichedCandidateCount,
+  warningCount: Math.max(0, semanticEnrichment.modelEligibleCandidateCount - semanticEnrichment.assessedCandidateCount),
+  details: {
+    evidenceCount: semanticEnrichment.enrichedCandidateCount,
+    modelEligibleCount: semanticEnrichment.modelEligibleCandidateCount,
+    assessedCount: semanticEnrichment.assessedCandidateCount
+  }
+});
+// Evidence stays out of the published projection: a display row must not become
+// a backdoor to source material or imply that an old snapshot is
+// inference-capable. It is written to the private, gitignored data directory so
+// `npm run nightlife:cards` can evaluate the evidence layer against what the
+// sources actually supplied.
+const evidenceArtifactPath = resolve('data/nightlife/evidence-latest.json');
+await mkdir(dirname(evidenceArtifactPath), { recursive: true });
+await writeFile(evidenceArtifactPath, `${JSON.stringify({
+  generatedAt: new Date(generatedAt).toISOString(),
+  candidates: ranked.map((candidate) => ({
+    id: candidate.id,
+    title: candidate.title,
+    sources: [...new Set((candidate.sourceOccurrences ?? []).map((occurrence) => occurrence.source))],
+    eventEvidence: candidate.eventEvidence ?? null,
+    // Occurrence-level evidence is what lets field-by-field merging run again
+    // during evaluation exactly as it ran here.
+    sourceOccurrences: candidate.sourceOccurrences ?? [],
+    startLocal: candidate.startLocal ?? null,
+    timeTbd: Boolean(candidate.timeTbd),
+    ranking: { utility: candidate.ranking?.utility ?? null }
+  }))
+}, null, 2)}\n`);
 buildReport.resolution.events = {
   confidentMerges: deduplication.mergedCount ?? 0,
   ambiguousMatches: 0,
@@ -417,7 +463,11 @@ const exportData = {
     teamName: sportsConfig.teamName,
     featuredInterestThreshold: sportsConfig.featuredInterestThreshold
   },
-  events: ranked.map((candidate) => toDisplayEvent(candidate, enhancementFor(eventEnhancement.byId.get(candidate.id)))),
+  events: ranked.map((candidate) => toDisplayEvent({
+    ...candidate,
+    semanticInsight: semanticEnrichment.byId.get(String(candidate.id)) ?? null,
+    semanticAssessment: semanticEnrichment.assessmentById.get(String(candidate.id)) ?? null
+  }, enhancementFor(eventEnhancement.byId.get(candidate.id)))),
   sports: sports.map((game) => toDisplaySportsGame(game, enhancementFor(sportsEnhancement.byId.get(game.id)))),
   movies: tmdb.items,
   editorialCandidates: buildEditorialCandidates({ events: ranked, sports, movies: tmdb.items })
@@ -646,8 +696,15 @@ function uniqueArtistWatchlist(artists) {
 
 async function optionalSource(source, configured, callback) {
   const startedAt = Date.now();
+  const reportsEventEvidence = ['ticketmaster', 'framework', 'insomniac'].includes(source);
   if (!configured) {
-    const result = { source, status: 'not configured', itemCount: 0, warningCount: 0 };
+    const result = {
+      source,
+      status: 'not configured',
+      itemCount: 0,
+      warningCount: 0,
+      ...(reportsEventEvidence ? { details: { evidenceCount: 0, modelEligibleCount: 0, fieldCoverage: {} } } : {})
+    };
     sourceHealth.push(result);
     recordBuildSource(buildReport, source, {
       fetched: false,
@@ -667,7 +724,8 @@ async function optionalSource(source, configured, callback) {
       source,
       status: result.warnings.length ? 'partial' : 'active',
       itemCount: result.items.length,
-      warningCount: result.warnings.length
+      warningCount: result.warnings.length,
+      ...(reportsEventEvidence ? { details: summarizeEvidenceCoverage(result.items) } : {})
     };
     sourceHealth.push(health);
     recordBuildSource(buildReport, source, {
@@ -683,7 +741,13 @@ async function optionalSource(source, configured, callback) {
     });
     return result;
   } catch (error) {
-    sourceHealth.push({ source, status: 'unavailable', itemCount: 0, warningCount: 1 });
+    sourceHealth.push({
+      source,
+      status: 'unavailable',
+      itemCount: 0,
+      warningCount: 1,
+      ...(reportsEventEvidence ? { details: { evidenceCount: 0, modelEligibleCount: 0, fieldCoverage: {}, reason: sanitizeErrorMessage(error) } } : {})
+    });
     recordBuildSource(buildReport, source, {
       fetched: true,
       normalized: 0,

@@ -4,31 +4,34 @@ import { ProfileAccessError, profileScopeForUser, resolveProfile } from "../../.
 import { NightlifeInputError, nightlifeStatus, runNightlifeQuery } from "../../../server/nightlife";
 import { deploymentEnvironment } from "../../../server/release";
 
-// The page already renders the bundled projection unauthenticated when
-// TASTE_ENGINE_ENV is local or test, so this tab is inspectable in local dev.
-// This keeps the route consistent with it rather than 401ing the one request
-// the page needs. Production never sets that variable to local or test, so the
-// branch cannot be reached there.
-export function localInspectionAllowed() {
+/**
+ * Development-only inference harness.
+ *
+ * The product surfaces semantic enrichment inside the existing Music and
+ * Overview cards; no shipped page calls this endpoint. It stays available
+ * locally because exercising the decision contract by hand is useful while
+ * tuning questions and thresholds, but it must not answer in a deployed
+ * environment, so it 404s exactly as an unrouted path would.
+ */
+export function harnessEnabled() {
   return ["local", "test"].includes(deploymentEnvironment());
+}
+
+function notFound() {
+  return Response.json({ error: "Not found." }, { status: 404 });
 }
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await getChatGPTUser();
-  if (!user && !localInspectionAllowed()) {
-    return Response.json({ error: "Sign in with ChatGPT." }, { status: 401 });
-  }
+  if (!harnessEnabled()) return notFound();
   return Response.json({ nightlife: nightlifeStatus() }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user && !localInspectionAllowed()) {
-    return Response.json({ error: "Sign in with ChatGPT to plan a night out." }, { status: 401 });
-  }
+  if (!harnessEnabled()) return notFound();
 
+  const user = await getChatGPTUser();
   let profile = null;
   if (user) {
     try {

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STAY_HOME_THRESHOLD, discoverNightlife, nightlifeScore } from '../src/nightlife/discovery.js';
 import { createDecisionInferenceProvider } from '../src/nightlife/inference.js';
+import { createEvidenceFact, createEventEvidence } from '../src/eventEvidence.js';
 import { normalizeNightlifeContext } from '../src/nightlife/context.js';
 import { refsToReassess, reviseCriteria } from '../src/nightlife/criteria.js';
 import { buildEveningPlan, candidateTiming, evaluateSequence, withinWindow } from '../src/nightlife/itinerary.js';
@@ -23,6 +24,35 @@ function baseContext(overrides = {}) {
 
 function candidate(id, { hour = 22, lat = 34.043, lon = -118.24, utility = 60, price = 30, source = 'ticketmaster' } = {}) {
   const startLocal = `2026-09-26T${String(hour).padStart(2, '0')}:00:00`;
+  const sourceUrl = `https://${source}.com/e/${id}`;
+  const sourceEventId = id;
+  const retrievedAt = '2026-09-20T00:00:00.000Z';
+  const eventEvidence = source === 'seatgeek' ? null : createEventEvidence({
+    eventRef: id,
+    provider: source,
+    sourceEventId,
+    sourceUrl,
+    retrievedAt,
+    facts: Object.fromEntries([
+      ['title', `Show ${id}`],
+      ['classification', ['Music', 'Electronic', 'Dance']],
+      ['namedLineup', ['Artist']],
+      ['format', 'Dance-floor program'],
+      ['doorTime', `2026-09-26T${String(Math.max(0, hour - 1)).padStart(2, '0')}:00:00`],
+      ['startTime', startLocal],
+      ['endTime', `2026-09-27T02:00:00`],
+      ['venueInfo', { name: `Venue ${id}`, city: 'Los Angeles', type: 'club' }],
+      ['agePolicy', '21+']
+    ].map(([field, value]) => [field, createEvidenceFact({
+      value,
+      field,
+      provider: source,
+      sourceEventId,
+      sourceUrl,
+      retrievedAt,
+      permission: { internalUse: true, display: true, modelInput: true, persist: true }
+    })]))
+  });
   return {
     id,
     title: `Show ${id}`,
@@ -35,12 +65,13 @@ function candidate(id, { hour = 22, lat = 34.043, lon = -118.24, utility = 60, p
     sourceOccurrences: [{
       source,
       sourceEventId: id,
-      sourceUrl: `https://${source}.com/e/${id}`,
+      sourceUrl,
       title: `Show ${id}`,
       startLocal,
       venue: { name: `Venue ${id}`, city: 'Los Angeles', lat, lon },
       performerNames: ['Artist']
     }],
+    ...(eventEvidence ? { eventEvidence } : {}),
     ranking: { utility }
   };
 }
@@ -49,13 +80,12 @@ function answers({ contextFit = 'strong', confidence = 0.9 } = {}) {
   return {
     model: 'jev-1.13.0',
     answers: {
-      context_fit: { type: 'choice', choice: contextFit, probabilities: { strong: 0.9, possible: 0.1 }, confidence },
-      music_fit: { type: 'choice', choice: 'strong', probabilities: { strong: 0.9, possible: 0.1 }, confidence: 0.9 },
-      late_night_fit: { type: 'choice', choice: 'confirmed', probabilities: { confirmed: 0.9, possible: 0.1 }, confidence: 0.9 },
-      novelty: { type: 'choice', choice: 'adjacent', probabilities: { adjacent: 0.9, familiar: 0.1 }, confidence: 0.9 },
-      friction_travel: { type: 'noul', noul: 0.1 },
-      friction_timing: { type: 'noul', noul: 0.1 },
-      friction_coordination: { type: 'noul', noul: 0.1 }
+      event_experience: { type: 'choice', choice: 'dance_floor', probabilities: { dance_floor: 0.9, live_performance: 0.03, seated_listening: 0.02, festival_multi_stage: 0.02, mixed_or_other: 0.02, unknown: 0.01 }, confidence },
+      music_character: { type: 'choice', choice: 'electronic_dance', probabilities: { electronic_dance: 0.9, band_or_live: 0.03, mixed_lineup: 0.02, named_style: 0.02, unknown: 0.02 }, confidence: 0.9 },
+      participation_format: { type: 'choice', choice: 'standing_or_floor', probabilities: { standing_or_floor: 0.9, seated: 0.03, mixed: 0.02, not_published: 0.02, unknown: 0.03 }, confidence: 0.9 },
+      schedule_character: { type: 'choice', choice: 'published_late_window', probabilities: { published_late_window: 0.9, published_early_window: 0.03, published_event_window: 0.04, unknown: 0.03 }, confidence: 0.9 },
+      entry_policy: { type: 'choice', choice: 'age_restricted', probabilities: { age_restricted: 0.9, all_ages: 0.03, policy_other: 0.04, unknown: 0.03 }, confidence: 0.9 },
+      venue_character: { type: 'choice', choice: 'club_or_dance_room', probabilities: { club_or_dance_room: 0.9, concert_hall: 0.03, outdoor_or_festival: 0.02, other_published: 0.02, unknown: 0.03 }, confidence: 0.9 }
     },
     usage: { input_tokens: 300, output_tokens: 10 }
   };
@@ -87,7 +117,7 @@ test('produces a shortlist with evidence, unknowns and source links', async () =
   const top = result.shortlist[0];
   assert.equal(top.inferenceCovered, true);
   assert.ok(top.assessment.reason.length > 0);
-  assert.ok(top.unknowns.includes('end-time'), 'no source publishes an end time');
+  assert.ok(top.unknowns.includes('closing-hours'), 'an event end time does not establish venue closing hours');
   assert.deepEqual(top.sourceLinks, [{ source: 'ticketmaster', url: 'https://ticketmaster.com/e/a' }]);
   assert.equal(result.inference.status, 'assessed');
 });

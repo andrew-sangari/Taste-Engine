@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDecisionInferenceProvider } from '../src/nightlife/inference.js';
+import { createEvidenceFact, createEventEvidence } from '../src/eventEvidence.js';
 import { createGatewayProvider } from '../src/nightlife/providers/gateway.js';
 import { createDirectServingProvider } from '../src/nightlife/providers/directServing.js';
 import { buildSemanticRequest } from '../src/nightlife/semanticInput.js';
@@ -17,6 +18,18 @@ const context = normalizeNightlifeContext({
 });
 
 function candidate(id = 'ticketmaster:1') {
+  const sourceEventId = id.replace(':', '-');
+  const sourceUrl = `https://ticketmaster.com/e/${sourceEventId}`;
+  const retrievedAt = '2026-09-20T00:00:00.000Z';
+  const fact = (value, field, permission = { internalUse: true, display: true, modelInput: true, persist: true }) => createEvidenceFact({
+    value,
+    field,
+    provider: 'ticketmaster',
+    sourceEventId,
+    sourceUrl,
+    retrievedAt,
+    permission
+  });
   return {
     id,
     title: 'A Permitted Show',
@@ -28,28 +41,46 @@ function candidate(id = 'ticketmaster:1') {
     ticketObservation: { lowestPriceUsd: 30 },
     sourceOccurrences: [{
       source: 'ticketmaster',
-      sourceEventId: 'tm-1',
-      sourceUrl: 'https://ticketmaster.com/e/1',
+      sourceEventId,
+      sourceUrl,
       title: 'A Permitted Show',
       venue: { name: 'Venue', city: 'Los Angeles', lat: 34.043, lon: -118.24 },
       performerNames: ['Artist']
     }],
+    eventEvidence: createEventEvidence({
+      eventRef: id,
+      provider: 'ticketmaster',
+      sourceEventId,
+      sourceUrl,
+      retrievedAt,
+      facts: {
+        title: fact('A Permitted Show', 'title'),
+        description: fact('A documented electronic dance-floor program.', 'description'),
+        classification: fact(['Music', 'Electronic', 'Dance'], 'classification'),
+        namedLineup: fact(['Artist'], 'namedLineup'),
+        format: fact('Dance-floor program', 'format'),
+        doorTime: fact('2026-09-26T21:00:00', 'doorTime'),
+        startTime: fact('2026-09-26T22:00:00', 'startTime'),
+        endTime: fact('2026-09-27T02:00:00', 'endTime'),
+        venueInfo: fact({ name: 'Venue', city: 'Los Angeles', type: 'club' }, 'venueInfo'),
+        agePolicy: fact('21+', 'agePolicy')
+      }
+    }),
     ranking: { utility: 62 }
   };
 }
 
 // A complete, well-formed System One response for the question set.
-function answersFixture({ contextFit = 'strong', confidence = 0.9, travelNoul = 0.1 } = {}) {
+function answersFixture({ experienceCharacter = 'dance_floor', confidence = 0.9 } = {}) {
   return {
     model: 'jev-1.13.0',
     answers: {
-      context_fit: { type: 'choice', choice: contextFit, probabilities: { strong: 0.9, possible: 0.06, exploratory: 0.03, poor: 0.01 }, confidence },
-      music_fit: { type: 'choice', choice: 'possible', probabilities: { strong: 0.3, possible: 0.6, weak: 0.1 }, confidence: 0.8 },
-      late_night_fit: { type: 'choice', choice: 'possible', probabilities: { confirmed: 0.2, possible: 0.7, unlikely: 0.1 }, confidence: 0.77 },
-      novelty: { type: 'choice', choice: 'adjacent', probabilities: { familiar: 0.2, adjacent: 0.7, exploratory: 0.1 }, confidence: 0.81 },
-      friction_travel: { type: 'noul', noul: travelNoul },
-      friction_timing: { type: 'noul', noul: 0.2 },
-      friction_coordination: { type: 'noul', noul: 0.15 }
+      event_experience: { type: 'choice', choice: experienceCharacter, probabilities: { dance_floor: 0.9, live_performance: 0.03, seated_listening: 0.02, festival_multi_stage: 0.02, mixed_or_other: 0.02, unknown: 0.01 }, confidence },
+      music_character: { type: 'choice', choice: 'electronic_dance', probabilities: { electronic_dance: 0.9, band_or_live: 0.03, mixed_lineup: 0.02, named_style: 0.02, unknown: 0.03 }, confidence: 0.8 },
+      participation_format: { type: 'choice', choice: 'standing_or_floor', probabilities: { standing_or_floor: 0.9, seated: 0.03, mixed: 0.02, not_published: 0.02, unknown: 0.03 }, confidence: 0.8 },
+      schedule_character: { type: 'choice', choice: 'published_late_window', probabilities: { published_late_window: 0.9, published_early_window: 0.03, published_event_window: 0.04, unknown: 0.03 }, confidence: 0.77 },
+      entry_policy: { type: 'choice', choice: 'age_restricted', probabilities: { age_restricted: 0.9, all_ages: 0.03, policy_other: 0.04, unknown: 0.03 }, confidence: 0.81 },
+      venue_character: { type: 'choice', choice: 'club_or_dance_room', probabilities: { club_or_dance_room: 0.9, concert_hall: 0.03, outdoor_or_festival: 0.02, other_published: 0.02, unknown: 0.03 }, confidence: 0.81 }
     },
     usage: { input_tokens: 400, output_tokens: 20 }
   };
@@ -119,7 +150,7 @@ test('the gateway adapter unwraps an enveloped response', async () => {
     fetchImpl: async () => ok({ data: answersFixture() })
   });
   const result = await adapter.evaluate({ state: {}, questions: {} });
-  assert.ok(result.answers.context_fit);
+  assert.ok(result.answers.event_experience);
 });
 
 test('the direct adapter posts to the documented native endpoint', async () => {
@@ -156,34 +187,33 @@ test('both routes produce an identical assessment from identical answers', async
   assert.deepEqual(strip(left.assessments.get('cand-1')), strip(right.assessments.get('cand-1')));
 });
 
-test('low confidence becomes unknown rather than a weak rating', async () => {
-  const provider = providerWith(async () => ok(answersFixture({ contextFit: 'poor', confidence: 0.31 })));
+test('low confidence becomes unknown rather than a weak characterization', async () => {
+  const provider = providerWith(async () => ok(answersFixture({ experienceCharacter: 'live_performance', confidence: 0.31 })));
   const { assessments } = await provider.assessCandidates(inputsFor(), context);
   const assessment = assessments.get('cand-1');
-  assert.equal(assessment.contextFit, 'unknown');
-  assert.equal(assessment.certainty.contextFit, 'low');
-  assert.match(assessment.reason, /Not enough evidence/);
+  assert.equal(assessment.experienceCharacter, 'unknown');
+  assert.equal(assessment.certainty.experienceCharacter, 'low');
+  assert.ok(!assessment.reason.includes('live-performance'));
 });
 
 test('the composed reason is deterministic and never quotes the model', async () => {
   const provider = providerWith(async () => ok(answersFixture()));
   const { assessments } = await provider.assessCandidates(inputsFor(), context);
   const assessment = assessments.get('cand-1');
-  assert.equal(assessment.reason, 'Matches the night you described; it could run late, though no source publishes an end time, it sits one step off your usual pattern.');
+  assert.equal(assessment.reason, 'Published details describe a dance-floor experience; published music details point to electronic dance music, the published format is standing or floor-oriented, published event times establish a late-running window, the published entry policy is age-restricted, published venue metadata describes a club or dance room.');
   assert.ok(!/https?:\/\//.test(assessment.reason));
   // Evidence refs point back into what was actually supplied.
   assert.ok(assessment.evidenceRefs.every((ref) => ref.startsWith('cand-1/')));
 });
 
-test('a friction noul above the flag threshold raises exactly one flag', async () => {
-  const provider = providerWith(async () => ok(answersFixture({ travelNoul: 0.8 })));
-  const { assessments } = await provider.assessCandidates(inputsFor(), context);
-  assert.ok(assessments.get('cand-1').frictionFlags.includes('long-travel'));
-
-  const quiet = providerWith(async () => ok(answersFixture({ travelNoul: 0.5 })));
-  const { assessments: unflagged } = await quiet.assessCandidates(inputsFor(), context);
-  // The middle band is "not established" and must not raise the flag.
-  assert.ok(!unflagged.get('cand-1').frictionFlags.includes('long-travel'));
+test('v2 event characterization asks no generic noul friction questions', async () => {
+  let requested;
+  const provider = providerWith(async (_url, options) => {
+    requested = Object.keys(JSON.parse(options.body).questions);
+    return ok(answersFixture());
+  });
+  await provider.assessCandidates(inputsFor(), context);
+  assert.ok(requested.every((id) => !id.startsWith('friction_')));
 });
 
 test('an unrequested question id is rejected as a validation failure', async () => {
@@ -200,7 +230,7 @@ test('an unrequested question id is rejected as a validation failure', async () 
 
 test('an option outside the declared criteria is rejected', async () => {
   const fixture = answersFixture();
-  fixture.answers.context_fit.choice = 'spectacular';
+  fixture.answers.event_experience.choice = 'spectacular';
   const provider = providerWith(async () => ok(fixture));
   const { telemetry } = await provider.assessCandidates(inputsFor(), context);
   assert.equal(telemetry.validationFailures, 1);

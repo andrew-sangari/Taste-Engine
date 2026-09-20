@@ -79,7 +79,7 @@ Concert retrieval now merges and deduplicates:
 - exact SeatGeek performer resolution followed by performer-ID event queries, which catches billing-name differences and support appearances.
 - optional Ticketmaster Discovery API results;
 - Framework's public artist roster, used as an exact promoter watchlist to expand SeatGeek performer and Ticketmaster attraction lookups;
-- all upcoming events from Framework's public structured calendar and the followed Insomniac Los Angeles calendar, treated as explicitly followed promoters and allowed to fail independently;
+- all upcoming events from Framework's public structured calendar; the followed Insomniac Los Angeles adapter remains explicitly unavailable until it is verified against permitted fixtures;
 - Dodgers home games from MLB Stats API, with standings, probable-pitcher, and optional ticket-source enrichment.
 
 TMDB is a candidate source rather than a recommendation authority. Its output is constrained by `config/movies.json`: preferred genres, people, companies, keywords, exclusions, minimum popularity, and a hard candidate cap. Each shortlisted film retains cast/crew, genre, keyword, company, runtime, and US release-type metadata. It remains “format verification pending” until scheduled discovery confirms a meaningful engagement at a configured priority theater.
@@ -107,21 +107,21 @@ The event explorer supports date-window and event-type filters, personal-fit/dat
 
 For music advisory passes, intentionally absent lineup, genre, or identity detail is uncertainty rather than a reason to skip; missing-evidence skips fall back to the deterministic call. Optional `EDMTRAIN_CLIENT_KEY` enables documented-API lineup enrichment only for confidently matched existing events. Unmatched results stay in a private audit and EDMTrain payloads never enter Ollama.
 
-### Tonight: contextual nightlife discovery
+### Source-grounded event characterization
 
-The **Tonight** tab answers a question static filters cannot express: "what is worth doing on Saturday, given the kind of night I actually want?" You state a goal in your own words plus explicit context — date, starting area, transport, who you are with, budget, how late you want to be out — and get a short, explainable shortlist, an optional running order, and a "nothing is worth the hassle" result when that is the honest answer. Location and companions are only ever what you type; nothing is inferred from your device.
+Music and Overview cards can show one compact semantic-insight chip when a permitted provider publishes enough useful event detail. Expanding **About this night** reveals up to three evidence-linked claims and a **How do we know?** disclosure. Sparse events remain unchanged.
 
-Behind it is a second, separate inference layer built on a System One evaluation model (Jev). It is not a chat model. It answers narrow typed questions about one candidate — how the likely sound and room match, whether the schedule supports a late night, how novel it is, where the friction is — and returns a probability distribution and a confidence value for each. It generates no text at all, so no sentence in the product was written by a model about an event it cannot see: explanations are composed in code from typed answers and the fields that were actually sent. When the model is not reasonably sure, the dimension is shown as *not clear* rather than as a low rating.
+Behind the disclosure is an optional System One evaluation model (Jev). It answers only narrow questions enabled by field-level Ticketmaster or Framework evidence, returns calibrated typed answers, and generates no prose. Deterministic code composes every displayed sentence, preserves explicit unknowns, and cannot alter canonical score, rank, Fit, Friction, Urgency, or Confidence. A future contextual “build a night” workflow remains deferred.
 
 ```text
 TYPESAFE_AI_API_KEY=
 ```
 
-That one key is enough; direct TypeSafe serving is the default route and the Vercel AI Gateway (`AI_GATEWAY_API_KEY`) is an alternate route, not a hosting change. With no key the tab still works and renders the deterministic shortlist alone. One candidate costs about $0.00007 and returns in roughly 150–375ms.
+That one key is enough; direct TypeSafe serving is the default route and the Vercel AI Gateway (`AI_GATEWAY_API_KEY`) is an alternate route, not a hosting change. With no key the cards render exactly as they did before, from published evidence alone. One candidate costs about $0.00004 and returns in roughly 200ms, and enrichment runs once per refresh rather than per page view.
 
-The same source policy applies as everywhere else: SeatGeek-only material, Spotify Content and Spotify-derived preference evidence, EDMTrain payloads, and private context never reach the model. A candidate backed only by a restricted source still ranks, but is shown unnamed. Withheld evidence is listed as *not known* and never counted against a candidate. Schedule, travel, overlap, budget and window feasibility are always recomputed deterministically, an evening order is an option rather than a booking, and nothing here changes the canonical ranking, the published projection, or the learned taste profile.
+The same source policy applies as everywhere else: SeatGeek-only material, Spotify Content and Spotify-derived preference evidence, EDMTrain payloads, and private context never reach the model. A candidate backed only by a restricted source keeps its normal card and simply gains no enrichment. Withheld evidence is listed as *not known* and never counted against a candidate. Schedule, travel, budget and urgency stay deterministic, and nothing here changes the canonical ranking, the published projection, or the learned taste profile.
 
-Use `npm run nightlife:probe` to check the route end to end, and `npm run nightlife:shadow` to compare deterministic and inference-assisted shortlists side by side. See `docs/system-one-inference.md`.
+Use `npm run nightlife:probe` to check the route end to end, `npm run evaluation:nightlife` for the offline gold-set gate (no credentials or network needed), and `npm run nightlife:cards` to measure evidence coverage, claim support, latency and spend against the real projection. See `docs/system-one-inference.md`.
 
 ### Automation requirements
 

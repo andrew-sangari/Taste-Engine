@@ -1,7 +1,7 @@
 {
-  "normalizedProjectionSha256": "e9865158bd7d2d6d2c341dbe43ded6aae9b107b4abb01e50666235c6575d0fa6",
+  "normalizedProjectionSha256": "db3f5c7f87053175b119d6db8e48f6d9d570b5fd0049e6be56b1b48c3871f96d",
   "counts": {
-    "events": 9,
+    "events": 8,
     "sports": 3,
     "movies": 1
   },
@@ -15,8 +15,8 @@
     "mlb:9003"
   ],
   "deduplication": {
-    "inputCount": 14,
+    "inputCount": 13,
     "mergedCount": 3,
-    "canonicalCount": 11
+    "canonicalCount": 10
   }
 }

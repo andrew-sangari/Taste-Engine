@@ -6,8 +6,10 @@
 import {
   applyPitcherStats,
   buildExpandedArtistSnapshot,
+  buildSemanticEventInsight,
   buildOverviewBuckets,
   deduplicateCandidates,
+  enrichSemanticEventCards,
   enrichEventsWithEdmtrain,
   enrichMovieMetadata,
   enrichSportsGames,
@@ -17,6 +19,7 @@ import {
   fetchFrameworkArtists,
   fetchFrameworkEvents,
   fetchInsomniacEvents,
+  INSOMNIAC_ADAPTER_VERIFIED,
   fetchMlbPitcherStats,
   fetchMlbStandings,
   fetchSeatGeekEvents,
@@ -36,12 +39,15 @@ import {
   normalizeTicketmasterSportsEvent,
   normalizeTmdbMovie,
   rankCandidates,
+  readNightlifeConfig,
   resolveMovieVisual,
   resolveMusicVisual,
   resolveSeatGeekPerformers,
   resolveSportsVisual,
   scoreSportsGame,
   selectMovieCandidates,
+  summarizeEvidenceCoverage,
+  createDecisionInferenceProvider,
 } from "./deterministic-engine.js";
 import { buildHostedTasteProfile } from "./taste-profile.ts";
 import { applyHostedFeedbackAdjustments, applyHostedPersonalContext } from "./feedback-learning.ts";
@@ -211,11 +217,14 @@ export async function buildHostedProjection({
         .map((event) => normalizeFrameworkEvent(event, generatedAt)),
       warnings: [],
     })),
-    optionalSource(sourceHealth, "insomniac", true, async () => ({
-      items: array(await fetchInsomniacEvents({ startDate, endDate }))
-        .map((event) => normalizeInsomniacEvent(event, generatedAt)),
-      warnings: [],
-    })),
+    optionalSource(sourceHealth, "insomniac", true, async () => {
+      if (!INSOMNIAC_ADAPTER_VERIFIED) throw new Error("Insomniac parser is unverified.");
+      return {
+        items: array(await fetchInsomniacEvents({ startDate, endDate }))
+          .map((event) => normalizeInsomniacEvent(event, generatedAt)),
+        warnings: [],
+      };
+    }),
     optionalSource(sourceHealth, "edmtrain", config.brief.edmtrain.enabled && Boolean(process.env.EDMTRAIN_CLIENT_KEY), async () => ({
       items: await fetchEdmtrainEvents({
         clientKey: process.env.EDMTRAIN_CLIENT_KEY,
@@ -352,6 +361,26 @@ export async function buildHostedProjection({
     .filter((item) => record(item).vertical === "sports")
     .map((item) => String(record(item).id));
 
+  const semanticEnrichment = await enrichSemanticEventCards(ranked.map(record), {
+    provider: createDecisionInferenceProvider(readNightlifeConfig(process.env)),
+    now: generatedAt,
+    requiredIds: requiredMusicIds,
+    maxCandidates: 24,
+  });
+  sourceHealth.push({
+    source: "jev-events",
+    status: semanticEnrichment.telemetry.status === "assessed"
+      ? "active"
+      : semanticEnrichment.assessedCandidateCount > 0 ? "partial" : "unavailable",
+    itemCount: semanticEnrichment.enrichedCandidateCount,
+    warningCount: Math.max(0, semanticEnrichment.modelEligibleCandidateCount - semanticEnrichment.assessedCandidateCount),
+    details: {
+      evidenceCount: semanticEnrichment.enrichedCandidateCount,
+      modelEligibleCount: semanticEnrichment.modelEligibleCandidateCount,
+      assessedCount: semanticEnrichment.assessedCandidateCount,
+    },
+  });
+
   const musicAdvisory = await enhanceHostedMusic(
     ranked.map(record) as Array<Record<string, unknown> & { id: string }>,
     config.personalContext,
@@ -365,8 +394,14 @@ export async function buildHostedProjection({
   sourceHealth.push(advisoryHealth("ollama-events", musicAdvisory));
   sourceHealth.push(advisoryHealth("ollama-sports", sportsAdvisory));
 
-  const events = ranked.map((candidate) =>
-    toDisplayEvent(candidate, nonEmpty(musicAdvisory.byId.get(String(record(candidate).id)))));
+  const events = ranked.map((candidate) => {
+    const id = String(record(candidate).id);
+    return toDisplayEvent({
+      ...record(candidate),
+      semanticInsight: semanticEnrichment.byId.get(id) ?? null,
+      semanticAssessment: semanticEnrichment.assessmentById.get(id) ?? null,
+    }, nonEmpty(musicAdvisory.byId.get(id)));
+  });
   const sportsDisplay = array(sports).map((game) =>
     toDisplaySportsGame(game, nonEmpty(sportsAdvisory.byId.get(String(record(game).id)))));
   await attachFeedbackSnapshots(events, "music");
@@ -458,8 +493,15 @@ async function optionalSource(
   configured: boolean,
   callback: () => Promise<SourceResult & { value?: unknown }>,
 ): Promise<SourceResult & { value?: unknown }> {
+  const reportsEventEvidence = ["ticketmaster", "framework", "insomniac"].includes(source);
   if (!configured) {
-    health.push({ source, status: "not configured", itemCount: 0, warningCount: 0 });
+    health.push({
+      source,
+      status: "not configured",
+      itemCount: 0,
+      warningCount: 0,
+      ...(reportsEventEvidence ? { details: { evidenceCount: 0, modelEligibleCount: 0, fieldCoverage: {} } } : {}),
+    });
     return { items: [], warnings: [] };
   }
   try {
@@ -469,10 +511,17 @@ async function optionalSource(
       status: result.warnings.length ? "partial" : "active",
       itemCount: result.items.length,
       warningCount: result.warnings.length,
+      ...(reportsEventEvidence ? { details: summarizeEvidenceCoverage(result.items) } : {}),
     });
     return result;
   } catch {
-    health.push({ source, status: "unavailable", itemCount: 0, warningCount: 1 });
+    health.push({
+      source,
+      status: "unavailable",
+      itemCount: 0,
+      warningCount: 1,
+      ...(reportsEventEvidence ? { details: { evidenceCount: 0, modelEligibleCount: 0, fieldCoverage: {} } } : {}),
+    });
     return { items: [], warnings: [`${source} unavailable.`] };
   }
 }
@@ -546,6 +595,7 @@ function toDisplayEvent(candidateInput: unknown, localEnhancement: Record<string
     lineupDisplay: sanitizeLineup(candidate.lineupDisplay),
     visual: candidate.visual ?? resolveMusicVisual(candidate),
     ranking,
+    semanticInsight: candidate.semanticInsight ?? buildSemanticEventInsight(candidate, candidate.semanticAssessment ?? null),
     localEnhancement,
   };
 }

@@ -51,6 +51,9 @@ test("renders the complete frozen fixture and its source-health states", async (
   await expect(page.locator(".sourceHealthGroup")).toHaveCount(4);
   await expect(page.getByText("Synthetic Night Market + more")).toBeVisible();
   await expect(page.locator(".overviewCard h3").filter({ hasText: "Synthetic Projection" })).toBeVisible();
+  const overviewInsight = page.locator(".overviewCard").filter({ hasText: "Synthetic Night Market + more" }).locator(".semanticInsightCompact");
+  await expect(overviewInsight).toHaveCount(1);
+  await expect(overviewInsight).toContainText("Published format: an open-air lineup");
   expect(blockedExternalByPage.get(page)).toEqual([]);
 
   const visualState = await page.locator(".recommendationVisual").evaluateAll((elements) => elements.map((element) => ({
@@ -63,6 +66,18 @@ test("renders the complete frozen fixture and its source-health states", async (
   expect(visualState.some((visual) => visual.kind === "texture" && visual.hidden === "true" && visual.pointerEvents === "none")).toBeTruthy();
   expect(visualState.some((visual) => visual.kind === "image" && visual.role === "img" && visual.label)).toBeTruthy();
   await page.getByRole("tab", { name: "Music" }).click();
+  const eventInsight = page.locator(".eventCard").filter({ hasText: "Synthetic Night Market + more" }).locator(".semanticInsight");
+  await expect(eventInsight).toHaveCount(1);
+  await expect(eventInsight.locator(".semanticInsightClaim")).toHaveCount(3);
+  await expect(eventInsight.locator(".semanticInsightDetails")).not.toHaveAttribute("open", "");
+  await eventInsight.getByText("About this night").click();
+  await expect(eventInsight.locator(".semanticInsightDetails")).toHaveAttribute("open", "");
+  await expect(eventInsight.locator(".semanticEvidence")).not.toHaveAttribute("open", "");
+  await eventInsight.getByText("How do we know?").click();
+  await expect(eventInsight.locator(".semanticEvidence")).toHaveAttribute("open", "");
+  await expect(eventInsight.locator(".semanticEvidence")).toContainText("Framework");
+  const restrictedEvent = page.locator(".eventCard").filter({ hasText: "No Visual Set" });
+  await expect(restrictedEvent.locator(".semanticInsight")).toHaveCount(0);
   await expect(page.getByText("From $0")).toHaveCount(0);
   const musicVisualState = await page.locator(".recommendationVisual").evaluateAll((elements) => elements.map((element) => ({
     kind: element.getAttribute("data-kind"),
@@ -136,6 +151,7 @@ test("switches all tabs and preserves the ARIA tab contract", async ({ page }) =
   await visit(page);
   const tabs = page.getByRole("tab");
   await expect(tabs).toHaveCount(5);
+  await expect(page.getByRole("tab", { name: "Tonight" })).toHaveCount(0);
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
   await expect(page.locator('[role="tabpanel"]')).toHaveCount(1);
 
@@ -150,6 +166,13 @@ test("switches all tabs and preserves the ARIA tab contract", async ({ page }) =
     await expect(page.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
     expect(new URL(page.url()).hash).toBe(`#${label.toLowerCase()}`);
   }
+});
+
+test("does not restore the retired Tonight route", async ({ page, baseURL }) => {
+  await page.goto(`${new URL(baseURL).origin}/#tonight`, { waitUntil: "networkidle" });
+  await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".nightlifeForm")).toHaveCount(0);
+  await expect(page.locator(".nightlifeShortlist")).toHaveCount(0);
 });
 
 test("supports roving keyboard tabs, native activation, hash reload, and history", async ({ page }) => {
@@ -259,9 +282,10 @@ test("keeps links, controls, disclosures, and visuals accessible", async ({ page
   await fitSummary.focus();
   await fitSummary.press("Space");
   await expect(fitSummary).toBeFocused();
-  await expect(page.locator(".localTake details")).toHaveAttribute("open", "");
+  const fitDetails = fitSummary.locator("..");
+  await expect(fitDetails).toHaveAttribute("open", "");
   await fitSummary.press("Space");
-  await expect(page.locator(".localTake details")).not.toHaveAttribute("open", "");
+  await expect(fitDetails).not.toHaveAttribute("open", "");
 });
 
 test("keeps card planning actions behind one disclosure in every vertical", async ({ page }) => {

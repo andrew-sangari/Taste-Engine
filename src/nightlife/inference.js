@@ -1,4 +1,5 @@
 import { sanitizeErrorMessage } from '../diagnostics.js';
+import { EVENT_EVIDENCE_SCHEMA_VERSION } from '../eventEvidence.js';
 import {
   DECISION_SCHEMA_VERSION,
   assessmentFromAnswers,
@@ -72,17 +73,23 @@ export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch
       }
 
       const safeContext = serializeContext(context);
-      const questions = buildQuestionSet();
       const deadline = started + deadlineMs;
       const pending = [];
 
       for (const input of requested) {
+        const questions = buildQuestionSet({ input });
+        const evidenceMode = Object.keys(input.fields?.publishedFacts ?? {}).length > 0;
         const key = assessmentCacheKey({
           candidateRevision: input.revision ?? null,
-          input: input.fields,
-          context: safeContext,
+          input: evidenceMode
+            ? { publishedFacts: input.fields.publishedFacts, knownUnknowns: input.fields.knownUnknowns }
+            : input.fields,
+          context: evidenceMode ? null : safeContext,
           schemaVersion: DECISION_SCHEMA_VERSION,
           promptVersion: QUESTION_SET_VERSION,
+          questionIds: Object.keys(questions),
+          evidenceSchemaVersion: EVENT_EVIDENCE_SCHEMA_VERSION,
+          criteriaVersion: QUESTION_SET_VERSION,
           provider: adapter.name,
           model: adapter.model
         });
@@ -92,10 +99,11 @@ export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch
           assessments.set(input.ref, { ...cached, cached: true });
           continue;
         }
-        pending.push({ input, key });
+        pending.push({ input, key, questions, evidenceMode });
       }
 
-      await runWithConcurrency(pending, concurrency, async ({ input, key }) => {
+      await runWithConcurrency(pending, concurrency, async ({ input, key, questions, evidenceMode }) => {
+        if (!Object.keys(questions).length) return;
         if (Date.now() >= deadline) {
           telemetry.deadlineSkipped += 1;
           return;
@@ -105,7 +113,15 @@ export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch
           return;
         }
 
-        const state = { request: safeContext, candidate: { ref: input.ref, restricted: input.restricted, ...withoutRef(input.fields) } };
+        const state = evidenceMode
+          ? {
+            event: {
+              ref: input.ref,
+              published: input.fields.publishedFacts,
+              missing: input.fields.knownUnknowns ?? []
+            }
+          }
+          : { request: safeContext, candidate: { ref: input.ref, restricted: input.restricted, ...withoutRef(input.fields) } };
         assertNoRestrictedEvidence(state);
 
         let result = null;

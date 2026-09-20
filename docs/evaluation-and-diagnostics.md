@@ -6,6 +6,7 @@ Commands:
 
 - `npm test` runs the root suite without credentials or network access.
 - `npm run evaluation:fixtures -- --json` runs the fixture pipeline with deterministic model fallback. Use `--model valid`, `timeout`, `malformed`, `unsupported`, or `ranking-mutation` to exercise model paths. Use `--output <path>` to write a normalized comparison projection.
+- `node scripts/evaluate-nightlife-enrichment.js` runs the credential-free Phase E card-enrichment gate against the 24-case source-diverse fixture. Add `--json` for machine-readable metrics or `--observation <key>` for another injected observation set.
 - `npm run projection:diff -- before.json after.json` prints a human report followed by machine-readable JSON. `--json-out <path>` writes pure JSON, and `--max-added`, `--max-removed`, and `--max-count-change` configure material-change thresholds.
 - `npm run taste:explain -- --event-id <canonical-id>` reads the private build report and prints a summarized deterministic trace.
 - `npm run build:site` remains the explicit live refresh/build path. It does not publish or promote a site.

@@ -1,4 +1,5 @@
 import { normalizeArtistName } from './ranking.js';
+import { createEvidenceFact, createEventEvidence, meaningfulClassifications } from './eventEvidence.js';
 
 const API_URL = 'https://app.ticketmaster.com/discovery/v2/events.json';
 
@@ -108,32 +109,176 @@ export function normalizeTicketmasterEvent(event, retrievedAt = new Date()) {
   const attractions = event._embedded?.attractions ?? [];
   const localDate = event.dates?.start?.localDate ?? null;
   const localTime = event.dates?.start?.localTime ?? null;
+  const retrieved = new Date(retrievedAt).toISOString();
+  const sourceEventId = String(event.id);
+  const sourceUrl = String(event.url ?? '');
+  const title = cleanText(event.name);
+  const startLocal = localDate ? `${localDate}T${localTime || '00:00:00'}` : null;
+  const startUtc = event.dates?.start?.dateTime ?? null;
+  const doorsUtc = event.dates?.start?.doorsDateTime ?? null;
+  const endUtc = event.dates?.end?.dateTime ?? null;
+  const doorsLocal = event.dates?.start?.doorsLocalDate && event.dates?.start?.doorsLocalTime
+    ? `${event.dates.start.doorsLocalDate}T${event.dates.start.doorsLocalTime}`
+    : null;
+  const endLocal = event.dates?.end?.localDate
+    ? `${event.dates.end.localDate}T${event.dates.end.localTime || '00:00:00'}`
+    : null;
+  const classifications = ticketmasterClassifications(event);
+  const namedLineup = attractions.map((attraction) => cleanText(attraction.name)).filter(Boolean);
+  const description = [event.info, event.pleaseNote].map(cleanText).filter(Boolean).join(' ');
+  const venueInfo = {
+    name: cleanText(venue.name),
+    city: cleanText(venue.city?.name),
+    state: cleanText(venue.state?.stateCode ?? venue.state?.name),
+    accessibility: cleanText(venue.accessibility?.info ?? venue.accessibility?.ticketLimit)
+  };
+  const eventEvidence = createEventEvidence({
+    eventRef: `ticketmaster:${sourceEventId}`,
+    provider: 'ticketmaster',
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    facts: {
+      title: createEvidenceFact({
+        value: title,
+        field: 'title',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      description: createEvidenceFact({
+        value: description,
+        field: 'description',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        assertionKind: 'descriptive-copy',
+        permission: { internalUse: true, display: true, modelInput: false, persist: true }
+      }),
+      classification: createEvidenceFact({
+        value: classifications,
+        field: 'classification',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      namedLineup: createEvidenceFact({
+        value: namedLineup,
+        field: 'namedLineup',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      format: createEvidenceFact({
+        value: event.eventType ?? event.format ?? null,
+        field: 'format',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      doorTime: createEvidenceFact({
+        value: doorsLocal ?? doorsUtc,
+        field: 'doorTime',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      startTime: createEvidenceFact({
+        value: { local: startLocal, utc: startUtc },
+        field: 'startTime',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      endTime: createEvidenceFact({
+        value: endLocal ?? endUtc,
+        field: 'endTime',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      venueInfo: createEvidenceFact({
+        value: venueInfo,
+        field: 'venueInfo',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      }),
+      agePolicy: createEvidenceFact({
+        value: event.ageRestrictions?.legalAge ?? event.ageRestrictions?.description ?? null,
+        field: 'agePolicy',
+        provider: 'ticketmaster',
+        sourceEventId,
+        sourceUrl,
+        retrievedAt: retrieved,
+        permission: { internalUse: true, display: true, modelInput: true, persist: true }
+      })
+    }
+  });
+  const sourceOccurrence = {
+    source: 'ticketmaster',
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    title,
+    startLocal,
+    venue: {
+      sourceId: venue.id ? String(venue.id) : null,
+      name: cleanText(venue.name),
+      city: cleanText(venue.city?.name),
+      state: cleanText(venue.state?.stateCode ?? venue.state?.name),
+      lat: numberOrNull(venue.location?.latitude),
+      lon: numberOrNull(venue.location?.longitude)
+    },
+    performerNames: namedLineup,
+    evidence: eventEvidence
+  };
   return {
     schemaVersion: 1,
-    id: `ticketmaster:${event.id}`,
+    id: `ticketmaster:${sourceEventId}`,
     source: 'ticketmaster',
-    sourceEventId: String(event.id),
-    sourceUrl: String(event.url ?? ''),
-    sourceOccurrences: [{ source: 'ticketmaster', sourceEventId: String(event.id), sourceUrl: String(event.url ?? '') }],
-    retrievedAt: new Date(retrievedAt).toISOString(),
-    title: String(event.name ?? '').trim(),
+    sourceEventId,
+    sourceUrl,
+    sourceOccurrences: [sourceOccurrence],
+    eventEvidence,
+    retrievedAt: retrieved,
+    title,
     type: 'concert',
-    startLocal: localDate ? `${localDate}T${localTime || '00:00:00'}` : null,
-    startUtc: event.dates?.start?.dateTime ?? null,
+    startLocal,
+    startUtc,
+    doorsLocal,
+    endLocal,
     timeTbd: Boolean(event.dates?.start?.timeTBA || !localTime),
     dateTbd: Boolean(event.dates?.start?.dateTBA || !localDate),
     status: event.dates?.status?.code ?? 'scheduled',
     venue: {
       sourceId: venue.id ? String(venue.id) : null,
-      name: String(venue.name ?? '').trim(),
-      city: String(venue.city?.name ?? '').trim(),
-      state: String(venue.state?.stateCode ?? venue.state?.name ?? '').trim(),
+      name: cleanText(venue.name),
+      city: cleanText(venue.city?.name),
+      state: cleanText(venue.state?.stateCode ?? venue.state?.name),
       lat: numberOrNull(venue.location?.latitude),
       lon: numberOrNull(venue.location?.longitude)
     },
     performers: attractions.map((attraction, index) => ({
       sourceId: attraction.id ? String(attraction.id) : null,
-      name: String(attraction.name ?? '').trim(),
+      name: cleanText(attraction.name),
       primary: index === 0,
       spotifyId: null
     })).filter((performer) => performer.name),
@@ -144,6 +289,29 @@ export function normalizeTicketmasterEvent(event, retrievedAt = new Date()) {
       observedAt: new Date(retrievedAt).toISOString()
     }
   };
+}
+
+function ticketmasterClassifications(event) {
+  const values = [];
+  for (const classification of event.classifications ?? []) {
+    for (const key of ['segment', 'genre', 'subGenre', 'type', 'subType']) {
+      const value = cleanText(classification?.[key]?.name);
+      if (value) values.push(value);
+    }
+  }
+  return meaningfulClassifications(values, { provider: 'ticketmaster' });
+}
+
+function cleanText(value) {
+  return String(value ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1200);
 }
 
 async function requestJson(url, fetchImpl) {

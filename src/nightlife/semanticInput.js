@@ -1,9 +1,17 @@
 import { classifyEventType } from '../eventEnhancement.js';
+import {
+  buildEventEvidence,
+  serializeEventEvidenceForModel
+} from '../eventEvidence.js';
+
+export const SEMANTIC_INPUT_SCHEMA_VERSION = 2;
 
 // Providers whose normalized fields may be named in model input. SeatGeek is
 // deliberately absent: a SeatGeek-only occurrence contributes coarse derived
 // timing and nothing else. EDMTrain is enrichment-only and never appears here.
-export const PERMITTED_EVIDENCE_PROVIDERS = ['ticketmaster', 'framework', 'insomniac'];
+// Insomniac remains excluded until its live extractor passes the independent
+// verification gate; parser-shaped fixture data is not production evidence.
+export const PERMITTED_EVIDENCE_PROVIDERS = ['ticketmaster', 'framework'];
 
 // Field-level provenance. Every field the serializer can emit declares where its
 // value came from, so a leak is a test failure rather than a code review guess.
@@ -21,6 +29,7 @@ export const FIELD_PROVENANCE = {
   city: 'permitted-provider',
   namedPerformerCount: 'permitted-provider',
   advertisedPriceUsd: 'permitted-provider',
+  publishedFacts: 'permitted-provider',
   travelMinutesEstimate: 'derived',
   adjacentEvidence: 'derived',
   knownUnknowns: 'derived'
@@ -56,17 +65,31 @@ export function nightlifeEvidenceFor(candidate) {
   // toward restricted whenever provenance cannot be established.
   if (!occurrences.length && Array.isArray(candidate.sources)) return evidenceFromPublishedRow(candidate);
   const sources = new Set(occurrences.map((occurrence) => occurrence.source));
-  const permitted = occurrences.find((occurrence) => PERMITTED_EVIDENCE_PROVIDERS.includes(occurrence.source)) ?? null;
-  const venue = permitted?.venue ?? null;
+  const evidence = buildEventEvidence(candidate);
+  const facts = evidence.permittedFacts ?? {};
+  const permittedProviders = [...new Set(Object.values(facts)
+    .map((fact) => fact?.provider)
+    .filter((provider) => PERMITTED_EVIDENCE_PROVIDERS.includes(provider)))];
+  for (const occurrence of occurrences) {
+    if (PERMITTED_EVIDENCE_PROVIDERS.includes(occurrence.source)) permittedProviders.push(occurrence.source);
+  }
+  const uniquePermittedProviders = [...new Set(permittedProviders)];
+  const permitted = occurrences.find((occurrence) => uniquePermittedProviders.includes(occurrence.source)) ?? null;
+  const venueFact = facts.venueInfo?.value;
+  const venue = permitted?.venue ?? (venueFact && typeof venueFact === 'object' ? venueFact : null);
+  const title = facts.title?.value ?? permitted?.title ?? null;
+  const namedLineup = Array.isArray(facts.namedLineup?.value)
+    ? facts.namedLineup.value
+    : (permitted?.performerNames ?? []);
   const price = candidate.ticketObservation?.lowestPriceUsd;
   return {
-    restricted: !permitted,
-    provider: permitted?.source ?? null,
-    title: permitted?.title ?? null,
+    restricted: !uniquePermittedProviders.length,
+    provider: uniquePermittedProviders[0] ?? permitted?.source ?? null,
+    title,
     venueName: venue?.name ?? null,
     city: venue?.city ?? null,
     venuePoint: Number.isFinite(venue?.lat) && Number.isFinite(venue?.lon) ? { lat: venue.lat, lon: venue.lon } : null,
-    namedPerformerCount: (permitted?.performerNames ?? []).filter(Boolean).length,
+    namedPerformerCount: namedLineup.filter(Boolean).length,
     // Quoted only when no restricted provider contributed to the merged
     // ticket observation at all.
     advertisedPriceUsd: !sources.has('seatgeek') && Number.isFinite(price) ? Math.round(price) : null,
@@ -126,6 +149,9 @@ export function buildSemanticCandidateInput(candidate, { ref, now = new Date(), 
   // Prefer evidence decided at export time; fall back to deriving it when the
   // full candidate with its source occurrences is in hand.
   const evidence = candidate.nightlifeEvidence ?? nightlifeEvidenceFor(candidate);
+  const fullEvidence = evidence.eventEvidence ?? buildEventEvidence(candidate);
+  const serializedModelEvidence = serializeEventEvidenceForModel(fullEvidence);
+  const modelPublishedFacts = evidence.publishedFacts ?? serializedModelEvidence.publishedFacts;
   const restricted = evidence.restricted;
   const start = candidate.startLocal ? new Date(candidate.startLocal) : null;
   const hasTime = Boolean(start && !Number.isNaN(start.getTime()) && !candidate.timeTbd);
@@ -137,6 +163,13 @@ export function buildSemanticCandidateInput(candidate, { ref, now = new Date(), 
     dayOfWeek: start ? weekday(start) : 'unknown',
     startPeriod: startPeriodFor(start, candidate.timeTbd)
   };
+
+  // Rich evidence is carried only after field-level rights filtering. The
+  // model receives values, not source URLs or provider payloads; opaque refs
+  // remain available for deterministic diagnostics and cache invalidation.
+  if (!restricted && Object.keys(modelPublishedFacts).length) {
+    fields.publishedFacts = modelPublishedFacts;
+  }
 
   if (!restricted) {
     // Exact clock time, venue identity, and title are only quoted when an
@@ -158,15 +191,22 @@ export function buildSemanticCandidateInput(candidate, { ref, now = new Date(), 
   // "this reached the shortlist through a similarity or promoter path" without
   // naming any playlist, artist, rank, or affinity.
   fields.adjacentEvidence = evidence.adjacentEvidence ?? [];
-  fields.knownUnknowns = knownUnknownsFor({ restricted, hasTime, evidence, fields });
+  fields.knownUnknowns = [...new Set([
+    ...knownUnknownsFor({ restricted, hasTime, evidence, fields }),
+    ...serializedModelEvidence.knownUnknowns
+  ])];
 
   const input = {
     ref,
     restricted,
     fields,
-    evidenceRefs: Object.keys(fields)
+    evidenceRefs: [
+      ...Object.keys(fields)
       .filter((key) => key !== 'ref' && key !== 'knownUnknowns')
-      .map((key) => `${ref}/${key}`)
+      .filter((key) => key !== 'publishedFacts')
+      .map((key) => `${ref}/${key}`),
+      ...Object.keys(fields.publishedFacts ?? {}).map((field) => `${ref}/publishedFacts/${field}`)
+    ]
   };
   assertFieldProvenance(fields);
   return input;
@@ -183,10 +223,23 @@ export function buildSemanticRequest(candidates, context, { now = new Date() } =
     startArea: context?.startArea ?? null,
     transport: context?.transport ?? 'drive'
   }));
+  const evidenceOnly = inputs.length > 0 && inputs.every((input) => Object.keys(input.fields?.publishedFacts ?? {}).length > 0);
   const payload = {
-    schemaVersion: 1,
-    context: serializeContext(context),
-    candidates: inputs.map(({ ref, restricted, fields }) => ({ ref, restricted, ...omitRef(fields) }))
+    schemaVersion: SEMANTIC_INPUT_SCHEMA_VERSION,
+    ...(evidenceOnly ? {} : { context: serializeContext(context) }),
+    candidates: inputs.map((input) => {
+      const { ref, restricted, fields } = input;
+      if (Object.keys(fields?.publishedFacts ?? {}).length) {
+        return {
+          event: {
+            ref,
+            published: fields.publishedFacts,
+            missing: fields.knownUnknowns ?? []
+          }
+        };
+      }
+      return { ref, restricted, ...omitRef(fields) };
+    })
   };
   assertNoRestrictedEvidence(payload);
   return { payload, inputs };
@@ -257,14 +310,17 @@ export function assertFieldProvenance(fields) {
 
 function knownUnknownsFor({ restricted, hasTime, evidence, fields }) {
   const unknowns = [];
-  // No permitted provider publishes a scheduled end time or a venue's real
-  // closing hour, so late-night viability is always an open question.
-  unknowns.push('end-time', 'closing-hours', 'after-hours');
+  // A venue's real closing hour remains unknown even when an event publishes
+  // an end time. An event end is evidence about that event only.
+  if (!fields.publishedFacts?.endTime) unknowns.push('end-time');
+  unknowns.push('closing-hours', 'after-hours');
   if (!hasTime) unknowns.push('capacity');
   if (restricted || !fields.namedPerformerCount) unknowns.push('lineup');
   if (restricted) unknowns.push('genre', 'neighborhood');
+  else if (!fields.publishedFacts?.classification && !fields.publishedFacts?.description) unknowns.push('genre');
   else if (!evidence?.city) unknowns.push('neighborhood');
-  unknowns.push('age-policy', 'ticket-availability');
+  if (!fields.publishedFacts?.agePolicy) unknowns.push('age-policy');
+  unknowns.push('ticket-availability');
   if (fields.advertisedPriceUsd == null) unknowns.push('cover-price');
   return [...new Set(unknowns)];
 }
