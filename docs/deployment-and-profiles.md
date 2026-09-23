@@ -52,8 +52,13 @@ npm run verify:release
 - the Worker entry point exists;
 - packaged Sites hosting metadata exactly matches the tracked declaration;
 - every tracked D1 migration is included in the package;
-- application identity is embedded; and
-- obvious secret assignments are absent from the bundle.
+- application identity is embedded;
+- obvious secret assignments are absent from the bundle, including the inference keys `TYPESAFE_AI_API_KEY` and `AI_GATEWAY_API_KEY`; and
+- every web font is served as a packaged `/assets/` file that exists in the build.
+
+The font check guards a silent failure. Fonts are fetched at build time into the gitignored `site/.vinext` cache, whose CSS records the absolute path it was created at. A cache carried across a moved or copied checkout keeps pointing at the old location, the build ships those raw paths as font URLs, every font 404s, and the site falls back to a system typeface with no error. A clean checkout is unaffected, but a working-tree build — including the local recovery producer — is not. If the check fails, delete `site/.vinext` and rebuild.
+
+Screenshot baselines must be recorded from a build that passes this check. Baselines captured while the fonts were 404ing encode a fallback typeface and will fail against every correct build.
 
 Run the browser suites sequentially because both use `site/dist`:
 

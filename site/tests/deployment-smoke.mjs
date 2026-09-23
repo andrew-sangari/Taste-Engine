@@ -27,15 +27,28 @@ if (expectedRelease.sourceState === "dirty") {
   assert.match(expectedRelease.release, /\.dirty$/, "dirty source trees must never masquerade as clean releases");
   assert.equal(expectedRelease.releasable, false);
 }
-for (const forbidden of ["SPOTIFY_TOKEN_ENCRYPTION_KEY=", "TASTE_REFRESH_SECRET=", "OLLAMA_API_KEY="]) {
+for (const forbidden of ["SPOTIFY_TOKEN_ENCRYPTION_KEY=", "TASTE_REFRESH_SECRET=", "OLLAMA_API_KEY=", "TYPESAFE_AI_API_KEY=", "AI_GATEWAY_API_KEY="]) {
   assert.doesNotMatch(serverBundle, new RegExp(forbidden), `the release bundle must not contain ${forbidden}`);
 }
-for (const serverOnlyName of ["SPOTIFY_TOKEN_ENCRYPTION_KEY", "TASTE_REFRESH_SECRET", "refresh_token", "access_token"]) {
+for (const serverOnlyName of ["SPOTIFY_TOKEN_ENCRYPTION_KEY", "TASTE_REFRESH_SECRET", "TYPESAFE_AI_API_KEY", "AI_GATEWAY_API_KEY", "refresh_token", "access_token"]) {
   assert.equal(clientBundle.includes(serverOnlyName), false, `client assets must not contain server-only identifier ${serverOnlyName}`);
 }
 
+// Fonts are fetched at build time into a gitignored cache whose CSS records the
+// absolute filesystem path it was created at. A cache carried across a moved or
+// copied checkout keeps pointing at the old location, and the build then ships
+// those raw paths as font URLs: every font 404s and the site silently falls back
+// to a system typeface. Clean checkouts are unaffected, but a working-tree
+// recovery build is not, so this is a hard release stop rather than a warning.
+const fontUrls = [...`${serverBundle}\n${clientBundle}`.matchAll(/url\(\s*['"]?([^'")]+?\.woff2)['"]?\s*\)/g)].map((match) => match[1]);
+assert.ok(fontUrls.length > 0, "the release bundle must declare its web fonts");
+for (const url of new Set(fontUrls)) {
+  assert.match(url, /^\/assets\//, `font URL must be a packaged asset, not a build-machine path: ${url} (delete site/.vinext and rebuild)`);
+  await assertFile(resolve(distRoot, "client", url.slice(1)));
+}
+
 const sqlMigrationCount = sourceMigrations.filter((path) => path.endsWith(".sql")).length;
-console.log(`Deployment smoke passed: ${sqlMigrationCount} SQL migrations and a complete Worker bundle.`);
+console.log(`Deployment smoke passed: ${sqlMigrationCount} SQL migrations, ${new Set(fontUrls).size} packaged fonts, and a complete Worker bundle.`);
 
 async function assertFile(path) {
   const details = await stat(path);
