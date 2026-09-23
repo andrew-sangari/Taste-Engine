@@ -13,6 +13,10 @@ test("complete hosted pipeline isolates sources and produces a publishable schem
     "TMDB_ACCESS_TOKEN",
     "OLLAMA_API_KEY",
     "OLLAMA_MODEL",
+    "TYPESAFE_AI_API_KEY",
+    "TYPESAFE_API_KEY",
+    "AI_GATEWAY_API_KEY",
+    "NIGHTLIFE_INFERENCE_PROVIDER",
   ].map((key) => [key, process.env[key]]));
   process.env.TASTE_ENGINE_CONFIG_JSON = JSON.stringify({
     brief: {
@@ -61,6 +65,9 @@ test("complete hosted pipeline isolates sources and produces a publishable schem
   process.env.TMDB_ACCESS_TOKEN = "tmdb";
   delete process.env.OLLAMA_API_KEY;
   delete process.env.OLLAMA_MODEL;
+  // Inference must be absent here regardless of the developer's shell, so the
+  // test proves the hosted refresh publishes without it.
+  for (const key of ["TYPESAFE_AI_API_KEY", "TYPESAFE_API_KEY", "AI_GATEWAY_API_KEY", "NIGHTLIFE_INFERENCE_PROVIDER"]) delete process.env[key];
 
   globalThis.fetch = async (input) => {
     const url = new URL(input instanceof Request ? input.url : input);
@@ -144,6 +151,14 @@ test("complete hosted pipeline isolates sources and produces a publishable schem
     assert.equal(result.projection.events[0].sources.includes("ticketmaster"), true);
     assert.equal(result.projection.eventEnhancement.mode, "deterministic");
     assert.ok(result.sourceHealth.some((source) => source.source === "edmtrain" && source.status === "active"));
+    // With no inference credential the hosted refresh still publishes, and the
+    // row reads as configuration rather than an outage.
+    const jev = result.sourceHealth.find((source) => source.source === "jev-events");
+    assert.ok(jev, "hosted refresh must report jev-events source health");
+    assert.equal(jev.status, "not configured");
+    // Raw assessments carry provider probabilities and must never be published.
+    assert.equal(JSON.stringify(result.projection).includes("semanticAssessment"), false);
+    assert.equal(JSON.stringify(result.projection).includes("probabilities"), false);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(priorEnv)) {

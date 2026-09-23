@@ -1,21 +1,25 @@
 import { loadEnv } from '../env.js';
+import { normalizeTicketmasterEvent } from '../ticketmaster.js';
 import { describeNightlifeConfig, nightlifeInferenceConfigured, readNightlifeConfig } from '../nightlife/config.js';
-import { createGatewayProvider } from '../nightlife/providers/gateway.js';
-import { createDirectServingProvider } from '../nightlife/providers/directServing.js';
+import { createDecisionInferenceProvider } from '../nightlife/inference.js';
+import { buildSemanticRequest } from '../nightlife/semanticInput.js';
 import { buildQuestionSet } from '../nightlife/questions.js';
-import { assessmentFromAnswers, validateAnswerEnvelope } from '../nightlife/decisionSchema.js';
 
 /**
  * The design spike, as a command.
  *
- * Sends one synthetic candidate through the configured route and prints what
- * actually came back: the versioned model that answered, real latency, real
- * token spend, and whether the answers survive our own validation. This exists
- * because the Gateway's wire format for evaluation-type models is not publicly
- * documented — assume nothing, measure it.
+ * Runs one synthetic event through exactly the path production uses — adapter
+ * normalization, field-level evidence, the model-input serializer, per-event
+ * question composition, and the inference orchestrator — then prints what came
+ * back: the versioned model that answered, real latency, real spend, and
+ * whether the answers survive validation.
  *
- * The candidate is synthetic on purpose, so the probe touches no real source
- * data and can be run against an unfamiliar route safely.
+ * Driving the real orchestrator rather than hand-building a request is the
+ * point. A probe that assembles its own payload drifts silently when the
+ * contract changes; this one fails the moment production would.
+ *
+ * The event is synthetic on purpose, so the probe touches no real source data,
+ * no private context, and no restricted provider.
  */
 loadEnv();
 
@@ -26,88 +30,75 @@ console.log(`Model      ${described.model ?? '—'}`);
 console.log(`Base URL   ${described.baseUrl ?? '—'}`);
 
 if (!nightlifeInferenceConfigured(config)) {
-  console.error('\nNot configured. Set NIGHTLIFE_INFERENCE_PROVIDER and the matching API key.');
+  console.error('\nNot configured. Set the matching API key, or NIGHTLIFE_INFERENCE_PROVIDER explicitly.');
+  console.error('  direct:  TYPESAFE_AI_API_KEY');
   console.error('  gateway: AI_GATEWAY_API_KEY');
-  console.error('  direct:  TYPESAFE_API_KEY');
   process.exitCode = 1;
 } else {
-  const adapter = config.provider === 'gateway'
-    ? createGatewayProvider({ ...config.gateway, timeoutMs: config.requestTimeoutMs })
-    : createDirectServingProvider({ ...config.direct, timeoutMs: config.requestTimeoutMs });
+  const now = new Date();
+  const event = normalizeTicketmasterEvent(syntheticTicketmasterEvent(now), now);
+  event.ranking = { utility: 60 };
+  const { inputs } = buildSemanticRequest([event], {}, { now });
+  const questions = buildQuestionSet({ input: inputs[0] });
 
-  // A synthetic candidate in exactly the serializer's shape. No real event, no
-  // real source data, no private context.
-  const input = {
-    ref: 'probe-1',
-    restricted: false,
-    fields: {
-      ref: 'probe-1',
-      eventType: 'dj set',
-      daysUntil: 2,
-      dayOfWeek: 'Saturday',
-      startPeriod: 'late',
-      startClock: '23:00',
-      providerContext: 'ticketmaster',
-      eventTitle: 'Probe Event',
-      venueName: 'Probe Venue',
-      city: 'Los Angeles',
-      neighborhood: 'Downtown / Arts District',
-      namedPerformerCount: 2,
-      adjacentEvidence: ['similar'],
-      travelMinutesEstimate: 18,
-      knownUnknowns: ['end-time', 'closing-hours', 'after-hours', 'age-policy', 'ticket-availability', 'cover-price']
-    },
-    evidenceRefs: ['probe-1/eventTitle', 'probe-1/venueName', 'probe-1/startClock']
-  };
-  const state = {
-    request: {
-      goal: 'A late electronic night downtown that can run past 2am',
-      date: '2026-09-26',
-      latestReturn: '03:00',
-      startArea: 'Downtown / Arts District',
-      transport: 'drive',
-      lateNightIntent: 'out late'
-    },
-    candidate: { ref: input.ref, restricted: false, ...withoutRef(input.fields) }
-  };
-
-  try {
-    const started = Date.now();
-    const result = await adapter.evaluate({ state, questions: buildQuestionSet() });
-    const elapsed = Date.now() - started;
-
-    console.log(`\nReached the route in ${elapsed}ms (transport reported ${result.latencyMs}ms).`);
-    console.log(`Answered by ${result.model}.`);
-    console.log(`Tokens     in ${result.usage.inputTokens ?? '—'} / out ${result.usage.outputTokens ?? '—'}`);
-    if (Number.isInteger(result.usage.inputTokens)) {
-      console.log(`Cost       $${(result.usage.inputTokens * 42 / 1e9).toFixed(8)} for this one candidate`);
-    }
-
-    validateAnswerEnvelope(result.answers, { expectedQuestionIds: Object.keys(buildQuestionSet()) });
-    const assessment = assessmentFromAnswers(result.answers, { candidateRef: input.ref, input });
-    console.log('\nValidated assessment:');
-    console.log(`  contextFit          ${assessment.contextFit} (${assessment.certainty.contextFit})`);
-    console.log(`  musicAtmosphereFit  ${assessment.musicAtmosphereFit} (${assessment.certainty.musicAtmosphereFit})`);
-    console.log(`  lateNightFit        ${assessment.lateNightFit} (${assessment.certainty.lateNightFit})`);
-    console.log(`  novelty             ${assessment.novelty} (${assessment.certainty.novelty})`);
-    console.log(`  frictionFlags       ${assessment.frictionFlags.join(', ') || 'none'}`);
-    console.log(`  reason              ${assessment.reason}`);
-    console.log('\nRaw signals:');
-    for (const [question, signal] of Object.entries(assessment.signals)) {
-      console.log(`  ${question.padEnd(22)} ${JSON.stringify(signal)}`);
-    }
-    console.log('\nThe route works and the decision contract holds.');
-  } catch (error) {
-    console.error(`\nProbe failed: ${error.message}`);
-    if (error.status) console.error(`HTTP status: ${error.status}`);
-    console.error('\nIf the route rejected the body, the Gateway may wrap evaluation requests');
-    console.error('differently from the native API. Adjust src/nightlife/providers/gateway.js');
-    console.error('and update docs/system-one-inference.md with what it actually expects.');
+  if (!Object.keys(questions).length) {
+    // An empty question set means the evidence contract and the question
+    // composer disagree. Sending it would only earn a 422, so stop here with
+    // the reason instead.
+    console.error('\nProbe composed no questions from the synthetic event.');
+    console.error(`Model-transmittable facts: ${Object.keys(inputs[0].fields.publishedFacts ?? {}).join(', ') || 'none'}`);
+    console.error('The serializer and buildQuestionSet have drifted apart; fix that before calling any route.');
     process.exitCode = 1;
+  } else {
+    console.log(`Questions  ${Object.keys(questions).join(', ')}`);
+    const provider = createDecisionInferenceProvider({ ...config, maxAttempts: 1 });
+    const { assessments, telemetry } = await provider.assessCandidates(inputs, {}, { refreshCache: true });
+    const assessment = assessments.get(inputs[0].ref);
+
+    if (!assessment) {
+      console.error(`\nProbe failed: ${telemetry.errors[0] ?? telemetry.status}`);
+      if (config.provider === 'gateway') {
+        console.error('\nThe Gateway answers `customer_verification_required` until a card is on file for');
+        console.error('the Vercel team. Other rejections mean its wire format differs from the native API;');
+        console.error('adjust src/nightlife/providers/gateway.js and record what it expects in');
+        console.error('docs/system-one-inference.md.');
+      }
+      process.exitCode = 1;
+    } else {
+      console.log(`\nAnswered by ${telemetry.resolvedModels.join(', ') || described.model}.`);
+      console.log(`Latency    ${telemetry.latencyMsMedian}ms`);
+      console.log(`Tokens     in ${telemetry.inputTokens ?? '—'} / out ${telemetry.outputTokens ?? '—'}`);
+      if (telemetry.costUsd != null) console.log(`Cost       $${telemetry.costUsd.toFixed(8)} for this one candidate`);
+
+      console.log('\nValidated assessment:');
+      for (const [field, band] of Object.entries(assessment.certainty ?? {})) {
+        console.log(`  ${field.padEnd(22)} ${String(assessment[field]).padEnd(24)} (${band})`);
+      }
+      console.log(`  ${'reason'.padEnd(22)} ${assessment.reason}`);
+      console.log('\nRaw signals (provider-scoped diagnostics, never rendered):');
+      for (const [question, signal] of Object.entries(assessment.signals ?? {})) {
+        console.log(`  ${question.padEnd(22)} ${JSON.stringify(signal)}`);
+      }
+      console.log('\nThe route works and the decision contract holds.');
+    }
   }
 }
 
-function withoutRef(fields) {
-  const { ref: _ref, ...rest } = fields;
-  return rest;
+// A plausible Ticketmaster Discovery payload with classification, lineup and a
+// published start, dated a few days out so it is always a future event.
+function syntheticTicketmasterEvent(now) {
+  const date = new Date(now);
+  date.setDate(date.getDate() + 5);
+  const localDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return {
+    id: 'probe-synthetic',
+    name: 'Probe Night: Open to Close',
+    url: 'https://www.ticketmaster.com/event/probe-synthetic',
+    dates: { start: { localDate, localTime: '22:00:00' }, status: { code: 'onsale' } },
+    classifications: [{ segment: { name: 'Music' }, genre: { name: 'Dance/Electronic' }, subGenre: { name: 'House' } }],
+    _embedded: {
+      venues: [{ id: 'probe-venue', name: 'Probe Hall', city: { name: 'Los Angeles' }, state: { stateCode: 'CA' }, location: { latitude: '34.04', longitude: '-118.24' } }],
+      attractions: [{ id: 'probe-artist', name: 'Probe Artist' }]
+    }
+  };
 }

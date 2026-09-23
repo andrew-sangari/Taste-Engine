@@ -228,3 +228,29 @@ test('a classification that only restates the vertical is not rendered as insigh
   assert.match(informative.whatToExpect.text, /Dance\/Electronic/);
   assert.ok(!/Music · Event Style/.test(informative.whatToExpect.text));
 });
+
+test('a representative permitted event composes at least one question end to end', async () => {
+  // The serializer and the question composer are separate modules. If they
+  // drift, every request goes out with an empty question set and the route
+  // answers 422. This walks the exact production path from a normalized
+  // Ticketmaster event to the composed question set.
+  const { normalizeTicketmasterEvent } = await import('../src/ticketmaster.js');
+  const { buildSemanticRequest } = await import('../src/nightlife/semanticInput.js');
+  const { buildQuestionSet } = await import('../src/nightlife/questions.js');
+  const event = normalizeTicketmasterEvent({
+    id: 'drift-guard',
+    name: 'Drift Guard Night',
+    url: 'https://www.ticketmaster.com/event/drift-guard',
+    dates: { start: { localDate: '2026-10-03', localTime: '22:00:00' }, status: { code: 'onsale' } },
+    classifications: [{ segment: { name: 'Music' }, genre: { name: 'Dance/Electronic' }, subGenre: { name: 'House' } }],
+    _embedded: {
+      venues: [{ id: 'v', name: 'Hall', city: { name: 'Los Angeles' }, state: { stateCode: 'CA' } }],
+      attractions: [{ id: 'a', name: 'Artist' }]
+    }
+  }, new Date('2026-09-23T00:00:00Z'));
+  event.ranking = { utility: 60 };
+  const { inputs } = buildSemanticRequest([event], {}, { now: new Date('2026-09-23T00:00:00Z') });
+  const questions = buildQuestionSet({ input: inputs[0] });
+  assert.ok(Object.keys(inputs[0].fields.publishedFacts ?? {}).length > 0, 'serializer must emit model-transmittable facts');
+  assert.ok(Object.keys(questions).length > 0, 'composer must ask at least one question of them');
+});

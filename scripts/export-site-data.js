@@ -40,7 +40,7 @@ import {
 } from '../src/diagnostics.js';
 import { enhancementFor, toDisplayEvent, toDisplaySportsGame } from '../src/projection.js';
 import { summarizeEvidenceCoverage } from '../src/eventEvidence.js';
-import { enrichSemanticEventCards } from '../src/nightlife/cardEnrichment.js';
+import { enrichSemanticEventCards, semanticSourceHealth } from '../src/nightlife/cardEnrichment.js';
 import { createDecisionInferenceProvider } from '../src/nightlife/inference.js';
 import { readNightlifeConfig } from '../src/nightlife/config.js';
 import { buildFeedbackSnapshot, mergeSnapshotIndex } from '../src/feedbackSnapshots.js';
@@ -305,19 +305,7 @@ const semanticEnrichment = await enrichSemanticEventCards(ranked, {
   requiredIds: overviewMusicIds,
   maxCandidates: 24
 });
-sourceHealth.push({
-  source: 'jev-events',
-  status: semanticEnrichment.telemetry.status === 'assessed'
-    ? 'active'
-    : semanticEnrichment.assessedCandidateCount > 0 ? 'partial' : 'unavailable',
-  itemCount: semanticEnrichment.enrichedCandidateCount,
-  warningCount: Math.max(0, semanticEnrichment.modelEligibleCandidateCount - semanticEnrichment.assessedCandidateCount),
-  details: {
-    evidenceCount: semanticEnrichment.enrichedCandidateCount,
-    modelEligibleCount: semanticEnrichment.modelEligibleCandidateCount,
-    assessedCount: semanticEnrichment.assessedCandidateCount
-  }
-});
+sourceHealth.push(semanticSourceHealth(semanticEnrichment));
 // Evidence stays out of the published projection: a display row must not become
 // a backdoor to source material or imply that an old snapshot is
 // inference-capable. It is written to the private, gitignored data directory so

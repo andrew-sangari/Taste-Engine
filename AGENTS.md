@@ -32,7 +32,6 @@ The current snapshot is a technical proof from the selected Playlist Sync source
 - `npm run nightlife:probe` — send one synthetic candidate through the configured decision-inference route and report real latency, spend, and contract validity
 - `npm run nightlife:cards` — measure evidence coverage, claim support, latency and spend for card enrichment against the real projection; changes no ranking or publication state
 - `npm run evaluation:nightlife` — offline gold-set gate for card enrichment; needs no credentials or network
-- `npm run nightlife:shadow` — legacy goal-driven shortlist comparison retained as a development harness; the product surfaces enrichment inside the existing Music and Overview cards
 
 ## Private local files
 
@@ -94,7 +93,7 @@ Everything in the LLM boundary above applies unchanged. Never send SeatGeek-only
 
 Provider selection is configuration. Direct TypeSafe serving is the verified default; the Vercel AI Gateway is an alternate inference route and not a hosting change. No module outside `src/nightlife/providers/` may branch on which provider is active.
 
-This layer is advisory only and has no surface of its own. Enrichment appears inside the existing Music and Overview cards as at most a few source-linked claims, each marked verified, inferred, or not known; a candidate with nothing specific to add renders nothing. It must not change the canonical utility score, Fit, Friction, Urgency, Confidence, source facts, publication eligibility, or the learned taste profile. Schedule, travel, budget, and urgency are always recomputed deterministically. Evidence stays out of the published projection and is written to the gitignored `data/` directory for evaluation. `/api/nightlife` is a development-only harness that 404s outside `local` and `test`. See `docs/system-one-inference.md`.
+This layer is advisory only and has no surface of its own. Enrichment appears inside the existing Music and Overview cards as at most a few source-linked claims, each marked verified, inferred, or not known; a candidate with nothing specific to add renders nothing. It must not change the canonical utility score, Fit, Friction, Urgency, Confidence, source facts, publication eligibility, or the learned taste profile. Schedule, travel, budget, and urgency are always recomputed deterministically. Evidence stays out of the published projection and is written to the gitignored `data/` directory for evaluation. There is no standalone nightlife route or form. See `docs/system-one-inference.md`.
 
 ## Automation contract
 

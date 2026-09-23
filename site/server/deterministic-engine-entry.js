@@ -26,7 +26,7 @@ export { buildOverview, buildOverviewBuckets } from "../../src/overview.js";
 export { buildExpandedArtistSnapshot, topRecurringTags } from "../../src/tasteExpansion.js";
 export { buildSemanticCandidateInput, buildSemanticRequest, nightlifeEvidenceFor, serializeContext } from "../../src/nightlife/semanticInput.js";
 export { buildSemanticEventInsight } from "../../src/nightlife/cardInsight.js";
-export { enrichSemanticEventCards } from "../../src/nightlife/cardEnrichment.js";
+export { enrichSemanticEventCards, semanticSourceHealth } from "../../src/nightlife/cardEnrichment.js";
 export {
   EVENT_EVIDENCE_SCHEMA_VERSION,
   buildEventEvidence,
@@ -36,9 +36,6 @@ export {
   serializeEventEvidenceForModel,
   summarizeEvidenceCoverage,
 } from "../../src/eventEvidence.js";
-export { normalizeNightlifeContext, windowBounds } from "../../src/nightlife/context.js";
-export { STAY_HOME_THRESHOLD, discoverNightlife, nightlifeScore, selectEligibleCandidates } from "../../src/nightlife/discovery.js";
 export { createDecisionInferenceProvider } from "../../src/nightlife/inference.js";
 export { createAssessmentCache } from "../../src/nightlife/assessmentCache.js";
 export { describeNightlifeConfig, nightlifeInferenceConfigured, readNightlifeConfig } from "../../src/nightlife/config.js";
-export { refsToReassess, reviseCriteria } from "../../src/nightlife/criteria.js";

@@ -438,11 +438,22 @@ fields the source never meant that way. Enrichment dropped from 57 cards to 37
 as a result, which is the correct direction: a truthful no-op beats confident
 filler.
 
-### The harness is development-only
+### The goal-driven harness is retired
 
-No shipped page calls `/api/nightlife`. The route and `server/nightlife.ts`
-remain as a manual inference harness for tuning, gated on
-`TASTE_ENGINE_ENV` being `local` or `test`, and return 404 anywhere else so a
-deployed environment exposes no second surface. The standalone Tonight
-explorer component and its styles are deleted.
+The original goal-driven flow — a free-text "kind of night", a shortlist
+scored by `context_fit`, and a two-stop itinerary — was the product the
+follow-up review rejected, and its question set was replaced by the
+evidence-dependent one above. After that replacement it could no longer ask the
+model anything: its inputs carry no model-transmittable evidence, so every run
+reported `deterministic fallback` while assessing nothing. A harness that
+silently cannot infer is worse than none, so it is deleted: the Tonight explorer,
+`/api/nightlife`, `site/server/nightlife.ts`, `src/nightlife/discovery.js`,
+`itinerary.js`, `criteria.js`, and `npm run nightlife:shadow`.
+
+Its job is covered by tools that exercise the real contract:
+`npm run nightlife:probe` (one synthetic event through the production path),
+`npm run nightlife:cards` (the real projection), and
+`npm run evaluation:nightlife` (the offline gold set). If "build a night around
+this" is picked up later, the deterministic itinerary logic is recoverable from
+commit `03efb1c`.
 

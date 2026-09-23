@@ -115,8 +115,8 @@ function topItemsAffinityFor(artist, topItems = {}, now = /* @__PURE__ */ new Da
   ].filter(([key]) => usableTopWindow(topItems?.windows?.[key], now));
   const totalWeight = windows.reduce((sum, [, weight]) => sum + weight, 0);
   if (totalWeight === 0) return 0;
-  const weighted2 = windows.reduce((sum, [, weight, rank]) => sum + weight * rankAffinity(rank), 0);
-  return Math.round(weighted2 / totalWeight);
+  const weighted = windows.reduce((sum, [, weight, rank]) => sum + weight * rankAffinity(rank), 0);
+  return Math.round(weighted / totalWeight);
 }
 function rankAffinity(rank) {
   const value = Number(rank);
@@ -863,7 +863,7 @@ function normalizeSeatGeekSportsEvent(event, retrievedAt = /* @__PURE__ */ new D
 function normalizeTicketmasterSportsEvent(event, retrievedAt = /* @__PURE__ */ new Date()) {
   const venue = event._embedded?.venues?.[0] ?? {};
   const attractions = event._embedded?.attractions ?? [];
-  const localDate4 = event.dates?.start?.localDate ?? null;
+  const localDate3 = event.dates?.start?.localDate ?? null;
   const localTime = event.dates?.start?.localTime ?? "00:00:00";
   const names = attractions.map((attraction) => attraction.name).filter(Boolean);
   return {
@@ -871,7 +871,7 @@ function normalizeTicketmasterSportsEvent(event, retrievedAt = /* @__PURE__ */ n
     sourceEventId: String(event.id),
     sourceUrl: String(event.url ?? ""),
     title: String(event.name ?? "").trim(),
-    startLocal: localDate4 ? `${localDate4}T${localTime}` : null,
+    startLocal: localDate3 ? `${localDate3}T${localTime}` : null,
     venue: normalizeTicketVenue(venue),
     teamNames: [...names, event.name ?? ""].filter(Boolean),
     ticketObservation: {
@@ -1727,12 +1727,12 @@ function meaningfulClassifications(values = [], { provider = null } = {}) {
   const promoter = String(provider ?? "").trim().toLowerCase();
   const output = [];
   for (const value of values) {
-    const text3 = String(value ?? "").trim();
-    if (!text3) continue;
-    const normalized = text3.toLowerCase();
+    const text2 = String(value ?? "").trim();
+    if (!text2) continue;
+    const normalized = text2.toLowerCase();
     if (PLACEHOLDER_CLASSIFICATIONS.has(normalized)) continue;
     if (promoter && normalized === promoter) continue;
-    if (!output.some((existing) => existing.toLowerCase() === normalized)) output.push(text3);
+    if (!output.some((existing) => existing.toLowerCase() === normalized)) output.push(text2);
   }
   return output;
 }
@@ -1884,13 +1884,13 @@ function ticketmasterEventMatchesArtist(event, artistName) {
 function normalizeTicketmasterEvent(event, retrievedAt = /* @__PURE__ */ new Date()) {
   const venue = event._embedded?.venues?.[0] ?? {};
   const attractions = event._embedded?.attractions ?? [];
-  const localDate4 = event.dates?.start?.localDate ?? null;
+  const localDate3 = event.dates?.start?.localDate ?? null;
   const localTime = event.dates?.start?.localTime ?? null;
   const retrieved = new Date(retrievedAt).toISOString();
   const sourceEventId = String(event.id);
   const sourceUrl = String(event.url ?? "");
   const title = cleanText2(event.name);
-  const startLocal = localDate4 ? `${localDate4}T${localTime || "00:00:00"}` : null;
+  const startLocal = localDate3 ? `${localDate3}T${localTime || "00:00:00"}` : null;
   const startUtc = event.dates?.start?.dateTime ?? null;
   const doorsUtc = event.dates?.start?.doorsDateTime ?? null;
   const endUtc = event.dates?.end?.dateTime ?? null;
@@ -2039,7 +2039,7 @@ function normalizeTicketmasterEvent(event, retrievedAt = /* @__PURE__ */ new Dat
     doorsLocal,
     endLocal,
     timeTbd: Boolean(event.dates?.start?.timeTBA || !localTime),
-    dateTbd: Boolean(event.dates?.start?.dateTBA || !localDate4),
+    dateTbd: Boolean(event.dates?.start?.dateTBA || !localDate3),
     status: event.dates?.status?.code ?? "scheduled",
     venue: {
       sourceId: venue.id ? String(venue.id) : null,
@@ -2296,8 +2296,8 @@ function frameworkPerformers(title) {
   return cleaned.split(/\s+b2b\s+|\s+&\s+/i).map((name, index) => ({ sourceId: null, name: name.trim(), primary: index === 0, spotifyId: null })).filter((performer) => performer.name);
 }
 function normalizeLocalDate(value) {
-  const text3 = String(value ?? "").trim();
-  return text3 ? text3.replace(" ", "T") : null;
+  const text2 = String(value ?? "").trim();
+  return text2 ? text2.replace(" ", "T") : null;
 }
 function firstPrice(value) {
   const match = String(value ?? "").match(/\$?([0-9]+(?:\.[0-9]{1,2})?)/);
@@ -2335,10 +2335,10 @@ function decodeText(value) {
   }).replace(/\s+/g, " ").trim();
 }
 function canonicalArtistUrl(value) {
-  const text3 = String(value ?? "").trim();
-  if (!text3) return null;
+  const text2 = String(value ?? "").trim();
+  if (!text2) return null;
   try {
-    const url = new URL(text3, ARTISTS_URL);
+    const url = new URL(text2, ARTISTS_URL);
     if (url.origin !== "https://thisisframework.com") return null;
     const match = url.pathname.match(/^\/artist\/([^/]+)\/?$/i);
     return match ? `https://thisisframework.com/artist/${match[1]}/` : null;
@@ -2558,11 +2558,11 @@ function cleanPerformer(value) {
   return cleanText3(value).replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
 }
 function normalizeStartLocal(value) {
-  const text3 = cleanText3(value);
-  if (!text3) return null;
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text3)) return text3.replace(/([+-]\d{2}:?\d{2}|Z)$/, "");
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text3)) return `${text3}T00:00:00`;
-  const match = text3.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:\s*[-+]\s*\d{1,2})?,?\s+(\d{4})\b/i);
+  const text2 = cleanText3(value);
+  if (!text2) return null;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text2)) return text2.replace(/([+-]\d{2}:?\d{2}|Z)$/, "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text2)) return `${text2}T00:00:00`;
+  const match = text2.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:\s*[-+]\s*\d{1,2})?,?\s+(\d{4})\b/i);
   if (!match) return null;
   const parsed = /* @__PURE__ */ new Date(`${match[1]} ${match[2]}, ${match[3]} 00:00:00`);
   if (Number.isNaN(parsed.getTime())) return null;
@@ -3334,10 +3334,6 @@ function evidenceFromPublishedRow(candidate) {
     adjacentEvidence: [...new Set((candidate.matchedArtists ?? []).map((artist) => artist.origin).filter((origin) => ["similar", "tag", "promoter"].includes(origin)))]
   };
 }
-function permittedVenuePoint(candidate) {
-  const evidence = candidate?.nightlifeEvidence ?? (candidate ? nightlifeEvidenceFor(candidate) : null);
-  return evidence?.venuePoint ?? null;
-}
 function buildSemanticCandidateInput(candidate, { ref, now = /* @__PURE__ */ new Date(), startArea = null, transport = "drive" } = {}) {
   if (!ref) throw new SourcePolicyError("A candidate input requires an opaque ref.");
   const evidence = candidate.nightlifeEvidence ?? nightlifeEvidenceFor(candidate);
@@ -3589,8 +3585,8 @@ function buildSemanticEventInsight(candidate, assessment = null) {
   if (!useful) return null;
   return { summary: useful.text, ...claims };
 }
-function claim(text3, status, ...facts) {
-  return { text: text3, status, evidence: evidenceFor(...facts) };
+function claim(text2, status, ...facts) {
+  return { text: text2, status, evidence: evidenceFor(...facts) };
 }
 function evidenceFor(...facts) {
   return facts.filter(Boolean).map((fact) => ({
@@ -3934,7 +3930,27 @@ function nulBand(noul, thresholds = DEFAULT_NOUL_THRESHOLDS) {
 }
 
 // ../src/nightlife/cardEnrichment.js
-async function enrichSemanticEventCards(events = [], {
+async function enrichSemanticEventCards(events = [], options = {}) {
+  try {
+    return await enrichOrThrow(events, options);
+  } catch (error) {
+    return {
+      byId: /* @__PURE__ */ new Map(),
+      assessmentById: /* @__PURE__ */ new Map(),
+      assessedCandidateCount: 0,
+      enrichedCandidateCount: 0,
+      modelEligibleCandidateCount: 0,
+      selectedCandidateCount: 0,
+      failed: true,
+      telemetry: {
+        status: "enrichment failed",
+        errors: [sanitizeErrorMessage(error)],
+        coverage: { requested: 0, covered: 0, uncovered: [] }
+      }
+    };
+  }
+}
+async function enrichOrThrow(events = [], {
   provider,
   now = /* @__PURE__ */ new Date(),
   requiredIds = [],
@@ -3972,446 +3988,33 @@ async function enrichSemanticEventCards(events = [], {
     telemetry: result.telemetry
   };
 }
-
-// ../src/nightlife/context.js
-var TRANSPORT_MODES = ["drive", "rideshare", "transit", "walk", "bike"];
-var PARTY_MODES = ["solo", "date", "small group", "large group"];
-var ENERGY_LEVELS = ["low", "medium", "high"];
-var LATE_NIGHT_INTENTS = ["home early", "flexible", "out late", "out very late"];
-var NOVELTY_APPETITES = ["familiar", "balanced", "exploratory"];
-var NightlifeContextError = class extends Error {
-};
-function normalizeNightlifeContext(input = {}, { now = /* @__PURE__ */ new Date() } = {}) {
-  const goal = text(input.goal, 400);
-  const date = localDate3(input.date) ?? localDateKey2(now);
-  const earliestStart = clock2(input.earliestStart) ?? null;
-  const latestReturn = clock2(input.latestReturn) ?? null;
-  if (earliestStart && latestReturn && !crossesMidnight(earliestStart, latestReturn) && earliestStart >= latestReturn) {
-    throw new NightlifeContextError("The latest return must be after the earliest start.");
-  }
+function semanticSourceHealth(enrichment) {
+  const eligible = enrichment.modelEligibleCandidateCount ?? 0;
+  const assessed = enrichment.assessedCandidateCount ?? 0;
+  const inferenceStatus = enrichment.telemetry?.status;
+  let status;
+  if (enrichment.failed) status = "unavailable";
+  else if (inferenceStatus === "not configured") status = "not configured";
+  else if (eligible === 0 || assessed >= eligible) status = "active";
+  else if (assessed > 0) status = "partial";
+  else status = "unavailable";
   return {
-    goal,
-    window: { date, earliestStart, latestReturn },
-    startArea: resolveStartArea(input.startArea),
-    transport: oneOf(input.transport, TRANSPORT_MODES),
-    budgetUsd: positiveNumber(input.budgetUsd),
-    party: oneOf(input.party, PARTY_MODES),
-    preferredMusic: list(input.preferredMusic, 8, 40),
-    energy: oneOf(input.energy, ENERGY_LEVELS),
-    lateNightIntent: oneOf(input.lateNightIntent, LATE_NIGHT_INTENTS),
-    noveltyAppetite: oneOf(input.noveltyAppetite, NOVELTY_APPETITES),
-    maxCandidates: boundedInteger(input.maxCandidates, 1, 60, 24),
-    shortlistSize: boundedInteger(input.shortlistSize, 1, 10, 4)
-  };
-}
-function resolveStartArea(value) {
-  if (!value) return null;
-  if (typeof value === "object") {
-    const label2 = text(value.label, 60);
-    if (!label2) return null;
-    return {
-      label: label2,
-      lat: Number.isFinite(value.lat) ? value.lat : null,
-      lon: Number.isFinite(value.lon) ? value.lon : null
-    };
-  }
-  const label = text(value, 60);
-  if (!label) return null;
-  const normalized = label.toLowerCase();
-  const known = LA_AREAS.find((area) => area.label.toLowerCase().includes(normalized) || normalized.includes(area.label.toLowerCase().split(" / ")[0]));
-  return known ? { label: known.label, lat: known.lat, lon: known.lon } : { label, lat: null, lon: null };
-}
-function windowBounds(context, { now = /* @__PURE__ */ new Date() } = {}) {
-  const date = context.window?.date ?? localDateKey2(now);
-  const start = /* @__PURE__ */ new Date(`${date}T${context.window?.earliestStart ?? "17:00"}:00`);
-  const endClock = context.window?.latestReturn ?? "02:30";
-  const end = /* @__PURE__ */ new Date(`${date}T${endClock}:00`);
-  if (end <= start) end.setDate(end.getDate() + 1);
-  return { start, end };
-}
-function localDateKey2(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-function crossesMidnight(earliest, latest) {
-  return latest < "06:00" && earliest >= "12:00";
-}
-function localDate3(value) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
-}
-function clock2(value) {
-  if (typeof value !== "string") return null;
-  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) return null;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-}
-function text(value, max) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  return trimmed ? trimmed.slice(0, max) : null;
-}
-function list(value, maxEntries, maxLength) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.map((entry) => text(entry, maxLength)).filter(Boolean))].slice(0, maxEntries);
-}
-function oneOf(value, allowed) {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  return allowed.includes(normalized) ? normalized : null;
-}
-function positiveNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? Math.round(number) : null;
-}
-function boundedInteger(value, min, max, fallback) {
-  const number = Number(value);
-  if (!Number.isInteger(number)) return fallback;
-  return Math.min(max, Math.max(min, number));
-}
-
-// ../src/nightlife/itinerary.js
-var ASSUMED_STOP_MINUTES = { concert: 150, "dj set": 210, festival: 300, unknown: 150 };
-var MINIMUM_TRANSFER_MINUTES = 20;
-function candidateTiming(candidate, { eventType = "unknown" } = {}) {
-  const start = candidate.startLocal ? new Date(candidate.startLocal) : null;
-  const timeKnown = Boolean(start && !Number.isNaN(start.getTime()) && !candidate.timeTbd);
-  if (!start || Number.isNaN(start.getTime())) return { start: null, end: null, timeKnown: false, endAssumed: true };
-  const minutes = ASSUMED_STOP_MINUTES[eventType] ?? ASSUMED_STOP_MINUTES.unknown;
-  return {
-    start,
-    end: new Date(start.getTime() + minutes * 6e4),
-    timeKnown,
-    endAssumed: true,
-    assumedStopMinutes: minutes
-  };
-}
-function withinWindow(candidate, context, { now = /* @__PURE__ */ new Date() } = {}) {
-  const { start, end } = windowBounds(context, { now });
-  const timing = candidateTiming(candidate);
-  if (!timing.start) return { inWindow: false, reason: "no scheduled date" };
-  if (!timing.timeKnown) {
-    const day = timing.start.toDateString();
-    return { inWindow: day === start.toDateString() || day === end.toDateString(), reason: "time unconfirmed" };
-  }
-  if (timing.start < start) return { inWindow: false, reason: "starts before the window" };
-  if (timing.start > end) return { inWindow: false, reason: "starts after the window" };
-  return { inWindow: true, reason: null };
-}
-function transferMinutes(fromCandidate, toCandidate, transport = "drive") {
-  const from = permittedVenue(fromCandidate);
-  const to = permittedVenue(toCandidate);
-  if (!from || !to) return null;
-  const minutes = travelMinutes(to, { lat: from.lat, lon: from.lon }, transport);
-  return minutes == null ? null : Math.max(MINIMUM_TRANSFER_MINUTES, minutes);
-}
-function evaluateSequence(candidates, context, { now = /* @__PURE__ */ new Date(), eventTypeFor = () => "unknown" } = {}) {
-  const { start: windowStart, end: windowEnd } = windowBounds(context, { now });
-  const transport = context.transport ?? "drive";
-  const stops = [];
-  const issues = [];
-  let previous = null;
-  let previousTiming = null;
-  for (const candidate of candidates) {
-    const timing = candidateTiming(candidate, { eventType: eventTypeFor(candidate) });
-    if (!timing.start) {
-      issues.push({ code: "no-schedule", candidateId: candidate.id });
-      return { feasible: false, stops, issues, travelMinutesTotal: null };
+    source: "jev-events",
+    status,
+    itemCount: enrichment.enrichedCandidateCount ?? 0,
+    warningCount: Math.max(0, eligible - assessed),
+    details: {
+      evidenceCount: enrichment.enrichedCandidateCount ?? 0,
+      modelEligibleCount: eligible,
+      assessedCount: assessed,
+      // Source health is published, so a failure message carries no URL at all:
+      // a provider error can echo an endpoint, and host and path are enough to leak.
+      ...enrichment.failed ? { failure: redactUrls(enrichment.telemetry?.errors?.[0] ?? "enrichment failed") } : {}
     }
-    if (timing.timeKnown && timing.start < windowStart) {
-      issues.push({ code: "before-window", candidateId: candidate.id });
-      return { feasible: false, stops, issues, travelMinutesTotal: null };
-    }
-    let transfer = null;
-    if (previous) {
-      transfer = transferMinutes(previous, candidate, transport);
-      if (transfer == null) {
-        issues.push({ code: "travel-unknown", candidateId: candidate.id });
-      } else if (previousTiming?.start && timing.timeKnown) {
-        const earliestArrival = new Date(previousTiming.start.getTime() + (MINIMUM_TRANSFER_MINUTES + transfer) * 6e4);
-        if (earliestArrival > timing.start) {
-          issues.push({ code: "overlap", candidateId: candidate.id });
-          return { feasible: false, stops, issues, travelMinutesTotal: null };
-        }
-      }
-    }
-    stops.push({ candidateId: candidate.id, timing, transferMinutes: transfer });
-    previous = candidate;
-    previousTiming = timing;
-  }
-  const last = stops.at(-1);
-  if (last?.timing?.end && last.timing.end > windowEnd) {
-    issues.push({ code: "past-latest-return", candidateId: last.candidateId });
-  }
-  const travelMinutesTotal = stops.every((stop) => stop.transferMinutes != null || stop === stops[0]) ? stops.reduce((total, stop) => total + (stop.transferMinutes ?? 0), 0) : null;
-  const blocking = issues.filter((issue) => ["no-schedule", "before-window", "overlap"].includes(issue.code));
-  return {
-    feasible: blocking.length === 0,
-    // A plan with an unknown transfer or an assumed end past the window is
-    // offered as an option, never as a confirmed evening.
-    confirmed: issues.length === 0 && stops.every((stop) => stop.timing.timeKnown),
-    stops,
-    issues,
-    travelMinutesTotal
   };
 }
-function buildEveningPlan(candidates, context, { now = /* @__PURE__ */ new Date(), maxStops = 2, eventTypeFor = () => "unknown" } = {}) {
-  const dated = candidates.filter((candidate) => candidateTiming(candidate).start);
-  if (!dated.length) return null;
-  const ordered = [...dated].sort((left, right) => new Date(left.startLocal) - new Date(right.startLocal));
-  const anchor = candidates[0];
-  const rest = ordered.filter((candidate) => candidate.id !== anchor.id);
-  for (const follow of rest) {
-    if (maxStops < 2) break;
-    const sequence = new Date(anchor.startLocal) <= new Date(follow.startLocal) ? [anchor, follow] : [follow, anchor];
-    const evaluation = evaluateSequence(sequence, context, { now, eventTypeFor });
-    if (evaluation.feasible) {
-      return { ...evaluation, candidateIds: sequence.map((candidate) => candidate.id) };
-    }
-  }
-  const solo = evaluateSequence([anchor], context, { now, eventTypeFor });
-  return solo.feasible ? { ...solo, candidateIds: [anchor.id] } : null;
-}
-function milesFromStart(candidate, startArea) {
-  const venue = permittedVenue(candidate);
-  if (!venue || !startArea || !Number.isFinite(startArea.lat) || !Number.isFinite(startArea.lon)) return null;
-  if (!Number.isFinite(venue.lat) || !Number.isFinite(venue.lon)) return null;
-  return Number(distanceMiles4(venue.lat, venue.lon, startArea.lat, startArea.lon).toFixed(1));
-}
-function permittedVenue(candidate) {
-  return permittedVenuePoint(candidate);
-}
-
-// ../src/nightlife/discovery.js
-var SEMANTIC_WEIGHTS = {
-  contextFit: { strong: 18, possible: 8, exploratory: 2, poor: -25, unknown: 0 },
-  musicAtmosphereFit: { strong: 10, possible: 3, weak: -8, unknown: 0 },
-  lateNightWanted: { confirmed: 10, possible: 3, unlikely: -12, unknown: 0 },
-  lateNightEarly: { confirmed: -4, possible: 0, unlikely: 3, unknown: 0 },
-  noveltyExploratory: { exploratory: 8, adjacent: 4, familiar: -2, unknown: 0 },
-  noveltyFamiliar: { exploratory: -6, adjacent: 0, familiar: 5, unknown: 0 },
-  noveltyBalanced: { exploratory: 1, adjacent: 3, familiar: 1, unknown: 0 },
-  friction: {
-    "long-travel": -8,
-    "late-start": -6,
-    "group-coordination": -4,
-    "schedule-unconfirmed": -3,
-    "ticket-unknown": 0,
-    "cost-unknown": 0
-  }
-};
-var STAY_HOME_THRESHOLD = 38;
-var LOW_CERTAINTY_DAMPING = 0.5;
-async function discoverNightlife({
-  events = [],
-  context,
-  provider,
-  now = /* @__PURE__ */ new Date(),
-  refreshCache = false,
-  onlyRefs = null,
-  stayHomeThreshold = STAY_HOME_THRESHOLD
-} = {}) {
-  const inWindow = events.filter((event) => event?.startLocal && withinWindow(event, context, { now }).inWindow);
-  const eligible = selectEligibleCandidates(events, context, { now });
-  const { inputs } = buildSemanticRequest(eligible, context, { now });
-  for (const [index, input] of inputs.entries()) {
-    input.revision = candidateRevision(eligible[index]);
-  }
-  const candidateByRef = new Map(inputs.map((input, index) => [input.ref, eligible[index]]));
-  const toAssess = onlyRefs ? inputs.filter((input) => onlyRefs.has(input.ref)) : inputs;
-  const { assessments, telemetry } = await provider.assessCandidates(toAssess, context, { refreshCache });
-  const scored = inputs.map((input) => {
-    const candidate = candidateByRef.get(input.ref);
-    const assessment = assessments.get(input.ref) ?? null;
-    const gate = deterministicGate(candidate, input, context, { now });
-    return {
-      ref: input.ref,
-      candidate,
-      input,
-      assessment,
-      excluded: gate.excluded ? gate : null,
-      score: gate.excluded ? 0 : nightlifeScore(candidate, assessment, context),
-      milesFromStart: milesFromStart(candidate, context.startArea),
-      travelMinutesEstimate: input.fields.travelMinutesEstimate ?? null
-    };
-  });
-  const viable = scored.filter((entry) => !entry.excluded).sort((left, right) => right.score - left.score || String(left.candidate.startLocal).localeCompare(String(right.candidate.startLocal)));
-  const shortlistSize = context.shortlistSize ?? 4;
-  const shortlist = viable.filter((entry) => entry.score >= stayHomeThreshold).slice(0, shortlistSize);
-  const alternatives = viable.filter((entry) => !shortlist.includes(entry)).slice(0, shortlistSize);
-  const plan = shortlist.length ? buildEveningPlan(shortlist.map((entry) => entry.candidate), context, {
-    now,
-    eventTypeFor: (candidate) => classifyEventType(candidate)
-  }) : null;
-  return {
-    generatedAt: new Date(now).toISOString(),
-    window: windowSummary(context, { now }),
-    // How the candidate set narrowed, so an empty shortlist can say whether the
-    // night was thin, the window was tight, or nothing simply cleared the bar.
-    considered: {
-      projectionCount: events.length,
-      inWindowCount: inWindow.length,
-      assessedCount: eligible.length,
-      // How many candidates carry independently permitted evidence. A low
-      // number here is a source-policy fact, not a model failure, and it caps
-      // how much any assessment can say.
-      permittedEvidenceCount: inputs.filter((input) => !input.restricted).length,
-      stayHomeThreshold
-    },
-    stayHome: shortlist.length === 0,
-    stayHomeReason: shortlist.length ? null : stayHomeReason(scored, eligible),
-    shortlist: shortlist.map(toResult),
-    alternatives: alternatives.map(toResult),
-    excluded: scored.filter((entry) => entry.excluded).map((entry) => ({
-      ref: entry.ref,
-      id: entry.candidate.id,
-      reason: entry.excluded.reason
-    })),
-    plan: plan ? summarizePlan(plan, candidateByRef, scored) : null,
-    inference: {
-      status: telemetry.status,
-      provider: telemetry.provider,
-      model: telemetry.model,
-      resolvedModels: telemetry.resolvedModels,
-      coverage: telemetry.coverage,
-      cacheHits: telemetry.cacheHits,
-      validationFailures: telemetry.validationFailures,
-      errorCount: telemetry.errors.length,
-      latencyMsMedian: telemetry.latencyMsMedian,
-      totalMs: telemetry.totalMs,
-      costUsd: telemetry.costUsd,
-      costPerAssessedCandidateUsd: telemetry.costPerAssessedCandidateUsd,
-      schemaVersion: telemetry.schemaVersion,
-      questionSetVersion: telemetry.questionSetVersion
-    },
-    telemetry,
-    // Refs are stable within one result, so a criteria revision can name the
-    // candidates it needs re-evaluated rather than regenerating the whole set.
-    refIndex: Object.fromEntries(inputs.map((input) => [input.ref, candidateByRef.get(input.ref).id]))
-  };
-}
-function selectEligibleCandidates(events, context, { now = /* @__PURE__ */ new Date() } = {}) {
-  const maxCandidates = context.maxCandidates ?? 24;
-  return events.filter((event) => event?.startLocal).filter((event) => withinWindow(event, context, { now }).inWindow).sort((left, right) => (right.ranking?.utility ?? 0) - (left.ranking?.utility ?? 0)).slice(0, maxCandidates);
-}
-function deterministicGate(candidate, input, context, { now = /* @__PURE__ */ new Date() } = {}) {
-  const window = withinWindow(candidate, context, { now });
-  if (!window.inWindow) return { excluded: true, reason: window.reason ?? "outside the requested window" };
-  const price = input.fields.advertisedPriceUsd;
-  if (context.budgetUsd != null && Number.isFinite(price) && price > context.budgetUsd) {
-    return { excluded: true, reason: `listed entry is over the $${context.budgetUsd} budget` };
-  }
-  return { excluded: false, reason: null };
-}
-function nightlifeScore(candidate, assessment, context) {
-  const base = Number(candidate.ranking?.utility ?? 0);
-  if (!assessment) return round2(base);
-  let adjustment = 0;
-  adjustment += weighted(SEMANTIC_WEIGHTS.contextFit, assessment.contextFit, assessment.certainty?.contextFit);
-  adjustment += weighted(SEMANTIC_WEIGHTS.musicAtmosphereFit, assessment.musicAtmosphereFit, assessment.certainty?.musicAtmosphereFit);
-  const wantsLate = ["out late", "out very late"].includes(context.lateNightIntent);
-  const wantsEarly = context.lateNightIntent === "home early";
-  if (wantsLate || wantsEarly) {
-    const table = wantsLate ? SEMANTIC_WEIGHTS.lateNightWanted : SEMANTIC_WEIGHTS.lateNightEarly;
-    adjustment += weighted(table, assessment.lateNightFit, assessment.certainty?.lateNightFit);
-  }
-  const noveltyTable = context.noveltyAppetite === "exploratory" ? SEMANTIC_WEIGHTS.noveltyExploratory : context.noveltyAppetite === "familiar" ? SEMANTIC_WEIGHTS.noveltyFamiliar : SEMANTIC_WEIGHTS.noveltyBalanced;
-  adjustment += weighted(noveltyTable, assessment.novelty, assessment.certainty?.novelty);
-  for (const flag of assessment.frictionFlags ?? []) {
-    adjustment += SEMANTIC_WEIGHTS.friction[flag] ?? 0;
-  }
-  return round2(Math.max(0, Math.min(100, base + adjustment)));
-}
-function weighted(table, value, certainty) {
-  const weight = table[value] ?? 0;
-  return certainty === "moderate" ? weight * LOW_CERTAINTY_DAMPING : weight;
-}
-function toResult(entry) {
-  const { candidate, assessment, input } = entry;
-  const permitted = (candidate.sourceOccurrences ?? []).filter((occurrence) => occurrence.sourceUrl);
-  return {
-    ref: entry.ref,
-    id: candidate.id,
-    title: input.restricted ? null : candidate.title,
-    restrictedSource: input.restricted,
-    startLocal: candidate.startLocal,
-    timeTbd: Boolean(candidate.timeTbd),
-    venue: input.restricted ? null : { name: candidate.venue?.name ?? null, city: candidate.venue?.city ?? null },
-    neighborhood: input.fields.neighborhood ?? null,
-    eventType: input.fields.eventType,
-    score: entry.score,
-    deterministicUtility: Number(candidate.ranking?.utility ?? 0),
-    milesFromStart: entry.milesFromStart,
-    travelMinutesEstimate: entry.travelMinutesEstimate,
-    advertisedPriceUsd: input.fields.advertisedPriceUsd ?? null,
-    // Verified facts, inferred fit, and unknowns are kept in separate fields so
-    // the surface can render them as different kinds of claim.
-    assessment: assessment ? {
-      contextFit: assessment.contextFit,
-      musicAtmosphereFit: assessment.musicAtmosphereFit,
-      lateNightFit: assessment.lateNightFit,
-      novelty: assessment.novelty,
-      frictionFlags: assessment.frictionFlags,
-      certainty: assessment.certainty,
-      reason: assessment.reason,
-      evidenceRefs: assessment.evidenceRefs,
-      cached: Boolean(assessment.cached)
-    } : null,
-    inferenceCovered: Boolean(assessment),
-    unknowns: input.fields.knownUnknowns ?? [],
-    sourceLinks: [...new Map(permitted.map((occurrence) => [
-      `${occurrence.source}|${occurrence.sourceUrl}`,
-      { source: occurrence.source, url: occurrence.sourceUrl }
-    ])).values()]
-  };
-}
-function summarizePlan(plan, candidateByRef, scored) {
-  const byId = new Map(scored.map((entry) => [entry.candidate.id, entry]));
-  return {
-    // A plan is an option. Nothing here books, holds, or guarantees admission.
-    confirmed: Boolean(plan.confirmed),
-    feasible: Boolean(plan.feasible),
-    travelMinutesTotal: plan.travelMinutesTotal,
-    issues: plan.issues,
-    stops: plan.stops.map((stop) => {
-      const entry = byId.get(stop.candidateId);
-      return {
-        id: stop.candidateId,
-        ref: entry?.ref ?? null,
-        title: entry?.input?.restricted ? null : entry?.candidate?.title ?? null,
-        // Wall-clock, matching every other timestamp in the projection. An
-        // ISO/UTC string here would render as the wrong hour in the browser,
-        // which reads these as Los Angeles local times.
-        startLocal: wallClock(stop.timing.start),
-        timeKnown: stop.timing.timeKnown,
-        assumedEndLocal: wallClock(stop.timing.end),
-        endIsAssumed: true,
-        transferMinutes: stop.transferMinutes
-      };
-    })
-  };
-}
-function stayHomeReason(scored, eligible) {
-  if (!eligible.length) return "Nothing in the permitted sources falls inside that window.";
-  if (scored.every((entry) => entry.excluded)) return "Everything in that window was ruled out by your own constraints.";
-  return "Nothing cleared the bar for the night you described. Staying in is the honest call.";
-}
-function windowSummary(context, { now }) {
-  const { start, end } = windowBounds(context, { now });
-  return { date: context.window?.date ?? null, start: start.toISOString(), end: end.toISOString() };
-}
-function round2(value) {
-  return Number(value.toFixed(1));
-}
-function wallClock(date) {
-  if (!date || Number.isNaN(date.getTime())) return null;
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+function redactUrls(message) {
+  return String(message).replace(/https?:\/\/\S+/g, "[URL REDACTED]");
 }
 
 // ../src/nightlife/decisionSchema.js
@@ -4485,7 +4088,7 @@ function assessmentFromAnswers(answers, {
     }
     assessment[field] = value;
     certainty[field] = band;
-    signals[questionId] = { choice: choice.choice, confidence: round3(choice.confidence), probabilities: roundAll(choice.probabilities) };
+    signals[questionId] = { choice: choice.choice, confidence: round2(choice.confidence), probabilities: roundAll(choice.probabilities) };
     answeredCount += 1;
   }
   const frictionFlags = [];
@@ -4494,7 +4097,7 @@ function assessmentFromAnswers(answers, {
     if (answer == null) continue;
     const noul = validateNoulAnswer(answer, questionId);
     const band = nulBand(noul, noulThresholds);
-    signals[questionId] = { noul: round3(noul), band };
+    signals[questionId] = { noul: round2(noul), band };
     if (band === "yes") frictionFlags.push(definition.flag);
     answeredCount += 1;
   }
@@ -4639,12 +4242,12 @@ function sentence(parts) {
   if (cleaned.length <= 1) return cleaned[0] ?? "No assessment was available";
   return `${cleaned[0]}; ${cleaned.slice(1).join(", ")}`;
 }
-function round3(value) {
+function round2(value) {
   return Number.isFinite(value) ? Number(value.toFixed(3)) : null;
 }
 function roundAll(probabilities) {
   if (!probabilities || typeof probabilities !== "object") return {};
-  return Object.fromEntries(Object.entries(probabilities).map(([key, value]) => [key, round3(Number(value))]));
+  return Object.fromEntries(Object.entries(probabilities).map(([key, value]) => [key, round2(Number(value))]));
 }
 
 // ../src/nightlife/providers/systemOneTransport.js
@@ -4811,12 +4414,12 @@ function createDirectServingProvider({
 var INPUT_TOKEN_COST_USD = 42 / 1e9;
 function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch, cache = createAssessmentCache() } = {}) {
   const adapter = adapterFor(config, fetchImpl);
-  const concurrency = boundedInteger2(config.concurrency, 1, 8, 4);
-  const maxCandidates = boundedInteger2(config.maxCandidates, 1, 80, 24);
-  const maxAttempts = boundedInteger2(config.maxAttempts, 1, 4, 3);
+  const concurrency = boundedInteger(config.concurrency, 1, 8, 4);
+  const maxCandidates = boundedInteger(config.maxCandidates, 1, 80, 24);
+  const maxAttempts = boundedInteger(config.maxAttempts, 1, 4, 3);
   const maxCostUsd = Number.isFinite(config.maxCostUsd) && config.maxCostUsd > 0 ? config.maxCostUsd : null;
-  const deadlineMs = boundedInteger2(config.deadlineMs, 1e3, 3e5, 6e4);
-  const retryBaseMs = boundedInteger2(config.retryBaseMs, 10, 5e3, 250);
+  const deadlineMs = boundedInteger(config.deadlineMs, 1e3, 3e5, 6e4);
+  const retryBaseMs = boundedInteger(config.retryBaseMs, 10, 5e3, 250);
   return {
     describe() {
       return {
@@ -5037,7 +4640,7 @@ function withoutRef(fields) {
   const { ref: _ref, ...rest } = fields;
   return rest;
 }
-function boundedInteger2(value, min, max, fallback) {
+function boundedInteger(value, min, max, fallback) {
   const number = Number(value);
   if (!Number.isInteger(number)) return fallback;
   return Math.min(max, Math.max(min, number));
@@ -5053,20 +4656,19 @@ function readNightlifeConfig(env = process.env) {
     maxAttempts: integer(env.NIGHTLIFE_MAX_ATTEMPTS, 3),
     deadlineMs: integer(env.NIGHTLIFE_DEADLINE_MS, 6e4),
     maxCostUsd: float(env.NIGHTLIFE_MAX_COST_USD, null),
-    stayHomeThreshold: float(env.NIGHTLIFE_STAY_HOME_THRESHOLD, null),
     gateway: {
-      apiKey: text2(env.AI_GATEWAY_API_KEY),
-      model: text2(env.AI_GATEWAY_MODEL) ?? DEFAULT_GATEWAY_MODEL,
-      baseUrl: text2(env.AI_GATEWAY_BASE_URL) ?? DEFAULT_GATEWAY_BASE_URL,
-      requestPath: text2(env.AI_GATEWAY_REQUEST_PATH) ?? void 0
+      apiKey: text(env.AI_GATEWAY_API_KEY),
+      model: text(env.AI_GATEWAY_MODEL) ?? DEFAULT_GATEWAY_MODEL,
+      baseUrl: text(env.AI_GATEWAY_BASE_URL) ?? DEFAULT_GATEWAY_BASE_URL,
+      requestPath: text(env.AI_GATEWAY_REQUEST_PATH) ?? void 0
     },
     direct: {
       // TYPESAFE_API_KEY is the vendor SDK's conventional name; the longer
       // form is what this project's environment uses.
-      apiKey: text2(env.TYPESAFE_AI_API_KEY) ?? text2(env.TYPESAFE_API_KEY),
-      model: text2(env.TYPESAFE_AI_MODEL) ?? text2(env.TYPESAFE_MODEL) ?? DEFAULT_DIRECT_MODEL,
-      baseUrl: text2(env.TYPESAFE_AI_BASE_URL) ?? text2(env.TYPESAFE_BASE_URL) ?? DEFAULT_DIRECT_BASE_URL,
-      requestPath: text2(env.TYPESAFE_REQUEST_PATH) ?? void 0
+      apiKey: text(env.TYPESAFE_AI_API_KEY) ?? text(env.TYPESAFE_API_KEY),
+      model: text(env.TYPESAFE_AI_MODEL) ?? text(env.TYPESAFE_MODEL) ?? DEFAULT_DIRECT_MODEL,
+      baseUrl: text(env.TYPESAFE_AI_BASE_URL) ?? text(env.TYPESAFE_BASE_URL) ?? DEFAULT_DIRECT_BASE_URL,
+      requestPath: text(env.TYPESAFE_REQUEST_PATH) ?? void 0
     }
   };
 }
@@ -5094,7 +4696,7 @@ function resolveProvider(env) {
   if (env.AI_GATEWAY_API_KEY) return "gateway";
   return "disabled";
 }
-function text2(value) {
+function text(value) {
   const trimmed = String(value ?? "").trim();
   return trimmed || null;
 }
@@ -5106,82 +4708,11 @@ function float(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
-
-// ../src/nightlife/criteria.js
-var DIMENSION_IMPACT = {
-  goal: "all",
-  preferredMusic: ["music_fit", "context_fit"],
-  energy: ["music_fit", "context_fit"],
-  lateNightIntent: ["late_night_fit", "context_fit"],
-  noveltyAppetite: ["novelty", "context_fit"],
-  party: ["friction_coordination", "context_fit"],
-  startArea: ["friction_travel", "context_fit"],
-  transport: ["friction_travel"],
-  budgetUsd: "deterministic",
-  window: ["friction_timing", "late_night_fit", "context_fit"],
-  maxCandidates: "deterministic",
-  shortlistSize: "deterministic"
-};
-function reviseCriteria(previousContext, revision = {}, { now = /* @__PURE__ */ new Date() } = {}) {
-  const merged = normalizeNightlifeContext({
-    goal: revision.goal ?? previousContext.goal,
-    date: revision.date ?? previousContext.window?.date,
-    earliestStart: revision.earliestStart ?? previousContext.window?.earliestStart,
-    latestReturn: revision.latestReturn ?? previousContext.window?.latestReturn,
-    startArea: revision.startArea ?? previousContext.startArea,
-    transport: revision.transport ?? previousContext.transport,
-    budgetUsd: revision.budgetUsd ?? previousContext.budgetUsd,
-    party: revision.party ?? previousContext.party,
-    preferredMusic: revision.preferredMusic ?? previousContext.preferredMusic,
-    energy: revision.energy ?? previousContext.energy,
-    lateNightIntent: revision.lateNightIntent ?? previousContext.lateNightIntent,
-    noveltyAppetite: revision.noveltyAppetite ?? previousContext.noveltyAppetite,
-    maxCandidates: revision.maxCandidates ?? previousContext.maxCandidates,
-    shortlistSize: revision.shortlistSize ?? previousContext.shortlistSize
-  }, { now });
-  const changed = changedDimensions(previousContext, merged);
-  const impacts = changed.map((dimension) => DIMENSION_IMPACT[dimension] ?? "all");
-  return {
-    context: merged,
-    changed,
-    reassessAll: impacts.includes("all"),
-    // A budget or shortlist-size change is answered entirely by deterministic
-    // re-filtering; no candidate needs re-assessing at all.
-    deterministicOnly: changed.length > 0 && impacts.every((impact) => impact === "deterministic")
-  };
-}
-function refsToReassess(previousResult, revisionOutcome) {
-  const allRefs = Object.keys(previousResult?.refIndex ?? {});
-  if (revisionOutcome.deterministicOnly) return /* @__PURE__ */ new Set();
-  if (revisionOutcome.reassessAll) return new Set(allRefs);
-  const covered = new Set([
-    ...previousResult?.shortlist ?? [],
-    ...previousResult?.alternatives ?? []
-  ].filter((entry) => entry.inferenceCovered).map((entry) => entry.ref));
-  const impacted = new Set(allRefs.filter((ref) => !covered.has(ref)));
-  for (const dimension of revisionOutcome.changed) {
-    const impact = DIMENSION_IMPACT[dimension];
-    if (!Array.isArray(impact)) continue;
-    for (const ref of allRefs) impacted.add(ref);
-  }
-  return impacted;
-}
-function changedDimensions(previous, next) {
-  const changed = [];
-  for (const key of ["goal", "transport", "budgetUsd", "party", "energy", "lateNightIntent", "noveltyAppetite", "maxCandidates", "shortlistSize"]) {
-    if (JSON.stringify(previous?.[key] ?? null) !== JSON.stringify(next?.[key] ?? null)) changed.push(key);
-  }
-  if (JSON.stringify(previous?.preferredMusic ?? []) !== JSON.stringify(next.preferredMusic)) changed.push("preferredMusic");
-  if (JSON.stringify(previous?.startArea ?? null) !== JSON.stringify(next.startArea)) changed.push("startArea");
-  if (JSON.stringify(previous?.window ?? null) !== JSON.stringify(next.window)) changed.push("window");
-  return changed;
-}
 export {
   DEFAULT_FOCAL_POINT,
   EDMTRAIN_API_BASE_URL,
   EVENT_EVIDENCE_SCHEMA_VERSION,
   INSOMNIAC_ADAPTER_VERIFIED,
-  STAY_HOME_THRESHOLD,
   UNORDERED_URGENCIES,
   URGENCY_PRIORITY,
   applyPitcherStats,
@@ -5201,7 +4732,6 @@ export {
   createEvidenceFact,
   deduplicateCandidates,
   describeNightlifeConfig,
-  discoverNightlife,
   enrichEventsWithEdmtrain,
   enrichMovieMetadata,
   enrichSemanticEventCards,
@@ -5227,14 +4757,12 @@ export {
   joinSportsTickets,
   nightlifeEvidenceFor,
   nightlifeInferenceConfigured,
-  nightlifeScore,
   normalizeArtistName,
   normalizeEdmtrainEvent,
   normalizeFocalPoint,
   normalizeFrameworkEvent,
   normalizeInsomniacEvent,
   normalizeMlbGame,
-  normalizeNightlifeContext,
   normalizePitcher,
   normalizeSeatGeekEvent,
   normalizeSeatGeekSportsEvent,
@@ -5250,19 +4778,17 @@ export {
   rankAffinity,
   rankCandidates,
   readNightlifeConfig,
-  refsToReassess,
   resolveMovieVisual,
   resolveMusicVisual,
   resolveSeatGeekPerformers,
   resolveSportsVisual,
   resolveTmdbAuth,
-  reviseCriteria,
   sameOccurrence,
   scoreSportsGame,
   searchSeatGeekPerformers,
-  selectEligibleCandidates,
   selectMovieCandidates,
   selectSeatGeekPerformer,
+  semanticSourceHealth,
   serializeContext,
   serializeEventEvidenceForDisplay,
   serializeEventEvidenceForModel,
@@ -5273,6 +4799,5 @@ export {
   ticketMatchesGame,
   ticketmasterEventMatchesArtist,
   topItemsAffinityFor,
-  topRecurringTags,
-  windowBounds
+  topRecurringTags
 };

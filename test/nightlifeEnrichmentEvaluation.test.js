@@ -107,3 +107,46 @@ test('the quality gate fails if Insomniac is claimed as functioning before repai
   assert.equal(report.pass, false);
   assert.equal(report.sourceHealth.find((item) => item.source === 'insomniac').consistent, false);
 });
+
+test('jev source health follows the shared source contract', async () => {
+  const { semanticSourceHealth } = await import('../src/nightlife/cardEnrichment.js');
+  const row = (telemetryStatus, eligible, assessed) => semanticSourceHealth({
+    telemetry: { status: telemetryStatus },
+    modelEligibleCandidateCount: eligible,
+    assessedCandidateCount: assessed,
+    enrichedCandidateCount: 5
+  });
+  // A missing credential is configuration, not failure.
+  assert.equal(row('not configured', 8, 0).status, 'not configured');
+  // Candidates with nothing to ask are not a coverage gap.
+  assert.equal(row('partial inference', 8, 8).status, 'active');
+  assert.equal(row('no candidates', 0, 0).status, 'active');
+  // Only eligible-but-unassessed candidates degrade the row.
+  assert.equal(row('partial inference', 8, 3).status, 'partial');
+  assert.equal(row('deterministic fallback', 8, 0).status, 'unavailable');
+  assert.equal(row('partial inference', 8, 3).warningCount, 5);
+});
+
+test('an enrichment failure degrades to no enrichment instead of aborting the refresh', async () => {
+  const { enrichSemanticEventCards, semanticSourceHealth } = await import('../src/nightlife/cardEnrichment.js');
+  const explodingProvider = {
+    async assessCandidates() {
+      throw new Error('provider exploded at https://secret.example/path?token=abc');
+    }
+  };
+  const events = [{
+    id: 'ticketmaster:1',
+    title: 'Some Show',
+    startLocal: '2026-10-03T22:00:00',
+    ranking: { utility: 60 },
+    sourceOccurrences: []
+  }];
+  const result = await enrichSemanticEventCards(events, { provider: explodingProvider, now: new Date('2026-09-23T00:00:00Z') });
+  assert.equal(result.failed, true);
+  assert.equal(result.byId.size, 0);
+  const health = semanticSourceHealth(result);
+  assert.equal(health.status, 'unavailable');
+  // The failure is reported, but never with a raw URL or credential in it.
+  assert.ok(health.details.failure);
+  assert.ok(!/secret\.example|token=abc/.test(health.details.failure), health.details.failure);
+});

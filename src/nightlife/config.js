@@ -15,7 +15,6 @@ export function readNightlifeConfig(env = process.env) {
     maxAttempts: integer(env.NIGHTLIFE_MAX_ATTEMPTS, 3),
     deadlineMs: integer(env.NIGHTLIFE_DEADLINE_MS, 60_000),
     maxCostUsd: float(env.NIGHTLIFE_MAX_COST_USD, null),
-    stayHomeThreshold: float(env.NIGHTLIFE_STAY_HOME_THRESHOLD, null),
     gateway: {
       apiKey: text(env.AI_GATEWAY_API_KEY),
       model: text(env.AI_GATEWAY_MODEL) ?? DEFAULT_GATEWAY_MODEL,

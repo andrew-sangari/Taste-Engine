@@ -10,6 +10,7 @@ import {
   buildOverviewBuckets,
   deduplicateCandidates,
   enrichSemanticEventCards,
+  semanticSourceHealth,
   enrichEventsWithEdmtrain,
   enrichMovieMetadata,
   enrichSportsGames,
@@ -367,19 +368,7 @@ export async function buildHostedProjection({
     requiredIds: requiredMusicIds,
     maxCandidates: 24,
   });
-  sourceHealth.push({
-    source: "jev-events",
-    status: semanticEnrichment.telemetry.status === "assessed"
-      ? "active"
-      : semanticEnrichment.assessedCandidateCount > 0 ? "partial" : "unavailable",
-    itemCount: semanticEnrichment.enrichedCandidateCount,
-    warningCount: Math.max(0, semanticEnrichment.modelEligibleCandidateCount - semanticEnrichment.assessedCandidateCount),
-    details: {
-      evidenceCount: semanticEnrichment.enrichedCandidateCount,
-      modelEligibleCount: semanticEnrichment.modelEligibleCandidateCount,
-      assessedCount: semanticEnrichment.assessedCandidateCount,
-    },
-  });
+  sourceHealth.push(semanticSourceHealth(semanticEnrichment) as SourceHealth);
 
   const musicAdvisory = await enhanceHostedMusic(
     ranked.map(record) as Array<Record<string, unknown> & { id: string }>,
