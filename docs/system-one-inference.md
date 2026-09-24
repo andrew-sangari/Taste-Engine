@@ -90,18 +90,19 @@ Request:
 
 ```json
 {
-  "state": { "request": { "goal": "..." }, "candidate": { "ref": "cand-1" } },
+  "state": {
+    "event": {
+      "ref": "cand-1",
+      "published": { "title": "...", "classification": ["Music", "Dance/Electronic"], "startTime": "..." },
+      "missing": ["end-time", "closing-hours", "after-hours", "age-policy", "ticket-availability"]
+    }
+  },
   "model": "jev-latest",
   "questions": {
-    "context_fit": {
+    "event_experience": {
       "type": "choice",
-      "instructions": "How well does this match the night described?",
-      "criteria": { "strong": "...", "possible": "...", "poor": "..." }
-    },
-    "friction_travel": {
-      "type": "noul",
-      "instructions": "Getting there and back is a real burden.",
-      "criteria": { "true": "...", "false": "..." }
+      "instructions": "Characterize the documented event experience using only the published event facts.",
+      "criteria": { "dance_floor": "...", "live_performance": "...", "unknown": "..." }
     }
   }
 }
@@ -113,13 +114,12 @@ Response:
 {
   "model": "jev-1.13.0",
   "answers": {
-    "context_fit": {
+    "event_experience": {
       "type": "choice",
-      "choice": "possible",
-      "probabilities": { "strong": 0.21, "possible": 0.68, "poor": 0.11 },
-      "confidence": 0.64
-    },
-    "friction_travel": { "type": "noul", "noul": 0.18 }
+      "choice": "dance_floor",
+      "probabilities": { "dance_floor": 0.71, "live_performance": 0.2, "unknown": 0.09 },
+      "confidence": 0.62
+    }
   },
   "usage": { "input_tokens": 312, "output_tokens": 48 }
 }
@@ -351,15 +351,17 @@ negative value.
 
 Defined in `src/nightlife/questions.js`:
 
-- Choice/Score confidence: `>= 0.75` high, `>= 0.5` moderate, below that the
+- Choice confidence: `>= 0.75` high, `>= 0.5` moderate, below that the
   dimension is recorded as `unknown`.
-- Noul: `>= 0.65` raises the friction flag, `<= 0.35` clears it, and the band
-  between is "not established" and raises nothing.
+
+Every production question is a Choice. The adapters still translate the Noul
+and Score primitives (the Gateway names Noul `boolean`), but no question uses
+them since the friction set was removed.
 
 These are starting values, not tuned ones. Tune them against the shadow
 evaluation output, and re-tune whenever the pinned model version moves.
 
-### First shadow-evaluation finding (2026-09-19)
+### First shadow-evaluation finding (2026-09-19, historical)
 
 Across live runs, `context_fit` came back `unknown` at low certainty for nearly
 every candidate, while `music_fit` and `late_night_fit` returned high certainty
@@ -376,7 +378,9 @@ The recommended next step, before any activation decision, is to **drop
 `context_fit` as a question** and compose overall fit in code from the atomic
 dimensions, per the composite-scoring pattern. That is a scoring change with
 real blast radius, so it belongs in a tuning pass with before/after comparisons,
-not in the change that introduced the layer.
+not in the change that introduced the layer. (Superseded: `context_fit` and
+the rest of the goal-driven question set were later deleted outright; see
+below.)
 
 Raw probabilities and confidence are kept in the assessment's `signals` field
 for the shadow evaluation only. They are deliberately **not** surfaced as
@@ -519,6 +523,14 @@ silently cannot infer is worse than none, so it is deleted: the Tonight explorer
 `/api/nightlife`, `site/server/nightlife.ts`, `src/nightlife/discovery.js`,
 `itinerary.js`, `criteria.js`, and `npm run nightlife:shadow`.
 
+Its context-mode plumbing is deleted too (question set v4, decision schema
+v3, semantic input v3). That covers the goal-driven questions and friction
+flags, `serializeContext` and `context.js`, and the request/candidate state
+branch. It also covers the coarse areas, travel estimates, prices and titles
+the candidate input used to carry. `buildSemanticCandidateInput` now emits
+only `{ ref, publishedFacts, knownUnknowns }` from merged, permitted evidence.
+Every request is `{ event: { ref, published, missing } }`.
+
 Its job is covered by tools that exercise the real contract:
 `npm run nightlife:probe` (one synthetic event through the production path),
 `npm run nightlife:cards` (the real projection), and
@@ -578,11 +590,27 @@ The first was sometimes false: `Josh Baker (21+)` is 21+. Now neither appears,
 and the unknown-finish gap shows only where a late start makes it consequential
 (2 cards).
 
-The refresh keeps its 24-call cap, but the cap is now spent only on candidates
-that have model-eligible evidence. Before, SeatGeek-only rows at the top of the
-ranking held slots they could never use, and only 8 candidates were assessed
-per refresh. Now 24 are, and `eligibleBeyondBudget` in source health counts
-the rest (26 in this export).
+The refresh no longer shortlists at all. Previously a 24-candidate cap was
+filled by ranking order, and SeatGeek-only rows at the top held slots they
+could never use, so only 8 candidates were assessed per refresh. Now every
+candidate with model-eligible evidence is assessed (50 in this export, about
+$0.002). `NIGHTLIFE_MAX_CANDIDATES` (default 200) remains as a spend ceiling;
+anything past it is counted as `eligibleBeyondBudget` in source health and
+makes the row `partial`.
+
+**After the context-mode removal (question set v4).** The shared preface
+used to call every event "one Los Angeles nightlife candidate for one private
+person". It now reads "one Los Angeles event from its published facts". An A/B
+on the same state shows the old framing was doing work the evidence was not.
+SIDEPIECE went from `dance_floor` at 0.65 confidence to `unknown` at 0.37, and
+Kyle Watson 360° from `dance_floor` at 0.59 to `unknown` at 0.45. The shorter
+`missing` list made no consistent difference. Calling every event "nightlife"
+is an assumption, not a published fact, so the neutral wording stays. The
+SIDEPIECE personal claim above no longer appears. Full-coverage export after the
+change: 49/49 eligible candidates assessed, $0.0019, 146ms median. One personal
+claim (Escape, documented festival), zero model-derived claims, zero grounding
+violations. Richer permitted evidence (format, description rights, end times)
+is what would bring model-derived claims back honestly.
 
 ### Grounding defects found in the second pass
 

@@ -161,7 +161,7 @@ function publishedClaims(insight) {
 
 function modelPayload(candidate) {
   try {
-    return JSON.stringify(buildSemanticRequest([candidate], {}, { now: new Date('2026-09-20T00:00:00Z') }).payload);
+    return JSON.stringify(buildSemanticRequest([candidate]).payload);
   } catch (error) {
     return `error:${error.message}`;
   }

@@ -1,204 +1,135 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { deduplicateCandidates } from '../src/candidates.js';
+import { normalizeSeatGeekEvent } from '../src/seatgeek.js';
+import { normalizeTicketmasterEvent } from '../src/ticketmaster.js';
 import {
   FIELD_PROVENANCE,
   SourcePolicyError,
   assertFieldProvenance,
   assertNoRestrictedEvidence,
   buildSemanticCandidateInput,
-  buildSemanticRequest,
-  coarseArea,
-  serializeContext
+  buildSemanticRequest
 } from '../src/nightlife/semanticInput.js';
-import { normalizeNightlifeContext } from '../src/nightlife/context.js';
 
-function candidate(overrides = {}) {
+const RETRIEVED = new Date('2026-09-20T00:00:00Z');
+
+function ticketmaster(overrides = {}) {
+  return normalizeTicketmasterEvent({
+    id: 'tm-1',
+    name: 'Permitted Title',
+    url: 'https://www.ticketmaster.com/event/tm-1',
+    dates: { start: { localDate: '2026-09-26', localTime: '22:30:00' } },
+    classifications: [{ segment: { name: 'Music' }, genre: { name: 'Dance/Electronic' } }],
+    priceRanges: [{ min: 35 }],
+    _embedded: {
+      venues: [{ name: 'The Venue', city: { name: 'Los Angeles' }, state: { stateCode: 'CA' }, location: { latitude: '34.0983', longitude: '-118.3267' } }],
+      attractions: [{ id: 'a1', name: 'Permitted Artist' }]
+    },
+    ...overrides
+  }, RETRIEVED);
+}
+
+function seatgeek(title = 'DO NOT SEND THIS TITLE') {
+  return normalizeSeatGeekEvent({
+    id: 'sg-9',
+    title,
+    url: 'https://seatgeek.com/e/9',
+    type: 'concert',
+    datetime_local: '2026-09-26T22:30:00',
+    performers: [{ name: 'Permitted Artist' }],
+    venue: { name: 'The Venue', city: 'Los Angeles', state: 'CA', location: { lat: 34.0983, lon: -118.3267 } },
+    stats: { lowest_price: 40 }
+  }, RETRIEVED);
+}
+
+// Everything a ranked candidate carries that must never reach the model:
+// Spotify-derived matches, EDMTrain lineup provenance, and ranking.
+function withPrivateContext(candidate) {
   return {
-    id: 'ticketmaster:abc',
-    title: 'Permitted Title',
-    startLocal: '2026-09-26T22:30:00',
-    timeTbd: false,
-    venue: { name: 'The Venue', city: 'Los Angeles', lat: 34.0983, lon: -118.3267 },
-    performers: [{ name: 'Someone' }],
+    ...candidate,
     matchedArtists: [
       { origin: 'similar', name: 'SPOTIFY DERIVED NAME', seedStrength: 0.9, spotifyArtistId: '4abc' },
       { origin: 'tag', name: 'ANOTHER SPOTIFY NAME' }
     ],
-    ticketObservation: { lowestPriceUsd: 35 },
     lineupDisplay: { displayTitle: 'EDMTRAIN LINEUP', sourceUrl: 'https://edmtrain.com/x' },
-    sourceOccurrences: [{
-      source: 'ticketmaster',
-      sourceEventId: 'tm-1',
-      sourceUrl: 'https://ticketmaster.com/e/1',
-      title: 'Permitted Title',
-      startLocal: '2026-09-26T22:30:00',
-      venue: { name: 'The Venue', city: 'Los Angeles', lat: 34.0983, lon: -118.3267 },
-      performerNames: ['Permitted Artist']
-    }],
-    ranking: { utility: 70 },
-    ...overrides
+    ranking: { utility: 70, whyYou: 'SPOTIFY DERIVED NAME runs through 3 of your selected playlists.' }
   };
 }
 
-function seatgeekOnly() {
-  return candidate({
-    id: 'seatgeek:9',
-    title: 'DO NOT SEND THIS TITLE',
-    sourceOccurrences: [{
-      source: 'seatgeek',
-      sourceEventId: 'sg-9',
-      sourceUrl: 'https://seatgeek.com/e/9',
-      title: 'DO NOT SEND THIS TITLE',
-      venue: { name: 'DO NOT SEND VENUE', city: 'Los Angeles', lat: 34.05, lon: -118.24 },
-      performerNames: ['DO NOT SEND ARTIST']
-    }]
-  });
-}
-
-const context = normalizeNightlifeContext({
-  goal: 'Late electronic night, start on the Westside',
-  date: '2026-09-26',
-  earliestStart: '21:00',
-  latestReturn: '03:00',
-  startArea: 'Westside',
-  transport: 'drive',
-  preferredMusic: ['house', 'techno'],
-  lateNightIntent: 'out late'
-});
-
-test('a SeatGeek-only candidate contributes only coarse derived timing', () => {
-  const input = buildSemanticCandidateInput(seatgeekOnly(), { ref: 'cand-1', now: new Date('2026-09-20T00:00:00') });
+test('a SeatGeek-only candidate contributes nothing at all', () => {
+  const input = buildSemanticCandidateInput(withPrivateContext(seatgeek()), { ref: 'cand-1' });
   assert.equal(input.restricted, true);
-  const serialized = JSON.stringify(input.fields);
-  assert.ok(!serialized.includes('DO NOT SEND'), 'no restricted payload field may be serialized');
-  assert.equal(input.fields.eventTitle, undefined);
-  assert.equal(input.fields.venueName, undefined);
-  assert.equal(input.fields.startClock, undefined);
-  assert.equal(input.fields.advertisedPriceUsd, undefined);
-  // Coarse timing is derived, not quoted, and matches the existing advisory line.
-  assert.equal(input.fields.dayOfWeek, 'Saturday');
-  assert.equal(input.fields.startPeriod, 'late');
+  assert.equal(input.fields.publishedFacts, undefined);
+  assert.ok(!JSON.stringify(input).includes('DO NOT SEND'));
+  const { payload } = buildSemanticRequest([withPrivateContext(seatgeek())]);
+  assert.deepEqual(payload.candidates, [], 'a candidate with nothing permitted is never sent');
 });
 
 test('withheld evidence becomes a declared unknown, never a negative value', () => {
-  const input = buildSemanticCandidateInput(seatgeekOnly(), { ref: 'cand-1' });
-  assert.ok(input.fields.knownUnknowns.includes('lineup'));
-  assert.ok(input.fields.knownUnknowns.includes('genre'));
-  assert.ok(input.fields.knownUnknowns.includes('neighborhood'));
+  const input = buildSemanticCandidateInput(seatgeek(), { ref: 'cand-1' });
+  for (const unknown of ['lineup', 'genre', 'end-time', 'age-policy']) {
+    assert.ok(input.fields.knownUnknowns.includes(unknown), unknown);
+  }
   for (const value of Object.values(input.fields)) {
     assert.notEqual(value, false, 'absence must not be encoded as a false/negative signal');
   }
 });
 
-test('Spotify-derived and EDMTrain evidence never reaches the payload', () => {
-  const { payload } = buildSemanticRequest([candidate()], context, { now: new Date('2026-09-20T00:00:00') });
+test('the payload holds only permitted event facts: no Spotify, EDMTrain, ranking or discovery tier', () => {
+  const { payload } = buildSemanticRequest([withPrivateContext(ticketmaster())]);
   const serialized = JSON.stringify(payload);
-  assert.ok(!/SPOTIFY DERIVED NAME|ANOTHER SPOTIFY NAME/.test(serialized));
+  assert.equal(payload.candidates.length, 1);
+  assert.deepEqual(Object.keys(payload.candidates[0]), ['event']);
+  assert.deepEqual(Object.keys(payload.candidates[0].event).sort(), ['missing', 'published', 'ref']);
+  assert.ok(!/SPOTIFY DERIVED NAME|ANOTHER SPOTIFY NAME|playlists/.test(serialized));
   assert.ok(!/EDMTRAIN LINEUP|edmtrain/i.test(serialized));
-  assert.ok(!/seedStrength|spotifyArtistId/.test(serialized));
-  // Not even the discovery tier crosses the boundary: the characterization
-  // must not vary with who the event is for.
-  assert.equal(payload.candidates[0].adjacentEvidence, undefined);
-  assert.ok(!/\b(?:similar|promoter)\b/.test(JSON.stringify(payload.candidates[0])));
+  assert.ok(!/seedStrength|spotifyArtistId|utility|whyYou/.test(serialized));
+  assert.ok(!/\b(?:similar|promoter)\b/.test(serialized));
+  // Price is ticket-observation data, not event evidence.
+  assert.ok(!/35/.test(JSON.stringify(payload.candidates[0].event.published)));
+  assert.equal(payload.candidates[0].event.published.title, 'Permitted Title');
 });
 
-test('permitted provider fields are quoted, including an independently sourced price', () => {
-  const input = buildSemanticCandidateInput(candidate(), { ref: 'cand-1', startArea: context.startArea, transport: 'drive' });
-  assert.equal(input.restricted, false);
-  assert.equal(input.fields.eventTitle, 'Permitted Title');
-  assert.equal(input.fields.providerContext, 'ticketmaster');
-  assert.equal(input.fields.advertisedPriceUsd, 35);
-  assert.equal(input.fields.startClock, '22:30');
-  assert.equal(input.fields.neighborhood, 'Hollywood');
-  assert.ok(Number.isInteger(input.fields.travelMinutesEstimate));
-});
-
-test('a price contaminated by a SeatGeek occurrence is withheld', () => {
-  const merged = candidate({
-    sourceOccurrences: [
-      ...candidate().sourceOccurrences,
-      { source: 'seatgeek', sourceEventId: 'sg-1', sourceUrl: 'https://seatgeek.com/e/1' }
-    ]
-  });
+test('a merged SeatGeek occurrence cannot put its title or venue into model input', () => {
+  const [merged] = deduplicateCandidates([seatgeek('Permitted Title (SEATGEEK ONLY)'), ticketmaster()]);
   const input = buildSemanticCandidateInput(merged, { ref: 'cand-1' });
-  assert.equal(input.restricted, false, 'a merged occurrence may still use Ticketmaster context');
-  assert.equal(input.fields.advertisedPriceUsd, undefined);
-  assert.ok(input.fields.knownUnknowns.includes('cover-price'));
+  assert.equal(input.restricted, false);
+  assert.equal(input.fields.publishedFacts.title, 'Permitted Title');
+  assert.doesNotMatch(JSON.stringify(input), /SEATGEEK ONLY|seatgeek/i);
+});
+
+test('a canonical title that did not come from a permitted fact is never sent', () => {
+  // The published row picks its title by source priority, which can be
+  // SeatGeek's. The model input reads evidence facts only, never that field.
+  const input = buildSemanticCandidateInput({ ...ticketmaster(), title: 'CANONICAL FROM ELSEWHERE' }, { ref: 'cand-1' });
+  assert.doesNotMatch(JSON.stringify(input), /CANONICAL FROM ELSEWHERE/);
 });
 
 test('the transmission guard rejects a restricted key or value', () => {
   assert.throws(() => assertNoRestrictedEvidence({ candidate: { spotifyArtistId: '4abc' } }), SourcePolicyError);
   assert.throws(() => assertNoRestrictedEvidence({ candidate: { url: 'https://seatgeek.com/e/1' } }), SourcePolicyError);
   assert.throws(() => assertNoRestrictedEvidence({ nested: [{ personalContext: 'note' }] }), SourcePolicyError);
-  assert.doesNotThrow(() => assertNoRestrictedEvidence({ candidate: { venueName: 'The Venue' } }));
+  assert.throws(() => assertNoRestrictedEvidence({ event: { matchedArtists: [] } }), SourcePolicyError);
+  assert.throws(() => assertNoRestrictedEvidence({ event: { topTags: ['house'] } }), SourcePolicyError);
+  assert.doesNotThrow(() => assertNoRestrictedEvidence({ event: { published: { title: 'The Show' } } }));
 });
 
 test('a field without declared provenance cannot be serialized', () => {
   // A field added to the serializer without a provenance entry must fail loudly
   // rather than quietly shipping whatever it holds.
   assert.throws(() => assertFieldProvenance({ ref: 'cand-1', spotifyRank: 3 }), SourcePolicyError);
-  assert.doesNotThrow(() => assertFieldProvenance({ ref: 'cand-1', venueName: 'The Venue' }));
+  assert.throws(() => assertFieldProvenance({ ref: 'cand-1', venueName: 'The Venue' }), SourcePolicyError);
+  assert.doesNotThrow(() => assertFieldProvenance({ ref: 'cand-1', publishedFacts: {}, knownUnknowns: [] }));
 });
 
 test('every field the serializer emits has declared provenance', () => {
-  const permitted = buildSemanticCandidateInput(candidate(), { ref: 'cand-1', startArea: context.startArea });
-  const restricted = buildSemanticCandidateInput(seatgeekOnly(), { ref: 'cand-2' });
-  for (const fields of [permitted.fields, restricted.fields]) {
-    for (const key of Object.keys(fields)) {
-      assert.ok(FIELD_PROVENANCE[key], `${key} must declare provenance`);
-    }
+  for (const candidate of [ticketmaster(), seatgeek()]) {
+    const { fields } = buildSemanticCandidateInput(withPrivateContext(candidate), { ref: 'cand-1' });
+    for (const key of Object.keys(fields)) assert.ok(FIELD_PROVENANCE[key], `${key} must declare provenance`);
   }
 });
 
 test('an unnamed candidate ref is rejected', () => {
-  assert.throws(() => buildSemanticCandidateInput(candidate(), { ref: '' }), SourcePolicyError);
-});
-
-test('context serialization carries only the declared decision dimensions', () => {
-  const serialized = serializeContext({
-    ...context,
-    personalNotes: 'private',
-    feedbackHistory: [{ id: 'x' }]
-  });
-  assert.deepEqual(Object.keys(serialized).sort(), [
-    'date', 'earliestStart', 'goal', 'latestReturn', 'lateNightIntent',
-    'preferredMusic', 'startArea', 'transport'
-  ].sort());
-  assert.equal(serialized.startArea, 'Westside');
-});
-
-test('coarse areas replace coordinates', () => {
-  assert.equal(coarseArea({ city: 'Los Angeles', lat: 34.0430, lon: -118.2400 }), 'Downtown / Arts District');
-  assert.equal(coarseArea({ city: 'Pomona', lat: 34.06, lon: -117.75 }), 'Pomona');
-  assert.equal(coarseArea(null), null);
-});
-
-test('a published row that lists SeatGeek at all is treated as restricted', () => {
-  // The published projection picks canonical fields by source priority, which
-  // puts SeatGeek first, so provenance cannot be recovered from the row.
-  const merged = buildSemanticCandidateInput({
-    id: 'x',
-    title: 'MIGHT BE A SEATGEEK TITLE',
-    startLocal: '2026-09-26T22:00:00',
-    sources: ['seatgeek', 'ticketmaster'],
-    venue: { name: 'MIGHT BE A SEATGEEK VENUE', city: 'Los Angeles' },
-    ticketObservation: { lowestPriceUsd: 40 },
-    matchedArtists: [{ origin: 'similar' }]
-  }, { ref: 'cand-1' });
-  assert.equal(merged.restricted, true);
-  assert.ok(!JSON.stringify(merged.fields).includes('MIGHT BE'));
-
-  const clean = buildSemanticCandidateInput({
-    id: 'y',
-    title: 'Framework Night',
-    startLocal: '2026-09-26T22:00:00',
-    sources: ['framework'],
-    venue: { name: 'The Venue', city: 'Los Angeles', lat: 34.043, lon: -118.24 },
-    performers: [{ name: 'Artist' }],
-    ticketObservation: { lowestPriceUsd: 40 },
-    matchedArtists: []
-  }, { ref: 'cand-2' });
-  assert.equal(clean.restricted, false);
-  assert.equal(clean.fields.eventTitle, 'Framework Night');
-  assert.equal(clean.fields.advertisedPriceUsd, 40);
+  assert.throws(() => buildSemanticCandidateInput(ticketmaster(), { ref: '' }), SourcePolicyError);
 });

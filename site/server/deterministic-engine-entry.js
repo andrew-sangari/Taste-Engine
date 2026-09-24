@@ -24,7 +24,7 @@ export { selectMovieCandidates } from "../../src/movieSelection.js";
 export { DEFAULT_FOCAL_POINT, isAllowedTmdbImage, normalizeFocalPoint, normalizeVisual, resolveMovieVisual, resolveMusicVisual, resolveSportsVisual } from "../../src/visuals.js";
 export { buildOverview, buildOverviewBuckets } from "../../src/overview.js";
 export { buildExpandedArtistSnapshot, topRecurringTags } from "../../src/tasteExpansion.js";
-export { buildSemanticCandidateInput, buildSemanticRequest, serializeContext } from "../../src/nightlife/semanticInput.js";
+export { buildSemanticCandidateInput, buildSemanticRequest } from "../../src/nightlife/semanticInput.js";
 export { buildSemanticEventInsight } from "../../src/nightlife/cardInsight.js";
 export { toDisplayEvent, toDisplaySportsGame } from "../../src/projection.js";
 export { enrichSemanticEventCards, semanticSourceHealth } from "../../src/nightlife/cardEnrichment.js";

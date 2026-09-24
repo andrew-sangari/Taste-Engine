@@ -11,7 +11,9 @@ export function readNightlifeConfig(env = process.env) {
     provider: resolveProvider(env),
     requestTimeoutMs: integer(env.NIGHTLIFE_REQUEST_TIMEOUT_MS, 45_000),
     concurrency: integer(env.NIGHTLIFE_CONCURRENCY, 4),
-    maxCandidates: integer(env.NIGHTLIFE_MAX_CANDIDATES, 24),
+    // A per-refresh spend ceiling, not a shortlist. Every candidate with eligible
+    // evidence is assessed; at ~$0.00004 each, 200 is under one cent.
+    maxCandidates: integer(env.NIGHTLIFE_MAX_CANDIDATES, 200),
     maxAttempts: integer(env.NIGHTLIFE_MAX_ATTEMPTS, 3),
     deadlineMs: integer(env.NIGHTLIFE_DEADLINE_MS, 60_000),
     maxCostUsd: float(env.NIGHTLIFE_MAX_COST_USD, null),

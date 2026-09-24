@@ -37,9 +37,11 @@ export async function enrichSemanticEventCards(events = [], options = {}) {
 
 async function enrichOrThrow(events = [], {
   provider,
-  now = new Date(),
   requiredIds = [],
-  maxCandidates = 24,
+  // No shortlist by default: every candidate with model-eligible evidence is
+  // assessed. The provider's own ceiling (NIGHTLIFE_MAX_CANDIDATES) still
+  // bounds spend, and anything past it is reported, not hidden.
+  maxCandidates = Infinity,
   // Profile-scoped preference signals (the public taste-profile block). They
   // are compared locally after inference and never enter a model request or
   // the event-level assessment cache.
@@ -50,11 +52,9 @@ async function enrichOrThrow(events = [], {
     const requiredDelta = Number(required.has(String(right.id))) - Number(required.has(String(left.id)));
     return requiredDelta || Number(right.ranking?.utility ?? 0) - Number(left.ranking?.utility ?? 0);
   });
-  // The call budget is spent only on candidates that have something to ask
-  // about. A candidate with no model-eligible evidence composes no questions
-  // and would never be called, so letting it hold a slot only starves an
-  // eligible candidate further down. The cap itself is unchanged.
-  const { inputs: allInputs } = buildSemanticRequest(ordered, {}, { now });
+  // Only candidates with something to ask about are selected. One with no
+  // model-eligible evidence composes no questions and is never called.
+  const { inputs: allInputs } = buildSemanticRequest(ordered);
   const eligible = ordered
     .map((candidate, index) => ({ candidate, input: allInputs[index] }))
     .filter(({ input }) => Object.keys(buildQuestionSet({ input })).length > 0);
@@ -67,7 +67,7 @@ async function enrichOrThrow(events = [], {
   const eligibleBeyondBudget = eligible.length - chosen.length;
 
   const result = provider
-    ? await provider.assessCandidates(inputs, {})
+    ? await provider.assessCandidates(inputs)
     : { assessments: new Map(), telemetry: { status: 'not configured', coverage: { requested: inputs.length, covered: 0, uncovered: inputs.map((input) => input.ref) } } };
   const assessmentById = new Map();
   inputs.forEach((input, index) => {
@@ -75,6 +75,7 @@ async function enrichOrThrow(events = [], {
     if (assessment) assessmentById.set(String(selected[index].id), assessment);
   });
 
+  const skippedByCeiling = result.telemetry?.skippedForBudget ?? 0;
   const byId = new Map();
   const contributions = emptyContributions();
   for (const event of events) {
@@ -90,7 +91,7 @@ async function enrichOrThrow(events = [], {
     assessedCandidateCount: assessmentById.size,
     enrichedCandidateCount: byId.size,
     modelEligibleCandidateCount,
-    eligibleBeyondBudget,
+    eligibleBeyondBudget: eligibleBeyondBudget + skippedByCeiling,
     selectedCandidateCount: selected.length,
     contributions,
     telemetry: result.telemetry

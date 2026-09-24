@@ -33,12 +33,11 @@ export function candidateRevision(candidate) {
 /**
  * The cache key binds a decision to everything that could change it: the
  * candidate revision, the exact policy-safe input, the decision schema and
- * prompt versions, the provider route, and the user's request context.
+ * prompt versions, and the provider route. Nothing user-specific is part of it.
  */
 export function assessmentCacheKey({
   candidateRevision: revision,
   input,
-  context,
   schemaVersion,
   promptVersion,
   questionIds = [],
@@ -50,7 +49,6 @@ export function assessmentCacheKey({
   return digestValue({
     revision,
     input,
-    context,
     schemaVersion,
     promptVersion,
     questionIds: [...questionIds].sort(),

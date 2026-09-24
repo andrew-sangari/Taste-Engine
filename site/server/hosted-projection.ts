@@ -365,7 +365,6 @@ export async function buildHostedProjection({
     provider: createDecisionInferenceProvider(readNightlifeConfig(process.env)),
     now: generatedAt,
     requiredIds: requiredMusicIds,
-    maxCandidates: 24,
     // Compared locally against Jev's event characterization; never sent to it.
     preferences: { topTags: array(rankedSnapshot.topTags).map(String) },
   });

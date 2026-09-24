@@ -109,3 +109,38 @@ test('the published row carries the insight and none of the private evidence', (
   assert.ok(row.semanticInsight.claimOrder.length > 0);
   assert.doesNotMatch(JSON.stringify(row), /permission|modelInput|probabilit/);
 });
+
+test('every eligible candidate is assessed, and only the spend ceiling can leave any out', async () => {
+  const { semanticSourceHealth } = await import('../src/nightlife/cardEnrichment.js');
+  const events = Array.from({ length: 30 }, (_, index) => ({
+    ...normalizeTicketmasterEvent({
+      id: `tm-${index}`, name: `Night ${index}`, url: `https://www.ticketmaster.com/event/tm-${index}`,
+      dates: { start: { localDate: '2026-10-03', localTime: '20:00:00' } },
+      classifications: [{ segment: { name: 'Music' }, genre: { name: 'Dance/Electronic' } }],
+      _embedded: { venues: [{ name: `Room ${index}`, city: { name: 'Los Angeles' } }], attractions: [{ name: `Act ${index}` }] }
+    }, new Date('2026-09-20T00:00:00Z')),
+    ranking: { utility: index }
+  }));
+  const adapter = {
+    name: 'fixture', model: 'jev-fixture', configured: true,
+    describe: () => ({ provider: 'fixture', model: 'jev-fixture', route: 'fixture', configured: true }),
+    async evaluate({ questions }) {
+      const answers = {};
+      for (const [id, question] of Object.entries(questions)) {
+        const choice = Object.keys(question.criteria).at(-1);
+        answers[id] = { type: 'choice', choice, probabilities: { [choice]: 0.8 }, confidence: 0.8 };
+      }
+      return { answers, usage: { inputTokens: 100 }, latencyMs: 1, model: 'jev-fixture' };
+    }
+  };
+
+  const all = await enrichSemanticEventCards(events, { provider: createDecisionInferenceProvider({ provider: 'custom', adapter }) });
+  assert.equal(all.assessedCandidateCount, 30, 'no 24-candidate shortlist');
+  assert.equal(all.eligibleBeyondBudget, 0);
+  assert.equal(semanticSourceHealth(all).status, 'active');
+
+  const capped = await enrichSemanticEventCards(events, { provider: createDecisionInferenceProvider({ provider: 'custom', adapter, maxCandidates: 5 }) });
+  assert.equal(capped.assessedCandidateCount, 5);
+  assert.equal(capped.eligibleBeyondBudget, 25);
+  assert.equal(semanticSourceHealth(capped).details.eligibleBeyondBudget, 25);
+});

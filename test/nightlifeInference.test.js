@@ -5,17 +5,7 @@ import { createEvidenceFact, createEventEvidence } from '../src/eventEvidence.js
 import { createGatewayProvider } from '../src/nightlife/providers/gateway.js';
 import { createDirectServingProvider } from '../src/nightlife/providers/directServing.js';
 import { buildSemanticRequest } from '../src/nightlife/semanticInput.js';
-import { normalizeNightlifeContext } from '../src/nightlife/context.js';
 import { readNightlifeConfig } from '../src/nightlife/config.js';
-
-const context = normalizeNightlifeContext({
-  goal: 'Something loud and late downtown',
-  date: '2026-09-26',
-  latestReturn: '03:00',
-  startArea: 'Downtown / Arts District',
-  lateNightIntent: 'out late',
-  noveltyAppetite: 'exploratory'
-});
 
 function candidate(id = 'ticketmaster:1') {
   const sourceEventId = id.replace(':', '-');
@@ -87,7 +77,7 @@ function answersFixture({ experienceCharacter = 'dance_floor', confidence = 0.9 
 }
 
 function inputsFor(candidates = [candidate()]) {
-  return buildSemanticRequest(candidates, context, { now: new Date('2026-09-20T12:00:00') }).inputs;
+  return buildSemanticRequest(candidates).inputs;
 }
 
 function providerWith(fetchImpl, overrides = {}) {
@@ -178,8 +168,8 @@ test('both routes produce an identical assessment from identical answers', async
     { fetchImpl: async () => ok(fixture) }
   );
   const inputs = inputsFor();
-  const left = await gateway.assessCandidates(inputs, context);
-  const right = await direct.assessCandidates(inputs, context);
+  const left = await gateway.assessCandidates(inputs);
+  const right = await direct.assessCandidates(inputs);
   const strip = (value) => {
     const { provider: _provider, model: _model, cached: _cached, ...rest } = value;
     return rest;
@@ -189,7 +179,7 @@ test('both routes produce an identical assessment from identical answers', async
 
 test('low confidence becomes unknown rather than a weak characterization', async () => {
   const provider = providerWith(async () => ok(answersFixture({ experienceCharacter: 'live_performance', confidence: 0.31 })));
-  const { assessments } = await provider.assessCandidates(inputsFor(), context);
+  const { assessments } = await provider.assessCandidates(inputsFor());
   const assessment = assessments.get('cand-1');
   assert.equal(assessment.experienceCharacter, 'unknown');
   assert.equal(assessment.certainty.experienceCharacter, 'low');
@@ -198,7 +188,7 @@ test('low confidence becomes unknown rather than a weak characterization', async
 
 test('the composed reason is deterministic and never quotes the model', async () => {
   const provider = providerWith(async () => ok(answersFixture()));
-  const { assessments } = await provider.assessCandidates(inputsFor(), context);
+  const { assessments } = await provider.assessCandidates(inputsFor());
   const assessment = assessments.get('cand-1');
   assert.equal(assessment.reason, 'Published details describe a dance-floor experience; published music details point to electronic dance music, the published format is standing or floor-oriented, published event times establish a late-running window, the published entry policy is age-restricted, published venue metadata describes a club or dance room.');
   assert.ok(!/https?:\/\//.test(assessment.reason));
@@ -206,14 +196,14 @@ test('the composed reason is deterministic and never quotes the model', async ()
   assert.ok(assessment.evidenceRefs.every((ref) => ref.startsWith('cand-1/')));
 });
 
-test('v2 event characterization asks no generic noul friction questions', async () => {
+test('event characterization asks no goal-driven or friction questions', async () => {
   let requested;
   const provider = providerWith(async (_url, options) => {
     requested = Object.keys(JSON.parse(options.body).questions);
     return ok(answersFixture());
   });
-  await provider.assessCandidates(inputsFor(), context);
-  assert.ok(requested.every((id) => !id.startsWith('friction_')));
+  await provider.assessCandidates(inputsFor());
+  assert.ok(requested.every((id) => !id.startsWith('friction_') && !['context_fit', 'music_fit', 'late_night_fit', 'novelty'].includes(id)));
 });
 
 test('an unrequested question id is rejected as a validation failure', async () => {
@@ -222,7 +212,7 @@ test('an unrequested question id is rejected as a validation failure', async () 
     answers: { ...answersFixture().answers, smuggled: { type: 'noul', noul: 1 } },
     usage: { input_tokens: 10, output_tokens: 1 }
   }));
-  const { assessments, telemetry } = await provider.assessCandidates(inputsFor(), context);
+  const { assessments, telemetry } = await provider.assessCandidates(inputsFor());
   assert.equal(assessments.size, 0);
   assert.equal(telemetry.validationFailures, 1);
   assert.equal(telemetry.status, 'deterministic fallback');
@@ -232,7 +222,7 @@ test('an option outside the declared criteria is rejected', async () => {
   const fixture = answersFixture();
   fixture.answers.event_experience.choice = 'spectacular';
   const provider = providerWith(async () => ok(fixture));
-  const { telemetry } = await provider.assessCandidates(inputsFor(), context);
+  const { telemetry } = await provider.assessCandidates(inputsFor());
   assert.equal(telemetry.validationFailures, 1);
 });
 
@@ -244,7 +234,7 @@ test('one failing candidate falls back alone and coverage reports it', async () 
     return ok(answersFixture());
   }, { concurrency: 1 });
   const inputs = inputsFor([candidate('ticketmaster:1'), candidate('ticketmaster:2')]);
-  const { assessments, telemetry } = await provider.assessCandidates(inputs, context);
+  const { assessments, telemetry } = await provider.assessCandidates(inputs);
   assert.equal(assessments.size, 1);
   assert.equal(telemetry.status, 'partial inference');
   assert.deepEqual(telemetry.coverage, { requested: 2, covered: 1, uncovered: ['cand-1'] });
@@ -257,7 +247,7 @@ test('a 429 is retried with backoff and a 422 is not', async () => {
     if (attempts === 1) return { ok: false, status: 429, json: async () => ({}) };
     return ok(answersFixture());
   });
-  const result = await retried.assessCandidates(inputsFor(), context);
+  const result = await retried.assessCandidates(inputsFor());
   assert.equal(result.assessments.size, 1);
   assert.equal(result.telemetry.retries, 1);
 
@@ -266,7 +256,7 @@ test('a 429 is retried with backoff and a 422 is not', async () => {
     hardAttempts += 1;
     return { ok: false, status: 422, json: async () => ({}) };
   });
-  await notRetried.assessCandidates(inputsFor(), context);
+  await notRetried.assessCandidates(inputsFor());
   assert.equal(hardAttempts, 1, 'a malformed request must not be retried');
 });
 
@@ -276,14 +266,14 @@ test('a timeout falls back without throwing', async () => {
     error.name = 'TimeoutError';
     throw error;
   }, { maxAttempts: 1 });
-  const { assessments, telemetry } = await provider.assessCandidates(inputsFor(), context);
+  const { assessments, telemetry } = await provider.assessCandidates(inputsFor());
   assert.equal(assessments.size, 0);
   assert.equal(telemetry.errors.length, 1);
 });
 
 test('a malformed body is a validation failure, not a crash', async () => {
   const provider = providerWith(async () => ok({ model: 'jev-1.13.0', notAnswers: true }));
-  const { telemetry } = await provider.assessCandidates(inputsFor(), context);
+  const { telemetry } = await provider.assessCandidates(inputsFor());
   assert.equal(telemetry.callsCompleted, 0);
   assert.equal(telemetry.errors.length, 1);
 });
@@ -295,8 +285,8 @@ test('a second identical request is served from cache without another call', asy
     return ok(answersFixture());
   });
   const inputs = inputsFor();
-  await provider.assessCandidates(inputs, context);
-  const second = await provider.assessCandidates(inputs, context);
+  await provider.assessCandidates(inputs);
+  const second = await provider.assessCandidates(inputs);
   assert.equal(calls, 1);
   assert.equal(second.telemetry.cacheHits, 1);
   assert.equal(second.assessments.get('cand-1').cached, true);
@@ -310,16 +300,16 @@ test('a changed candidate revision invalidates the cached assessment', async () 
   });
   const inputs = inputsFor();
   inputs[0].revision = 'rev-1';
-  await provider.assessCandidates(inputs, context);
+  await provider.assessCandidates(inputs);
   const moved = inputsFor();
   moved[0].revision = 'rev-2';
-  await provider.assessCandidates(moved, context);
+  await provider.assessCandidates(moved);
   assert.equal(calls, 2);
 });
 
 test('spend is reported per assessed candidate from documented pricing', async () => {
   const provider = providerWith(async () => ok(answersFixture()));
-  const { telemetry } = await provider.assessCandidates(inputsFor(), context);
+  const { telemetry } = await provider.assessCandidates(inputsFor());
   // 400 input tokens at $42 per billion.
   assert.equal(telemetry.costUsd, 0.0000168);
   assert.equal(telemetry.costPerAssessedCandidateUsd, 0.0000168);
@@ -332,7 +322,7 @@ test('a disabled provider makes no call and reports deterministic fallback', asy
       throw new Error('must not be called');
     }
   });
-  const { assessments, telemetry } = await provider.assessCandidates(inputsFor(), context);
+  const { assessments, telemetry } = await provider.assessCandidates(inputsFor());
   assert.equal(assessments.size, 0);
   assert.equal(telemetry.status, 'not configured');
 });

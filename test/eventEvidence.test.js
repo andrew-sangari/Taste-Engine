@@ -249,7 +249,7 @@ test('a representative permitted event composes at least one question end to end
     }
   }, new Date('2026-09-23T00:00:00Z'));
   event.ranking = { utility: 60 };
-  const { inputs } = buildSemanticRequest([event], {}, { now: new Date('2026-09-23T00:00:00Z') });
+  const { inputs } = buildSemanticRequest([event]);
   const questions = buildQuestionSet({ input: inputs[0] });
   assert.ok(Object.keys(inputs[0].fields.publishedFacts ?? {}).length > 0, 'serializer must emit model-transmittable facts');
   assert.ok(Object.keys(questions).length > 0, 'composer must ask at least one question of them');

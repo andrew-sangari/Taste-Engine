@@ -66,10 +66,10 @@ Ollama Cloud never becomes the ranker or source of canonical facts. Spotify-deri
 
 ## Card enrichment (System One / Jev)
 
-The hosted refresh runs the same bounded card-enrichment pass as the local export: after deterministic ranking, up to 24 candidates — Overview picks first — are characterized from permitted Ticketmaster and Framework evidence, and Music and Overview cards gain source-linked "About this night" claims. See `docs/system-one-inference.md`.
+The hosted refresh runs the same bounded card-enrichment pass as the local export: after deterministic ranking, every candidate with model-eligible evidence — Overview picks first — is characterized from permitted Ticketmaster and Framework evidence, and Music and Overview cards gain source-linked "About this night" claims. See `docs/system-one-inference.md`.
 
 - Route: direct TypeSafe serving, `POST https://api.typesafe.ai/v1/systemone`, bearer `TYPESAFE_AI_API_KEY`. Selected automatically when that key is present.
-- Cost and time: one request per model-eligible candidate, about $0.00004 and 200ms each, at concurrency 4 under a 60-second deadline. On current coverage roughly 8 of 24 candidates are eligible, so a pass adds under ten outbound requests.
+- Cost and time: one request per model-eligible candidate, about $0.00004 and 200ms each, at concurrency 4 under a 60-second deadline. On current coverage about 50 of 98 candidates are eligible: roughly 50 requests, $0.002 and a few seconds per refresh. `NIGHTLIFE_MAX_CANDIDATES` (default 200) is a spend ceiling, not a shortlist; anything past it is counted as `eligibleBeyondBudget` in source health and makes the row `partial`.
 - Retries: 429 and 529 are retried with backoff, at most three attempts; 401 and 422 are not.
 - Failure: advisory only. A missing key, a failed call, or even a source-policy guard refusing to serialize a candidate degrades that run to "no enrichment" and never blocks publication. `jev-events` source health reads `not configured`, `active`, `partial`, or `unavailable` accordingly.
 - Privacy: raw assessments and provider probabilities are never published; the projection carries only the composed display claims.

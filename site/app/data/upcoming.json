@@ -1,6 +1,6 @@
 {
   "schemaVersion": 5,
-  "generatedAt": "2026-09-24T01:08:56.996Z",
+  "generatedAt": "2026-09-24T01:38:01.056Z",
   "horizon": {
     "startDate": "2026-09-23",
     "endDate": "2027-03-22",
@@ -40,14 +40,14 @@
     {
       "source": "ticketmaster",
       "status": "partial",
-      "itemCount": 1006,
-      "warningCount": 13,
+      "itemCount": 1005,
+      "warningCount": 11,
       "details": {
-        "evidenceCount": 1006,
-        "modelEligibleCount": 1006,
+        "evidenceCount": 1005,
+        "modelEligibleCount": 1005,
         "fieldCoverage": {
           "title": {
-            "count": 1006,
+            "count": 1005,
             "rate": 1
           },
           "description": {
@@ -55,11 +55,11 @@
             "rate": 0.74
           },
           "classification": {
-            "count": 1005,
+            "count": 1004,
             "rate": 0.999
           },
           "namedLineup": {
-            "count": 839,
+            "count": 838,
             "rate": 0.834
           },
           "format": {
@@ -71,7 +71,7 @@
             "rate": 0
           },
           "startTime": {
-            "count": 1004,
+            "count": 1003,
             "rate": 0.998
           },
           "endTime": {
@@ -79,7 +79,7 @@
             "rate": 0.066
           },
           "venueInfo": {
-            "count": 1006,
+            "count": 1005,
             "rate": 1
           },
           "agePolicy": {
@@ -87,7 +87,7 @@
             "rate": 0
           },
           "genre": {
-            "count": 1005,
+            "count": 1004,
             "rate": 0.999
           },
           "blurb": {
@@ -233,15 +233,15 @@
     {
       "source": "jev-events",
       "status": "active",
-      "itemCount": 43,
+      "itemCount": 42,
       "warningCount": 0,
       "details": {
-        "evidenceCount": 43,
-        "modelEligibleCount": 24,
-        "assessedCount": 24,
-        "modelDerivedCardCount": 1,
-        "personalMatchCardCount": 2,
-        "eligibleBeyondBudget": 26
+        "evidenceCount": 42,
+        "modelEligibleCount": 49,
+        "assessedCount": 49,
+        "modelDerivedCardCount": 0,
+        "personalMatchCardCount": 1,
+        "eligibleBeyondBudget": 0
       }
     },
     {
@@ -345,7 +345,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -441,7 +441,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -544,7 +544,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -652,7 +652,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -707,7 +707,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/josh-baker/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -721,7 +721,7 @@
         },
         "recommendation": {
           "verdict": "consider",
-          "explanation": "Josh Baker at The Dock; worth exploring as a potential discovery despite lack of genre detail."
+          "explanation": "Josh Baker is a single performer; suitability depends on musical interest which is currently unverified."
         }
       },
       "feedbackSnapshot": {
@@ -775,7 +775,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -830,7 +830,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/charli-xcx-music-fashion-film-tour-inglewood-california-10-17-2026/event/090064C5EF12A97C",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -838,13 +838,13 @@
       },
       "localEnhancement": {
         "personalFit": {
-          "score": 65,
-          "label": "possible fit",
-          "explanation": "Charli xcx aligns with electronic interests; venue is a large scale presentation in Inglewood."
+          "score": 75,
+          "label": "strong fit",
+          "explanation": "Charli xcx aligns with electronic interests; Kia Forum is a major venue worth a cross-town trip."
         },
         "recommendation": {
           "verdict": "consider",
-          "explanation": "Charli xcx at Kia Forum; aligns with interest in music/fashion/film, though involves travel to Inglewood."
+          "explanation": "Charli xcx tour aligns with electronic interests, though travel to Inglewood is noted as a friction point."
         },
         "urgency": {
           "label": "safe to wait",
@@ -852,7 +852,7 @@
         },
         "hassle": {
           "score": 1,
-          "explanation": "Low hassle score for this Saturday evening event in Inglewood."
+          "explanation": "Low hassle score for an evening event in Inglewood occurring in 25 days."
         }
       },
       "feedbackSnapshot": {
@@ -906,7 +906,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -961,7 +961,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/charli-xcx-music-fashion-film-tour-inglewood-california-10-18-2026/event/090064C5F509BA04",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -1010,7 +1010,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1100,7 +1100,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1190,7 +1190,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1285,7 +1285,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1340,7 +1340,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/aespa-live-tour-synk-complxity-in-inglewood-california-10-03-2026/event/09006495E8BC30ED",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -1350,11 +1350,11 @@
         "personalFit": {
           "score": 85,
           "label": "strong fit",
-          "explanation": "Direct alignment with K-pop interest; high-scale venue in Inglewood."
+          "explanation": "Direct alignment with K-pop interest; Intuit Dome is a significant destination."
         },
         "recommendation": {
           "verdict": "prioritize",
-          "explanation": "aespa at Intuit Dome; aligns directly with K-pop interest, justifying the travel to Inglewood."
+          "explanation": "Matches K-pop interest; despite the travel friction to Inglewood, the genre alignment is strong."
         },
         "urgency": {
           "label": "safe to wait",
@@ -1362,7 +1362,7 @@
         },
         "hassle": {
           "score": 1,
-          "explanation": "Low hassle score for this Saturday evening event in Inglewood."
+          "explanation": "Low hassle score for an evening event in Inglewood occurring in 11 days."
         }
       },
       "feedbackSnapshot": {
@@ -1407,7 +1407,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1471,11 +1471,11 @@
         "personalFit": {
           "score": 0,
           "label": "weak fit",
-          "explanation": "No artist or venue information provided to assess personal fit."
+          "explanation": "No event details provided."
         },
         "recommendation": {
           "verdict": "watch",
-          "explanation": "No event details provided to evaluate interest or feasibility."
+          "explanation": "Insufficient details regarding artist or venue to provide a recommendation."
         }
       },
       "feedbackSnapshot": {
@@ -1530,7 +1530,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1602,7 +1602,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/hugel/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -1651,7 +1651,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1750,7 +1750,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1805,7 +1805,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/event/Z7r9jZ1A70_1o",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -1813,13 +1813,13 @@
       },
       "localEnhancement": {
         "personalFit": {
-          "score": 55,
+          "score": 60,
           "label": "possible fit",
-          "explanation": "Tove Lo aligns with electronic interests; Greek Theatre offers a specific presentation quality."
+          "explanation": "Tove Lo aligns with electronic interests; Greek Theatre is a notable Los Angeles venue."
         },
         "recommendation": {
           "verdict": "consider",
-          "explanation": "Tove Lo at the Greek Theatre; a notable Los Angeles venue, though genre fit is unconfirmed."
+          "explanation": "Tove Lo aligns with electronic interests; venue is local to Los Angeles with low friction."
         },
         "urgency": {
           "label": "watch",
@@ -1827,7 +1827,7 @@
         },
         "hassle": {
           "score": 0,
-          "explanation": "Minimal hassle for this Sunday evening event in Los Angeles."
+          "explanation": "Minimal hassle for a Sunday evening event located in Los Angeles."
         }
       },
       "feedbackSnapshot": {
@@ -1872,7 +1872,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -1919,7 +1919,7 @@
         "personalFit": {
           "score": 0,
           "label": "weak fit",
-          "explanation": "No artist or venue information provided to assess personal fit."
+          "explanation": "No event details provided."
         },
         "recommendation": {
           "verdict": "consider",
@@ -1968,7 +1968,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2071,7 +2071,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2157,7 +2157,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2267,7 +2267,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2316,9 +2316,9 @@
       "semanticInsight": null,
       "localEnhancement": {
         "personalFit": {
-          "score": 65,
-          "label": "possible fit",
-          "explanation": "Electronic music interest; local Los Angeles venue."
+          "score": 70,
+          "label": "strong fit",
+          "explanation": "Kettama aligns with electronic interests; located in Los Angeles."
         },
         "recommendation": {
           "verdict": "watch",
@@ -2330,7 +2330,7 @@
         },
         "hassle": {
           "score": 2,
-          "explanation": "Moderate hassle score for this Wednesday event in Los Angeles with an unknown start period."
+          "explanation": "Moderate hassle score due to an unknown start period for this Los Angeles concert."
         }
       },
       "feedbackSnapshot": {
@@ -2375,7 +2375,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2465,7 +2465,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2595,7 +2595,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2655,7 +2655,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://on.fgtix.com/trk/Ni5m",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             },
             {
@@ -2681,17 +2681,12 @@
       "title": "John Summit",
       "sourceUrl": "https://seatgeek.com/john-summit-tickets/los-angeles-california-los-angeles-memorial-coliseum-2026-12-12-7-pm/concert/18494071",
       "sources": [
-        "seatgeek",
-        "ticketmaster"
+        "seatgeek"
       ],
       "sourceLinks": [
         {
           "source": "seatgeek",
           "url": "https://seatgeek.com/john-summit-tickets/los-angeles-california-los-angeles-memorial-coliseum-2026-12-12-7-pm/concert/18494071"
-        },
-        {
-          "source": "ticketmaster",
-          "url": "https://www.ticketmaster.com/john-summit-ctrl-escape-tour-los-angeles-california-12-12-2026/event/0A0064FFC2CDF6B7"
         }
       ],
       "eventType": "concert",
@@ -2715,7 +2710,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2774,25 +2769,7 @@
         "urgency": "safe to wait",
         "whyYou": "John Summit shows up 6 times in one of your core playlists."
       },
-      "semanticInsight": {
-        "summary": "Ticketmaster classifies it as Dance/Electronic.",
-        "claimOrder": [
-          "whatToExpect"
-        ],
-        "whatToExpect": {
-          "text": "Ticketmaster classifies it as Dance/Electronic.",
-          "status": "verified",
-          "basis": "documented-attribute",
-          "evidence": [
-            {
-              "source": "Ticketmaster",
-              "url": "https://www.ticketmaster.com/john-summit-ctrl-escape-tour-los-angeles-california-12-12-2026/event/0A0064FFC2CDF6B7",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
-              "status": "verified"
-            }
-          ]
-        }
-      },
+      "semanticInsight": null,
       "localEnhancement": null,
       "feedbackSnapshot": {
         "feedbackSnapshotId": "fs-53ce80bb955dc53c63387743",
@@ -2836,7 +2813,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2927,7 +2904,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -2972,9 +2949,9 @@
       "semanticInsight": null,
       "localEnhancement": {
         "personalFit": {
-          "score": 50,
+          "score": 55,
           "label": "possible fit",
-          "explanation": "Pop presentation at a notable local venue."
+          "explanation": "Zara Larsson aligns with pop interests; Greek Theatre is a notable venue."
         },
         "recommendation": {
           "verdict": "consider",
@@ -2986,7 +2963,7 @@
         },
         "hassle": {
           "score": 0,
-          "explanation": "Minimal hassle for this Tuesday evening event in Los Angeles."
+          "explanation": "Minimal hassle for a Tuesday evening concert located in Los Angeles."
         }
       },
       "feedbackSnapshot": {
@@ -3036,7 +3013,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -3127,7 +3104,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -3183,7 +3160,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.universe.com/events/an-evening-with-kim-petras-tickets-DSN8VH?ref=ticketmaster",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -3196,7 +3173,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.universe.com/events/an-evening-with-kim-petras-tickets-DSN8VH?ref=ticketmaster",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -3245,7 +3222,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -3348,7 +3325,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -3401,13 +3378,13 @@
       "semanticInsight": null,
       "localEnhancement": {
         "personalFit": {
-          "score": 60,
+          "score": 65,
           "label": "possible fit",
-          "explanation": "Potential K-pop/R&B crossover interest; local Los Angeles venue."
+          "explanation": "Jay Park aligns with K-pop/R&B interests; located in Los Angeles."
         },
         "recommendation": {
-          "verdict": "prioritize",
-          "explanation": "Jay Park aligns with K-pop interests and offers a local Los Angeles engagement with low friction."
+          "verdict": "consider",
+          "explanation": "Jay Park aligns with K-pop interests; local venue provides low friction for a potential match."
         },
         "urgency": {
           "label": "watch",
@@ -3415,7 +3392,7 @@
         },
         "hassle": {
           "score": 0,
-          "explanation": "Minimal hassle for this Saturday evening event in Los Angeles."
+          "explanation": "Minimal hassle for a Saturday evening concert located in Los Angeles."
         }
       },
       "feedbackSnapshot": {
@@ -3460,7 +3437,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -3582,7 +3559,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -3638,7 +3615,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.universe.com/events/an-evening-with-raye-tickets-91QXG4?ref=ticketmaster",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -3651,7 +3628,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.universe.com/events/an-evening-with-raye-tickets-91QXG4?ref=ticketmaster",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -3661,7 +3638,7 @@
         "personalFit": {
           "score": 40,
           "label": "exploratory",
-          "explanation": "Specific venue type; artist relevance to electronic or K-pop is not established."
+          "explanation": "RAYE is a significant performer, but venue type is more specialized/intimate."
         },
         "recommendation": {
           "verdict": "consider",
@@ -3673,7 +3650,7 @@
         },
         "hassle": {
           "score": 0,
-          "explanation": "Minimal hassle for this Monday evening event in Los Angeles."
+          "explanation": "Minimal hassle for a Monday evening concert located in Los Angeles."
         }
       },
       "feedbackSnapshot": {
@@ -3727,7 +3704,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -3782,7 +3759,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/comedy-tragedy-parody-dominic-fike-in-los-angeles-california-09-29-2026/event/0900648FC0A9933D",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -3792,7 +3769,7 @@
         "personalFit": {
           "score": 45,
           "label": "exploratory",
-          "explanation": "Artist relevance to established music interests is unconfirmed."
+          "explanation": "Dominic Fike is a known artist, but genre alignment is not explicitly confirmed."
         },
         "recommendation": {
           "verdict": "watch",
@@ -3804,7 +3781,7 @@
         },
         "hassle": {
           "score": 0,
-          "explanation": "Minimal hassle for this Tuesday evening event in Los Angeles."
+          "explanation": "Minimal hassle for a Tuesday evening concert located in Los Angeles."
         }
       },
       "feedbackSnapshot": {
@@ -3858,7 +3835,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -3913,7 +3890,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/comedy-tragedy-parody-dominic-fike-in-los-angeles-california-09-30-2026/event/0900648FECB8C10C",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -3966,7 +3943,7 @@
         "listingCount": null,
         "lowestPriceUsd": 39.95,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -4045,32 +4022,11 @@
         "whyYou": "SIDEPIECE is a strong signal in one of your selected playlists."
       },
       "semanticInsight": {
-        "summary": "The listing points to a dance-floor set from SIDEPIECE, who is already in your listening.",
+        "summary": "Ticketmaster classifies it as Dance/Electronic.",
         "claimOrder": [
-          "whyItMayFit",
           "worthChecking",
           "whatToExpect"
         ],
-        "whyItMayFit": {
-          "text": "The listing points to a dance-floor set from SIDEPIECE, who is already in your listening.",
-          "status": "inferred",
-          "basis": "calculated-match",
-          "eventBasis": "model-characterization",
-          "evidence": [
-            {
-              "source": "Ticketmaster",
-              "url": "https://www.ticketweb.com/event/sidepiece-w-maesic-avalon-hollywood-tickets/14334404",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
-              "status": "verified"
-            },
-            {
-              "source": "Your taste profile: SIDEPIECE is in your selected listening",
-              "url": null,
-              "retrievedAt": null,
-              "status": "verified"
-            }
-          ]
-        },
         "worthChecking": {
           "text": "Starts at 10 PM and no end time is published, so how late it runs is not known.",
           "status": "not known",
@@ -4079,7 +4035,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketweb.com/event/sidepiece-w-maesic-avalon-hollywood-tickets/14334404",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -4092,7 +4048,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketweb.com/event/sidepiece-w-maesic-avalon-hollywood-tickets/14334404",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -4154,7 +4110,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -4253,7 +4209,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -4339,7 +4295,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -4434,7 +4390,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -4489,7 +4445,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/doja-cat-tour-ma-vie-world-inglewood-california-10-22-2026/event/0900633A1B2389F9",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -4559,7 +4515,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -4659,7 +4615,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/worship-north-america-2026-inglewood-california-10-23-2026/event/090064D3F4CB4635",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -4712,7 +4668,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -4836,7 +4792,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -4922,7 +4878,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5008,7 +4964,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5094,7 +5050,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5222,7 +5178,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5277,7 +5233,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/the-kehlani-world-tour-north-america-inglewood-california-09-24-2026/event/090064B6E25E61FE",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -5287,19 +5243,19 @@
         "personalFit": {
           "score": 50,
           "label": "possible fit",
-          "explanation": "Large scale production in Inglewood; artist relevance is unconfirmed via provided interests."
+          "explanation": "Kehlani is a major performer, though genre alignment is not explicitly established."
         },
         "recommendation": {
           "verdict": "consider",
-          "explanation": "Kehlani tour at Intuit Dome; aligns with interest in major performances, though involves some travel friction."
+          "explanation": "Kehlani is a major performer, but the event details are limited beyond the tour name."
         },
         "urgency": {
           "label": "watch",
-          "explanation": "The advisory label suggests watching this festival occurring in 2 days."
+          "explanation": "The advisory label suggests watching this festival occurring in 1 day."
         },
         "hassle": {
           "score": 1,
-          "explanation": "Low hassle score for this Thursday evening festival in Inglewood."
+          "explanation": "Low hassle score for a Thursday evening festival in Inglewood occurring tomorrow."
         }
       },
       "feedbackSnapshot": {
@@ -5357,7 +5313,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5412,7 +5368,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/bruno-mars-the-romantic-tour-inglewood-california-09-30-2026/event/0A006451D6B8C1D4",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -5478,7 +5434,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5541,7 +5497,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/bruno-mars-the-romantic-tour-inglewood-california-10-02-2026/event/0A006396BA615BBE",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -5607,7 +5563,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5670,7 +5626,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/bruno-mars-the-romantic-tour-inglewood-california-10-03-2026/event/0A006396E80D747B",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -5736,7 +5692,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5799,7 +5755,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/bruno-mars-the-romantic-tour-inglewood-california-10-06-2026/event/0A006426C23B4B2A",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -5865,7 +5821,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -5928,7 +5884,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/bruno-mars-the-romantic-tour-inglewood-california-10-07-2026/event/0A006426C2444B31",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -5990,7 +5946,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6045,7 +6001,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/logic-geazy-the-endless-summer-tour-inglewood-california-10-21-2026/event/0A006496ABA0B4F9",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -6111,7 +6067,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6166,7 +6122,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/bryson-tiller-presents-the-neo-trapsoul-inglewood-california-10-25-2026/event/090064B9EC44AB68",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -6215,7 +6171,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6309,7 +6265,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6399,7 +6355,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6489,7 +6445,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6579,7 +6535,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6665,7 +6621,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6796,7 +6752,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -6855,7 +6811,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/bryson-tiller-presents-the-neo-trapsoul-anaheim-california-10-22-2026/event/090064B5DC213A81",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -6904,7 +6860,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7020,7 +6976,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7096,7 +7052,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/jason-ross-18-santa-ana-california-09-25-2026/event/0900649C02F152AC",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -7106,7 +7062,7 @@
         "personalFit": {
           "score": 55,
           "label": "possible fit",
-          "explanation": "Electronic music interest; however, travel to Santa Ana may be a factor."
+          "explanation": "Jason Ross aligns with electronic interests, though Santa Ana requires significant travel."
         },
         "recommendation": {
           "verdict": "watch",
@@ -7118,7 +7074,7 @@
         },
         "hassle": {
           "score": 3,
-          "explanation": "Moderate hassle score for this Friday evening event in Santa Ana."
+          "explanation": "Moderate hassle score for a Friday evening concert requiring travel to Santa Ana."
         }
       },
       "feedbackSnapshot": {
@@ -7168,7 +7124,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7251,13 +7207,13 @@
       "semanticInsight": null,
       "localEnhancement": {
         "personalFit": {
-          "score": 65,
-          "label": "possible fit",
-          "explanation": "Electronic music interest; local Los Angeles venue."
+          "score": 70,
+          "label": "strong fit",
+          "explanation": "Amelie Lens aligns with electronic interests; located in Los Angeles."
         },
         "recommendation": {
           "verdict": "watch",
-          "explanation": "Amelie Lens at a local park; aligns with electronic music interest with low friction."
+          "explanation": "Amelie Lens aligns with electronic interests; location is local, but specific set details are unknown."
         },
         "urgency": {
           "label": "watch",
@@ -7265,7 +7221,7 @@
         },
         "hassle": {
           "score": 0,
-          "explanation": "Minimal hassle for this Saturday evening event in Los Angeles."
+          "explanation": "Minimal hassle for a Saturday evening concert located in Los Angeles."
         }
       },
       "feedbackSnapshot": {
@@ -7310,7 +7266,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7382,7 +7338,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/jimi-jules-open-to-close-%e7%9c%bc%e7%9d%9b-%e7%9c%bc%e7%9d%9b-%e7%9c%bc%e7%9d%9b/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -7390,13 +7346,13 @@
       },
       "localEnhancement": {
         "personalFit": {
-          "score": 60,
+          "score": 65,
           "label": "possible fit",
-          "explanation": "Electronic music interest; local Los Angeles venue; noted as promoter-adjacent."
+          "explanation": "Electronic music alignment; located in Los Angeles, though venue type is unspecified."
         },
         "recommendation": {
           "verdict": "watch",
-          "explanation": "Jimi Jules set in Los Angeles; aligns with electronic music interest and low friction."
+          "explanation": "Electronic music interest; local venue, though specific musical fit remains unconfirmed."
         },
         "urgency": {
           "label": "watch",
@@ -7404,7 +7360,7 @@
         },
         "hassle": {
           "score": 0,
-          "explanation": "Minimal hassle for this Saturday evening DJ set in Los Angeles."
+          "explanation": "Minimal hassle for a Saturday evening DJ set located in Los Angeles."
         }
       },
       "feedbackSnapshot": {
@@ -7449,7 +7405,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7504,7 +7460,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/soulection-15-year-anniversary/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -7558,7 +7514,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7668,7 +7624,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7771,7 +7727,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7826,7 +7782,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/chris-stussy-halloween-arizona/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -7880,7 +7836,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -7952,7 +7908,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/kcrw-presents-bonobo-distance-in-static-los-angeles-california-11-11-2026/event/090064C3CC0645B7",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -8006,7 +7962,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8078,7 +8034,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/kcrw-presents-bonobo-distance-in-static-los-angeles-california-11-12-2026/event/090064C3CC0A45C4",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -8127,7 +8083,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8235,7 +8191,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8307,7 +8263,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/amtrac-los-angeles-california-11-25-2026/event/0900650E152099DC",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -8356,7 +8312,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8473,7 +8429,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8528,7 +8484,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/franky-rizardo-presents-flow/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -8577,7 +8533,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8632,7 +8588,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/zhu-second-date/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -8681,7 +8637,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8736,7 +8692,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/black-book-records-presents-untitled/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -8785,7 +8741,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8857,7 +8813,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/nimino/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -8906,7 +8862,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -8961,7 +8917,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/duke-dumont-nye/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -9010,7 +8966,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9065,7 +9021,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/deadmau5-birthday-celebration/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -9114,7 +9070,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9186,7 +9142,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/mahmut-orhan/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -9235,7 +9191,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9307,7 +9263,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/hot-since-82/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -9356,7 +9312,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9463,7 +9419,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9557,7 +9513,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9655,7 +9611,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9749,7 +9705,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9839,7 +9795,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -9929,7 +9885,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10019,7 +9975,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10137,7 +10093,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10239,7 +10195,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10361,7 +10317,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10451,7 +10407,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10566,7 +10522,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10724,7 +10680,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10923,7 +10879,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -10982,7 +10938,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://on.fgtix.com/trk/Ni5m",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -11031,7 +10987,7 @@
         "listingCount": null,
         "lowestPriceUsd": 19.95,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -11129,7 +11085,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketweb.com/event/kyle-watson-360-exchange-la-tickets/14991793",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -11142,7 +11098,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketweb.com/event/kyle-watson-360-exchange-la-tickets/14991793",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -11200,7 +11156,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -11255,7 +11211,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/event/Z7r9jZ1A70kAU",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -11313,7 +11269,7 @@
         "listingCount": null,
         "lowestPriceUsd": null,
         "averagePriceUsd": null,
-        "observedAt": "2026-09-24T01:08:56.996Z"
+        "observedAt": "2026-09-24T01:38:01.056Z"
       },
       "matchedArtists": [
         {
@@ -11368,7 +11324,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/event/Z7r9jZ1A70kAg",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -11434,7 +11390,7 @@
       },
       "sportsContext": {
         "opponentWinPct": 0.554,
-        "opponentLeagueRank": 6,
+        "opponentLeagueRank": 5,
         "opponentDivisionRank": 2,
         "opponentLast10": "8-2",
         "opponentLastTenRecord": {
@@ -11443,7 +11399,7 @@
           "winPct": 0.8
         },
         "opponentStreak": "L1",
-        "opponentWildCardGamesBack": null,
+        "opponentWildCardGamesBack": 0.5,
         "opponentRunDifferential": 34,
         "opponentHomeRecord": {
           "wins": 49,
@@ -11495,12 +11451,14 @@
           "gameCount": 3
         },
         "opponentTags": [
+          "Wild-card contender",
+          "Top-five league record",
           "+34 run differential",
           "Won 8 of last 10"
         ],
         "schedule": {
-          "abstractState": "Preview",
-          "detailedState": "Pre-Game",
+          "abstractState": "Live",
+          "detailedState": "Warmup",
           "codedState": "P",
           "reason": null,
           "changed": false,
@@ -11512,12 +11470,14 @@
         "gameContext": {
           "opponent": {
             "tags": [
+              "Wild-card contender",
+              "Top-five league record",
               "+34 run differential",
               "Won 8 of last 10"
             ],
-            "leagueRank": 6,
+            "leagueRank": 5,
             "divisionRank": 2,
-            "wildCardGamesBack": null,
+            "wildCardGamesBack": 0.5,
             "runDifferential": 34,
             "lastTen": "8-2",
             "streak": "L1"
@@ -11532,8 +11492,8 @@
             "gameCount": 3
           },
           "schedule": {
-            "abstractState": "Preview",
-            "detailedState": "Pre-Game",
+            "abstractState": "Live",
+            "detailedState": "Warmup",
             "codedState": "P",
             "reason": null,
             "changed": false,
@@ -11544,12 +11504,13 @@
         }
       },
       "tags": [
+        "Wild-card contender",
+        "Top-five league record",
         "+34 run differential",
         "Won 8 of last 10",
         "San Diego rivalry",
         "Notable pitching matchup",
-        "Game 2 of 3",
-        "Late-season leverage"
+        "Game 2 of 3"
       ],
       "ticketObservations": [
         {
@@ -11560,7 +11521,7 @@
           "averagePriceUsd": null,
           "listingCount": null,
           "status": "normal",
-          "observedAt": "2026-09-24T01:08:56.996Z"
+          "observedAt": "2026-09-24T01:38:01.056Z"
         },
         {
           "source": "ticketmaster",
@@ -11570,7 +11531,7 @@
           "averagePriceUsd": null,
           "listingCount": null,
           "status": "onsale",
-          "observedAt": "2026-09-24T01:08:56.996Z"
+          "observedAt": "2026-09-24T01:38:01.056Z"
         }
       ],
       "sourceLinks": [
@@ -11589,10 +11550,10 @@
       ],
       "ranking": {
         "excluded": false,
-        "interestScore": 86,
-        "utility": 82,
-        "opponentQuality": 14,
-        "opponentStakesScore": 2,
+        "interestScore": 91,
+        "utility": 87,
+        "opponentQuality": 15,
+        "opponentStakesScore": 6,
         "rivalryScore": 15,
         "pitchingScore": 6,
         "leverageScore": 10,
@@ -11629,13 +11590,13 @@
       },
       "localEnhancement": {
         "personalFit": {
-          "score": 85,
-          "label": "strong fit",
-          "explanation": "High leverage and rivalry tier paired with solid pitching make this a high-value presentation despite the travel hassle."
+          "score": 75,
+          "label": "possible fit",
+          "explanation": "High leverage and rivalry tier provide strong value, though low convenience score offsets the high deterministic interest."
         },
         "recommendation": {
           "verdict": "prioritize",
-          "explanation": "High leverage and rivalry tier combined with strong deterministic interest make this a top priority despite the lower convenience score."
+          "explanation": "High deterministic interest and high leverage score make this a top priority, despite the lower convenience score."
         },
         "urgency": {
           "label": "watch",
@@ -11703,7 +11664,7 @@
       },
       "sportsContext": {
         "opponentWinPct": 0.554,
-        "opponentLeagueRank": 6,
+        "opponentLeagueRank": 5,
         "opponentDivisionRank": 2,
         "opponentLast10": "8-2",
         "opponentLastTenRecord": {
@@ -11712,7 +11673,7 @@
           "winPct": 0.8
         },
         "opponentStreak": "L1",
-        "opponentWildCardGamesBack": null,
+        "opponentWildCardGamesBack": 0.5,
         "opponentRunDifferential": 34,
         "opponentHomeRecord": {
           "wins": 49,
@@ -11764,6 +11725,8 @@
           "gameCount": 3
         },
         "opponentTags": [
+          "Wild-card contender",
+          "Top-five league record",
           "+34 run differential",
           "Won 8 of last 10"
         ],
@@ -11781,12 +11744,14 @@
         "gameContext": {
           "opponent": {
             "tags": [
+              "Wild-card contender",
+              "Top-five league record",
               "+34 run differential",
               "Won 8 of last 10"
             ],
-            "leagueRank": 6,
+            "leagueRank": 5,
             "divisionRank": 2,
-            "wildCardGamesBack": null,
+            "wildCardGamesBack": 0.5,
             "runDifferential": 34,
             "lastTen": "8-2",
             "streak": "L1"
@@ -11813,6 +11778,8 @@
         }
       },
       "tags": [
+        "Wild-card contender",
+        "Top-five league record",
         "+34 run differential",
         "Won 8 of last 10",
         "San Diego rivalry",
@@ -11828,7 +11795,7 @@
           "averagePriceUsd": null,
           "listingCount": null,
           "status": "normal",
-          "observedAt": "2026-09-24T01:08:56.996Z"
+          "observedAt": "2026-09-24T01:38:01.056Z"
         },
         {
           "source": "ticketmaster",
@@ -11838,7 +11805,7 @@
           "averagePriceUsd": null,
           "listingCount": null,
           "status": "onsale",
-          "observedAt": "2026-09-24T01:08:56.996Z"
+          "observedAt": "2026-09-24T01:38:01.056Z"
         }
       ],
       "sourceLinks": [
@@ -11857,10 +11824,10 @@
       ],
       "ranking": {
         "excluded": false,
-        "interestScore": 80,
-        "utility": 76,
-        "opponentQuality": 14,
-        "opponentStakesScore": 2,
+        "interestScore": 85,
+        "utility": 81,
+        "opponentQuality": 15,
+        "opponentStakesScore": 6,
         "rivalryScore": 15,
         "pitchingScore": 0,
         "leverageScore": 10,
@@ -11897,13 +11864,13 @@
       },
       "localEnhancement": {
         "personalFit": {
-          "score": 72,
-          "label": "possible fit",
-          "explanation": "High leverage and rivalry provide strong interest, but the lack of pitching quality reduces the overall presentation value."
+          "score": 62,
+          "label": "exploratory",
+          "explanation": "High rivalry and leverage are present, but the zero pitching score significantly diminishes the premium presentation quality."
         },
         "recommendation": {
           "verdict": "consider",
-          "explanation": "While the rivalry and leverage are high, the zero pitching score makes this a less certain recommendation than the first option."
+          "explanation": "Strong interest and high leverage, but the zero pitching score makes it a secondary option compared to the first candidate."
         },
         "urgency": {
           "label": "watch",
@@ -12064,7 +12031,7 @@
           "averagePriceUsd": null,
           "listingCount": null,
           "status": "offsale",
-          "observedAt": "2026-09-24T01:08:56.996Z"
+          "observedAt": "2026-09-24T01:38:01.056Z"
         }
       ],
       "sourceLinks": [
@@ -12121,13 +12088,13 @@
       },
       "localEnhancement": {
         "personalFit": {
-          "score": 25,
+          "score": 15,
           "label": "weak fit",
-          "explanation": "Low opponent quality, no rivalry, and low leverage make this a generic experience that does not justify the effort."
+          "explanation": "Low opponent quality, no rivalry, and minimal leverage make this a low-value engagement despite high convenience."
         },
         "recommendation": {
           "verdict": "skip",
-          "explanation": "Low opponent quality, no rivalry, and low leverage scores suggest this is not a high-value engagement worth the trip."
+          "explanation": "Low opponent quality, no rivalry, and low leverage score make this a poor use of time compared to other options."
         },
         "urgency": {
           "label": "safe to wait",
@@ -12152,7 +12119,7 @@
       "id": "tmdb:1294189",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1294189",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "The Mongoose",
       "releaseDate": "2026-10-29",
       "overview": "A falsely accused war hero with nothing to lose leads police on an epic televised cross-country car chase, helped by members of his former Special Forces Army battalion and closely monitored by a fascinated public rooting for his safe getaway.",
@@ -12225,7 +12192,7 @@
       "id": "tmdb:299534",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/299534",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Avengers: Endgame",
       "releaseDate": "2019-04-24",
       "overview": "After the devastating events of Avengers: Infinity War, the universe is in ruins due to the efforts of the Mad Titan, Thanos. With the help of remaining allies, the Avengers must assemble once more in order to undo Thanos' actions and restore order to the universe once and for all, no matter what consequences may be in store.",
@@ -12341,7 +12308,7 @@
       "id": "tmdb:1393326",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1393326",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Ghost in the Cell",
       "releaseDate": "2026-04-16",
       "overview": "In a notorious prison, an invisible force begins killing inmates brutally, compelling enemy gangs and corrupt guards to work together as they try to survive the mounting bloodshed.",
@@ -12437,7 +12404,7 @@
       "id": "tmdb:1263337",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1263337",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Heart of the Beast",
       "releaseDate": "2026-09-19",
       "overview": "After a harrowing plane crash, Special Forces officer James Belmont and his combat dog, Odin, find themselves stranded deep in the Alaskan wilderness. Together, they are forced into a brutal fight for survival against the elements.",
@@ -12517,7 +12484,7 @@
       "id": "tmdb:11",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/11",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Star Wars",
       "releaseDate": "1977-05-25",
       "overview": "Princess Leia is captured and held hostage by the evil Imperial forces in their effort to take over the galactic Empire. Venturesome Luke Skywalker and dashing captain Han Solo team together with the loveable robot duo R2-D2 and C-3PO to rescue the beautiful princess and restore peace and justice in the Empire.",
@@ -12745,7 +12712,7 @@
       "id": "tmdb:1003596",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1003596",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Avengers: Doomsday",
       "releaseDate": "2026-12-16",
       "overview": "Beloved heroes from three distinct universes are set on a deadly collision course and face an existential threat unlike anything they've ever encountered.",
@@ -12827,7 +12794,7 @@
       "id": "tmdb:1465063",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1465063",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Forgotten Island",
       "releaseDate": "2026-09-10",
       "overview": "While celebrating their last night together, high school graduates and best friends Jo and Raissa stumble upon a mysterious portal that transports them to the fantastical island of Nakali. When they discover that the memories of their entire friendship are the price for returning home, Jo and Raissa must race to find a way to leave the island before they forget each other forever.",
@@ -12914,7 +12881,7 @@
       "id": "tmdb:752",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/752",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "V for Vendetta",
       "releaseDate": "2006-02-23",
       "overview": "In a world in which Great Britain has become a fascist state, a masked vigilante known only as “V” conducts guerrilla warfare against the oppressive British government. When V rescues a young woman from the secret police, he finds in her an ally with whom he can continue his fight to free the people of Britain.",
@@ -13019,7 +12986,7 @@
       "id": "tmdb:128",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/128",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Princess Mononoke",
       "releaseDate": "1997-07-12",
       "overview": "Ashitaka, a prince of the disappearing Emishi people, is cursed by a demonized boar god and must journey to the west to find a cure. Along the way, he encounters San, a young human woman fighting to protect the forest, and Lady Eboshi, who is trying to destroy it. Ashitaka must find a way to bring balance to this conflict.",
@@ -13147,7 +13114,7 @@
       "id": "tmdb:1300968",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1300968",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "The Hunger Games: Sunrise on the Reaping",
       "releaseDate": "2026-11-18",
       "overview": "Return to the world of Panem 24 years before the events of The Hunger Games, starting on the morning of the reaping of the 50th Hunger Games, also known as the Second Quarter Quell.",
@@ -13229,7 +13196,7 @@
       "id": "tmdb:1400940",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1400940",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Clayface",
       "releaseDate": "2026-10-21",
       "overview": "Matt Hagen's meteoric rise from Gotham street kid to Hollywood leading man is tragically cut short when a local crime boss's actions leave him horribly disfigured. Abandoned by his team and with nothing left, Matt seeks out a cutting edge treatment that miraculously returns him to his former self… but also unexpectedly affects his grip on reality, spiraling him down a destructive path of all-consuming revenge.",
@@ -13316,7 +13283,7 @@
       "id": "tmdb:1244523",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1244523",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Beware Boiúna",
       "releaseDate": "2026-10-01",
       "overview": "Deep in the Amazon, a medical mission spirals into a fight for survival when Boiúna, a colossal ancient predator, awakens to reclaim her domain. In the jungle where nature holds absolute power, she decides who lives and who dies.",
@@ -13409,7 +13376,7 @@
       "id": "tmdb:1477104",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1477104",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Shaun the Sheep: The Beast of Mossy Bottom",
       "releaseDate": "2026-09-17",
       "overview": "On Halloween Eve at Mossy Bottom Farm, excitement turns to dismay when the clumsy Farmer ruins the pumpkin patch. Shaun tries fixing it with science experiments, but things go wrong when a wild beast appears in the woods.",
@@ -13500,7 +13467,7 @@
       "id": "tmdb:1170608",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1170608",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Dune: Part Three",
       "releaseDate": "2026-12-15",
       "overview": "Emperor Paul Atreides faces the fallout from his ascent to power as political plots and a galaxy-wide holy war endanger the future only he can see.",
@@ -13582,11 +13549,11 @@
       "id": "tmdb:1153576",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1153576",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Street Fighter",
       "releaseDate": "2026-10-14",
       "overview": "In 1993, estranged Street Fighters Ryu and Ken Masters are thrown back into combat when the mysterious Chun-Li recruits them for the next World Warrior Tournament: a brutal clash of fists, fate, and fury. But behind this battle royale lies a deadly conspiracy that forces them to face off against each other and the demons of their past. And if they don't, it's GAME OVER!",
-      "popularity": 17.1172,
+      "popularity": 18.3367,
       "voteAverage": 0,
       "runtimeMinutes": 119,
       "genres": [
@@ -13642,8 +13609,8 @@
       "hassle": null,
       "experienceScore": null,
       "formatStatus": "verification pending",
-      "candidateScore": 57.1,
-      "tasteScore": 57,
+      "candidateScore": 58.3,
+      "tasteScore": 58,
       "tasteTier": "potential",
       "reasons": [
         "Premium-format potential: action, fantasy."
@@ -13664,7 +13631,7 @@
       "id": "tmdb:791523",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/791523",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Wildwood",
       "releaseDate": "2026-10-21",
       "overview": "Prue and her classmate Curtis are drawn into a magical forest filled with enchanted creatures, loyal allies, and formidable adversaries as they embark on a desperate quest to rescue Prue’s abducted baby brother from a murder of crows led by a mysterious woman named Alexandra.",
@@ -13750,7 +13717,7 @@
       "id": "tmdb:1562642",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1562642",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Ghost Soldier",
       "releaseDate": "2026-11-04",
       "overview": "A former Green Beret and weapons expert stands with his Wyoming neighbors against a ruthless corporation threatening their rural community.",
@@ -13828,7 +13795,7 @@
       "id": "tmdb:1538497",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1538497",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Hexed",
       "releaseDate": "2026-11-25",
       "overview": "An impulsive and unconventional teenage girl named Billie discovers secret magical abilities which, once unleashed, hurtle her into a spectacle-filled journey out of suburbia and into a vast witch realm called Hexe. Forced to team up with her cautious mother, Alice, they uncover family mysteries that could change the world of witches forever.",
@@ -13906,7 +13873,7 @@
       "id": "tmdb:1401586",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1401586",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Sonic the Hedgehog 4",
       "releaseDate": "2027-03-11",
       "overview": "Sonic the Hedgehog, joined by a new hero named Amy, faces a new technological nemesis known as Metal Sonic.",
@@ -13993,7 +13960,7 @@
       "id": "tmdb:1147572",
       "source": "tmdb",
       "sourceUrl": "https://www.themoviedb.org/movie/1147572",
-      "retrievedAt": "2026-09-24T01:08:56.996Z",
+      "retrievedAt": "2026-09-24T01:38:01.056Z",
       "title": "Narnia: The Magician's Nephew",
       "releaseDate": "2027-02-10",
       "overview": "The new upcoming film by Greta Gerwig.",
@@ -14086,8 +14053,8 @@
         "lat": null,
         "lon": null
       },
-      "score": 82,
-      "interestScore": 86,
+      "score": 87,
+      "interestScore": 91,
       "hassleScore": 2,
       "urgency": "watch",
       "confidence": "high",
@@ -14146,7 +14113,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/aespa-live-tour-synk-complxity-in-inglewood-california-10-03-2026/event/09006495E8BC30ED",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -14246,7 +14213,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/event/Z7r9jZ1A70_1o",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -14389,7 +14356,7 @@
             {
               "source": "Framework",
               "url": "https://thisisframework.com/event/josh-baker/",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -14448,7 +14415,7 @@
             {
               "source": "Ticketmaster",
               "url": "https://www.ticketmaster.com/charli-xcx-music-fashion-film-tour-inglewood-california-10-17-2026/event/090064C5EF12A97C",
-              "retrievedAt": "2026-09-24T01:08:56.996Z",
+              "retrievedAt": "2026-09-24T01:38:01.056Z",
               "status": "verified"
             }
           ]
@@ -14727,17 +14694,17 @@
     "mode": "ollama",
     "status": "locally enhanced",
     "model": "gemma4:26b-mlx",
-    "generatedAt": "2026-09-24T01:09:58.585Z",
+    "generatedAt": "2026-09-24T01:39:19.660Z",
     "headline": "Music and Baseball Highlights",
     "verdict": "maybe",
-    "lead": "Music leads the broader shortlist, but this Wednesday Dodgers game is the strongest immediate option.",
+    "lead": "Music leads the broader shortlist, but this Wednesday Dodgers game is the strongest immediate option. The next two weeks feature a strong run of music, including a performance at the Greek Theatre.",
     "decisionNotes": [
       "Tove Lo performs at the Greek Theatre soon.",
-      "The Dodgers host San Diego at Dodger Stadium.",
-      "aespa brings their tour to the Intuit Dome later in the window."
+      "The Dodgers game offers a significant sports option.",
+      "aespa will play at the Intuit Dome later in October."
     ],
-    "skipCall": "You may want to monitor the upcoming music and baseball schedules.",
-    "caution": "Check specific venue details for your preferred shows.",
+    "skipCall": "You may want to wait for more specific details on upcoming music shows.",
+    "caution": "Check specific venue details for the upcoming baseball game.",
     "mentions": [
       "seatgeek:18242231",
       "mlb:823894",
@@ -14800,7 +14767,7 @@
       "dateLocal": "2026-11-21",
       "locationLabel": "The Historic Sears Building - Los Angeles · Los Angeles",
       "firstShownAt": "2026-09-23T22:30:50.587Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "plan-ahead",
         "shortlist"
@@ -14816,7 +14783,7 @@
       "dateLocal": "2026-10-29",
       "locationLabel": null,
       "firstShownAt": "2026-09-19T22:10:35.090Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "shortlist"
       ],
@@ -14831,7 +14798,7 @@
       "dateLocal": "2026-10-17",
       "locationLabel": "Kia Forum · Inglewood",
       "firstShownAt": "2026-07-23T17:59:46.524Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "plan-ahead",
         "shortlist"
@@ -14847,7 +14814,7 @@
       "dateLocal": "2026-10-16",
       "locationLabel": "Shrine Expo Hall · Los Angeles",
       "firstShownAt": "2026-07-13T21:31:24.047Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "shortlist"
       ],
@@ -14877,7 +14844,7 @@
       "dateLocal": "2026-10-15",
       "locationLabel": "Shrine Expo Hall · Los Angeles",
       "firstShownAt": "2026-07-13T21:31:24.047Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "shortlist"
       ],
@@ -14923,7 +14890,7 @@
       "dateLocal": "2026-10-14",
       "locationLabel": "Shrine Expo Hall · Los Angeles",
       "firstShownAt": "2026-07-13T21:31:24.047Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "plan-ahead",
         "shortlist"
@@ -14939,7 +14906,7 @@
       "dateLocal": "2026-10-03",
       "locationLabel": "Intuit Dome · Inglewood",
       "firstShownAt": "2026-07-13T21:31:24.047Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "overview",
         "plan-ahead",
@@ -14956,7 +14923,7 @@
       "dateLocal": "2026-10-03",
       "locationLabel": "Shrine Expo Hall · Los Angeles",
       "firstShownAt": "2026-09-19T23:59:50.318Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "overview"
       ],
@@ -14986,7 +14953,7 @@
       "dateLocal": "2026-09-30",
       "locationLabel": "Shrine Expo Hall · Los Angeles",
       "firstShownAt": "2026-09-23T22:30:50.587Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "overview"
       ],
@@ -15001,7 +14968,7 @@
       "dateLocal": "2026-09-27",
       "locationLabel": "The Greek Theatre - Los Angeles · Los Angeles",
       "firstShownAt": "2026-09-19T22:10:35.090Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "overview"
       ],
@@ -15016,7 +14983,7 @@
       "dateLocal": "2026-09-23",
       "locationLabel": "UNIQLO Field at Dodger Stadium · Los Angeles",
       "firstShownAt": "2026-09-23T22:30:50.587Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "overview"
       ],
@@ -15061,7 +15028,7 @@
       "dateLocal": "2026-09-19",
       "locationLabel": null,
       "firstShownAt": "2026-09-23T22:30:50.587Z",
-      "lastShownAt": "2026-09-24T01:08:56.996Z",
+      "lastShownAt": "2026-09-24T01:38:01.056Z",
       "surfaces": [
         "shortlist"
       ],

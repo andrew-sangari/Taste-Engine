@@ -6,7 +6,7 @@ import {
   validateAnswerEnvelope
 } from './decisionSchema.js';
 import { QUESTION_SET_VERSION, buildQuestionSet } from './questions.js';
-import { assertNoRestrictedEvidence, serializeContext } from './semanticInput.js';
+import { assertNoRestrictedEvidence, eventState } from './semanticInput.js';
 import { assessmentCacheKey, createAssessmentCache } from './assessmentCache.js';
 import { createGatewayProvider } from './providers/gateway.js';
 import { createDirectServingProvider } from './providers/directServing.js';
@@ -16,6 +16,8 @@ export const INFERENCE_PROVIDERS = ['gateway', 'direct', 'disabled'];
 // $42 per billion input tokens, output free. Used only to report spend; a route
 // that reports its own cost would override this.
 const INPUT_TOKEN_COST_USD = 42 / 1e9;
+
+export const DEFAULT_MAX_CANDIDATES = 200;
 
 /**
  * The domain-facing inference interface.
@@ -32,7 +34,9 @@ const INPUT_TOKEN_COST_USD = 42 / 1e9;
 export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch, cache = createAssessmentCache() } = {}) {
   const adapter = adapterFor(config, fetchImpl);
   const concurrency = boundedInteger(config.concurrency, 1, 8, 4);
-  const maxCandidates = boundedInteger(config.maxCandidates, 1, 80, 24);
+  // A spend guard, not a shortlist: every candidate with eligible evidence is
+  // assessed unless a refresh somehow exceeds this ceiling.
+  const maxCandidates = boundedInteger(config.maxCandidates, 1, 500, DEFAULT_MAX_CANDIDATES);
   const maxAttempts = boundedInteger(config.maxAttempts, 1, 4, 3);
   const maxCostUsd = Number.isFinite(config.maxCostUsd) && config.maxCostUsd > 0 ? config.maxCostUsd : null;
   const deadlineMs = boundedInteger(config.deadlineMs, 1_000, 300_000, 60_000);
@@ -52,11 +56,10 @@ export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch
     },
 
     /**
-     * @param {Array} inputs source-safe candidate inputs from `buildSemanticRequest`
-     * @param {object} context normalized nightlife context
+     * @param {Array} inputs event-evidence inputs from `buildSemanticRequest`
      * @returns {Promise<{assessments: Map<string, object>, telemetry: object}>}
      */
-    async assessCandidates(inputs, context, options = {}) {
+    async assessCandidates(inputs, options = {}) {
       const started = Date.now();
       const requested = inputs.slice(0, maxCandidates);
       const telemetry = baseTelemetry(adapter, {
@@ -72,19 +75,16 @@ export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch
         return { assessments, telemetry };
       }
 
-      const safeContext = serializeContext(context);
       const deadline = started + deadlineMs;
       const pending = [];
 
       for (const input of requested) {
         const questions = buildQuestionSet({ input });
-        const evidenceMode = Object.keys(input.fields?.publishedFacts ?? {}).length > 0;
+        // Event-level only: the key holds nothing about the user, so one
+        // characterization is shared by every profile.
         const key = assessmentCacheKey({
           candidateRevision: input.revision ?? null,
-          input: evidenceMode
-            ? { publishedFacts: input.fields.publishedFacts, knownUnknowns: input.fields.knownUnknowns }
-            : input.fields,
-          context: evidenceMode ? null : safeContext,
+          input: { publishedFacts: input.fields.publishedFacts ?? null, knownUnknowns: input.fields.knownUnknowns },
           schemaVersion: DECISION_SCHEMA_VERSION,
           promptVersion: QUESTION_SET_VERSION,
           questionIds: Object.keys(questions),
@@ -99,10 +99,10 @@ export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch
           assessments.set(input.ref, { ...cached, cached: true });
           continue;
         }
-        pending.push({ input, key, questions, evidenceMode });
+        pending.push({ input, key, questions });
       }
 
-      await runWithConcurrency(pending, concurrency, async ({ input, key, questions, evidenceMode }) => {
+      await runWithConcurrency(pending, concurrency, async ({ input, key, questions }) => {
         if (!Object.keys(questions).length) return;
         if (Date.now() >= deadline) {
           telemetry.deadlineSkipped += 1;
@@ -113,15 +113,7 @@ export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch
           return;
         }
 
-        const state = evidenceMode
-          ? {
-            event: {
-              ref: input.ref,
-              published: input.fields.publishedFacts,
-              missing: input.fields.knownUnknowns ?? []
-            }
-          }
-          : { request: safeContext, candidate: { ref: input.ref, restricted: input.restricted, ...withoutRef(input.fields) } };
+        const state = eventState(input);
         assertNoRestrictedEvidence(state);
 
         let result = null;
@@ -159,8 +151,7 @@ export function createDecisionInferenceProvider(config = {}, { fetchImpl = fetch
           assessment = assessmentFromAnswers(result.answers, {
             candidateRef: input.ref,
             input,
-            certaintyThresholds: config.certaintyThresholds,
-            noulThresholds: config.noulThresholds
+            certaintyThresholds: config.certaintyThresholds
           });
         } catch (error) {
           telemetry.validationFailures += 1;
@@ -281,11 +272,6 @@ function median(values) {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
-}
-
-function withoutRef(fields) {
-  const { ref: _ref, ...rest } = fields;
-  return rest;
 }
 
 function boundedInteger(value, min, max, fallback) {

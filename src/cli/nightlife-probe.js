@@ -38,7 +38,7 @@ if (!nightlifeInferenceConfigured(config)) {
   const now = new Date();
   const event = normalizeTicketmasterEvent(syntheticTicketmasterEvent(now), now);
   event.ranking = { utility: 60 };
-  const { inputs } = buildSemanticRequest([event], {}, { now });
+  const { inputs } = buildSemanticRequest([event]);
   const questions = buildQuestionSet({ input: inputs[0] });
 
   if (!Object.keys(questions).length) {
@@ -52,7 +52,7 @@ if (!nightlifeInferenceConfigured(config)) {
   } else {
     console.log(`Questions  ${Object.keys(questions).join(', ')}`);
     const provider = createDecisionInferenceProvider({ ...config, maxAttempts: 1 });
-    const { assessments, telemetry } = await provider.assessCandidates(inputs, {}, { refreshCache: true });
+    const { assessments, telemetry } = await provider.assessCandidates(inputs, { refreshCache: true });
     const assessment = assessments.get(inputs[0].ref);
 
     if (!assessment) {

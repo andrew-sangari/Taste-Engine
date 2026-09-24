@@ -47,10 +47,10 @@ try {
   console.log(`Candidates ${events.length} in the projection\n`);
 
   const now = options.now ? new Date(options.now) : new Date();
-  // Default to every candidate, not only the refresh shortlist: the question is
-  // what the evidence can support, and spend is a fraction of a cent.
-  const maxCandidates = Number(options.max ?? events.length);
-  const provider = createDecisionInferenceProvider({ ...config, maxCandidates: Math.min(80, maxCandidates) });
+  // Same selection as a refresh: every candidate with eligible evidence, up to
+  // the configured spend ceiling. `--max` narrows it for a quick run.
+  const maxCandidates = options.max ? Number(options.max) : Infinity;
+  const provider = createDecisionInferenceProvider(config);
   const started = Date.now();
   const enrichment = await enrichSemanticEventCards(events, { provider, now, maxCandidates, preferences });
   const wallMs = Date.now() - started;

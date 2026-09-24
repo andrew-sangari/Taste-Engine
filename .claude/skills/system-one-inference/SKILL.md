@@ -42,7 +42,16 @@ The adapter translates; the domain vocabulary stays `noul`. The Gateway's
 response envelope is unconfirmed until the account has a card on file.
 
 All questions run in parallel against one state: one request per candidate,
-every question for that candidate in it.
+every question for that candidate in it. Every production question is a
+Choice; the adapters still translate Noul/Score, but nothing asks one.
+
+The state is always `{ event: { ref, published, missing } }`, built by
+`buildSemanticCandidateInput` from merged, permitted evidence as
+`{ ref, publishedFacts, knownUnknowns }`, and nothing else. There is no request
+context, and there are no canonical titles, venues, prices or travel estimates.
+Every candidate with eligible evidence is assessed each refresh.
+`NIGHTLIFE_MAX_CANDIDATES` (default 200) is a spend ceiling, not a shortlist;
+overflow shows as `eligibleBeyondBudget` and a `partial` source-health row.
 
 ## Characterization is event-level; relevance is local
 
