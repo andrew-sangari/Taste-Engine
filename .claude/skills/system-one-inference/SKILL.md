@@ -44,6 +44,26 @@ response envelope is unconfirmed until the account has a card on file.
 All questions run in parallel against one state: one request per candidate,
 every question for that candidate in it.
 
+## Characterization is event-level; relevance is local
+
+Jev characterizes the **event** from permitted event facts. It never learns who
+the event is for: no artist match, discovery tier, taste tag, playlist or note
+enters its state, and its cache key is event-level. Relevance to this user is
+compared afterwards, locally, in `src/nightlife/personalRelevance.js`, and
+only these comparisons exist:
+
+- a distinct experience (documented festival/format, or Jev's `dance_floor` /
+  `festival_multi_stage` / `seated_listening` at moderate+ certainty, grounded
+  in a genre, format or lineup fact it was sent) **and** a direct artist match
+  (`matchedArtists` origin `source` or `top-items`);
+- a published genre **and** a recurring `tasteProfile.topTags` entry, only when
+  no direct artist already explains the fit.
+
+Both halves or nothing. A discovery path is not a preference and not proof of
+novelty; `live_performance` is not a distinction; there is no format, venue or
+negative preference to compare against. Never write "new to you", "you'll
+love", or any claim about the user's history.
+
 ## Where the product surfaces
 
 Enrichment lives only inside the existing **Music** and **Overview** cards: one
@@ -52,6 +72,22 @@ marked verified / inferred / not known, and a **How do we know?** list linking
 each claim to its source. There is no standalone route, form, or score. A card
 with nothing specific to say renders nothing — that is the correct outcome, not
 a gap to fill.
+
+## Composing claims
+
+`composeInsightClaims` (in `cardInsight.js`) returns every supported claim with a
+`basis`: `documented-attribute`, `model-characterization`, `calculated-match`
+(plus `eventBasis`), `uncertainty` or `conflict`. The card keeps the strongest
+per kind, at most three, and leads with a non-gap claim. Rules:
+
+- Never state an absence as a fact ("no restriction is verified" is banned).
+- Never restate the card: no "Music", no bare start time, no age limit already
+  in the title.
+- Quote a window only from one provider's own start and end.
+- The displayed title may be SeatGeek's: use it only to suppress repetition or
+  detect a disagreement, never as a new claim or model input.
+- A model characterization, or a match resting on one, is `inferred`, never
+  `verified`, and cites only facts the model was sent.
 
 ## Rules for this repo
 
@@ -93,9 +129,12 @@ separate.
 Only Ticketmaster and Framework are permitted evidence providers. Insomniac is
 unverified and excluded until its extractor is repaired with real fixtures.
 
-The published projection carries only the display-safe view: no permission
-metadata, no raw assessment. Full evidence goes to the gitignored
-`data/nightlife/evidence-latest.json` for evaluation only.
+The published projection carries only `semanticInsight` (claims, status,
+basis, citations): no `eventEvidence`, no `nightlifeEvidence`, no permission
+metadata, no raw assessment. Local export and hosted refresh share
+`toDisplayEvent` in `src/projection.js`, and a site test asserts both publish
+the same fields. Full evidence, artist matches and taste tags go to the
+gitignored `data/nightlife/evidence-latest.json` for evaluation only.
 
 Never send SeatGeek-only material, Spotify Content or Spotify-derived preference
 evidence, EDMTrain payloads, personal-context notes, or credentials.
@@ -115,7 +154,11 @@ timeout, 429, malformed body, unrequested question id, and partial answers.
 
 - `npm test` passes, including `test/eventEvidence.test.js` and
   `test/nightlifePolicy.test.js`.
-- `npm run evaluation:nightlife` passes (offline, no credentials).
+- `npm run evaluation:nightlife` passes (offline, no credentials), including
+  the composed-insight cases in `test/fixtures/nightlife/insight-cases.js`.
+  Add a case there for any new claim type or grounding defect.
+- `npm run nightlife:cards` reports 0 grounding violations and attributes
+  claims by basis; never count source extraction as model value.
 - `npm run nightlife:probe` answers on the direct route if you touched the
   contract; it drives the real production path, so it fails when production
   would.

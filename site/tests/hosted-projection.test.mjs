@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildHostedProjection } from "../server/hosted-projection.ts";
+import { toDisplayEvent } from "../../src/projection.js";
 
 test("complete hosted pipeline isolates sources and produces a publishable schema-v5 projection", async () => {
   const originalFetch = globalThis.fetch;
@@ -159,6 +160,14 @@ test("complete hosted pipeline isolates sources and produces a publishable schem
     // Raw assessments carry provider probabilities and must never be published.
     assert.equal(JSON.stringify(result.projection).includes("semanticAssessment"), false);
     assert.equal(JSON.stringify(result.projection).includes("probabilities"), false);
+    // One published event contract for both paths: the hosted row has exactly
+    // the fields the local export's shared serializer emits, and no private
+    // source evidence or model-input provenance.
+    const localRow = toDisplayEvent({ id: "contract", title: "Contract", performers: [], sourceOccurrences: [], ranking: {} });
+    assert.deepEqual(Object.keys(result.projection.events[0]).filter((key) => key !== "feedbackSnapshot").sort(), Object.keys(localRow).sort());
+    for (const field of ["eventEvidence", "nightlifeEvidence", "sourceOccurrences", "permittedFacts"]) {
+      assert.equal(JSON.stringify(result.projection.events).includes(`"${field}"`), false, `${field} must not be published`);
+    }
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(priorEnv)) {

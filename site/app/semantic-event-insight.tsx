@@ -12,8 +12,15 @@ export type SemanticEvidenceRef = {
 export type SemanticInsightClaim = {
   text: string;
   status: SemanticEvidenceStatus;
+  // Where the claim comes from: a source's published fact, Jev's
+  // characterization of published facts, a match against the taste profile, or
+  // a consequential gap/disagreement. Diagnostic; the status is what renders.
+  basis?: "documented-attribute" | "model-characterization" | "calculated-match" | "uncertainty" | "conflict";
+  eventBasis?: "documented-attribute" | "model-characterization";
   evidence?: SemanticEvidenceRef[];
 };
+
+type ClaimKind = "whatToExpect" | "whyItMayFit" | "worthPlanning" | "worthChecking";
 
 /**
  * A display-safe, deterministic summary of an advisory event assessment.
@@ -28,10 +35,19 @@ export type SemanticEventInsight = {
   whyItMayFit?: SemanticInsightClaim | null;
   worthPlanning?: SemanticInsightClaim | null;
   worthChecking?: SemanticInsightClaim | null;
+  // The composer's order, most consequential first. Older snapshots omit it.
+  claimOrder?: ClaimKind[];
   evidence?: SemanticEvidenceRef[];
 };
 
-type ClaimEntry = { label: string; claim: SemanticInsightClaim };
+type ClaimEntry = { kind: ClaimKind; label: string; claim: SemanticInsightClaim };
+
+const CLAIM_LABELS: Array<[ClaimKind, string]> = [
+  ["whatToExpect", "What to expect"],
+  ["whyItMayFit", "Why it may fit"],
+  ["worthPlanning", "Worth planning around"],
+  ["worthChecking", "Worth checking"],
+];
 
 export function hasSemanticInsight(insight: SemanticEventInsight | null | undefined) {
   if (!insight) return false;
@@ -91,21 +107,26 @@ function Claim({ label, claim }: { label: string; claim: SemanticInsightClaim })
 }
 
 function claimEntries(insight: SemanticEventInsight): ClaimEntry[] {
-  return [
-    ["What to expect", insight.whatToExpect],
-    ["Why it may fit", insight.whyItMayFit],
-    ["Worth planning around", insight.worthPlanning],
-    ["Worth checking", insight.worthChecking],
-  ].flatMap(([label, value]) => {
+  return CLAIM_LABELS.flatMap(([kind, label]) => {
+    const value = insight[kind];
     if (!value || typeof value !== "object") return [];
     const text = cleanText(value.text);
     if (!text) return [];
-    return [{ label: label as string, claim: { ...value, text } }];
+    return [{ kind, label, claim: { ...value, text } }];
   });
 }
 
 function selectedClaims(insight: SemanticEventInsight): ClaimEntry[] {
   const claims = claimEntries(insight);
+  const order = Array.isArray(insight.claimOrder) ? insight.claimOrder : [];
+  if (order.length) {
+    // The server ranked these by consequence; keep its order and its bound.
+    const rank = (kind: ClaimKind) => {
+      const index = order.indexOf(kind);
+      return index === -1 ? order.length : index;
+    };
+    return [...claims].sort((left, right) => rank(left.kind) - rank(right.kind)).slice(0, 3);
+  }
   const useful = claims.filter(({ claim }) => safeStatus(claim.status) !== "not known");
   const gaps = claims.filter(({ claim }) => safeStatus(claim.status) === "not known");
   // Keep the expanded card bounded. Positive characterization wins first;

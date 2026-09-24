@@ -254,6 +254,74 @@ permitted preference context, question criteria, provider/model route, and
 response schema. An event characterization may be reused across Music and
 Overview, but user-specific relevance must never leak through that cache.
 
+## Personal relevance: where characterization meets taste
+
+Layer B is implemented in `src/nightlife/personalRelevance.js` and runs
+entirely on our side, after inference. Jev never sees who an event is for: its
+state is `{ event: { ref, published, missing } }` built from permitted event
+facts only, and even the discovery tier (`similar` / `tag` / `promoter`) was
+removed from the semantic input in question-set v3. The assessment cache key is
+event-level, so one characterization serves every profile, and no match is ever
+written back into it. `test/nightlifeCardInsight.test.js` proves both: two
+profiles share one model call, and the transmitted state contains no artist
+match, tag, or origin.
+
+The comparisons are deliberately few. Each names both halves it needs:
+
+| Comparison | Event half | Preference half | Claim status |
+| --- | --- | --- | --- |
+| `familiar-artist-in-format` | a distinct experience: a documented festival classification or format, or a Jev `experienceCharacter` of `dance_floor`, `festival_multi_stage` or `seated_listening` at moderate or high certainty, grounded in a genre, format or lineup fact the model was actually sent | a direct artist match (`matchedArtists` origin `source` or `top-items`) | `verified` when the event half is documented, `inferred` when it is Jev's |
+| `taste-tag-genre` | a published, informative classification | a recurring tag in the public `tasteProfile.topTags` | `verified` |
+
+What is deliberately **not** compared:
+
+- A `live_performance` characterization. It is what a concert listing already
+  implies, so pairing it with a familiar artist says nothing new.
+- A discovery path. `similar`, `tag` and `promoter` say how a candidate reached
+  the shortlist; they are not proof the user likes it, and not proof a format
+  would be new to them. No claim asserts novelty or history.
+- Format, venue or schedule preferences. The profile holds none, so no claim
+  says an event does or does not suit one.
+- A "may not fit" claim. That would need a documented negative preference,
+  which the profile does not have. Private personal-context notes and feedback
+  are not used; feedback application stays disabled until its own review.
+
+A tag match is used only when no direct artist explains the fit, because the
+card's existing artist match already says that.
+
+## Composing the card
+
+`composeInsightClaims` in `src/nightlife/cardInsight.js` gathers every
+supported claim with its full provenance, then `buildSemanticEventInsight`
+keeps the strongest claim per kind, at most three, and leads with the
+strongest non-gap claim. A gap or disagreement may accompany a useful claim
+but never stands alone. Every claim has a `basis`:
+
+- `documented-attribute` — a source published it;
+- `model-characterization` — Jev characterized published facts;
+- `calculated-match` — our code matched an event attribute to a preference
+  signal (the claim also carries `eventBasis`);
+- `uncertainty` / `conflict` — something consequential is unknown, or two
+  sources disagree.
+
+Consequence order: a personal match, then a provider disagreement (age or
+time), a model-characterized experience, a documented format, a published age
+limit the title does not already show, a late start with no published end, a
+late published window, a classification, a plain window, doors and start.
+Nothing restates what the card already shows: no "Music", no start time on its
+own, no age limit already in the title. An absence is never a claim: "no
+restriction is verified" was removed outright.
+
+Rules the composer holds to:
+
+- A window is quoted only from one provider's own start and end.
+- The card's own title may come from a provider whose facts are not evidence
+  (SeatGeek). It is used only to avoid repeating a restriction and to detect a
+  disagreement, never as a new claim, and it is never model input.
+- A permitted title that states "21+", "18 and over" or "All ages" becomes an
+  `agePolicy` fact marked `derivedFrom: 'title'`. When a structured policy
+  disagrees, both are kept and the card says so.
+
 ## Source policy (this does not change)
 
 `AGENTS.md` governs. Jev is an AI/ML model like any other:
@@ -317,10 +385,11 @@ calibrated cross-provider numbers, and the site renders the banded
 
 ## Ranking authority
 
-Launch is shadow/advisory. Jev assessments enrich nightlife discovery and may
-order the nightlife shortlist within its own surface. They must not modify the
-canonical utility score, source facts, publication eligibility, or the learned
-taste profile. Changing that requires a separate activation review with
+Jev assessments are advisory card content only. They have no surface of their
+own and order nothing. They must not modify the canonical utility score, source
+facts, publication eligibility, or the learned taste profile. Enrichment reads
+`ranking.utility` only to spend its call budget on the most relevant eligible
+candidates first. Changing that requires a separate activation review with
 traceable before/after comparisons, per issue #2 and `AGENTS.md`.
 
 ## Revision phases and offline quality gate
@@ -456,4 +525,89 @@ Its job is covered by tools that exercise the real contract:
 `npm run evaluation:nightlife` (the offline gold set). If "build a night around
 this" is picked up later, the deterministic itinerary logic is recoverable from
 commit `03efb1c`.
+
+### Second live gate: personal relevance (2026-09-23)
+
+Measured with `npm run nightlife:cards` against the 2026-09-24T01:06Z export
+(98 candidates, every model-eligible candidate assessed on the direct route):
+
+| Measure | Result |
+| --- | --- |
+| Candidates with permitted evidence | 73 / 98 |
+| Candidates with a direct artist match | 65 |
+| Candidates with descriptive model facts (genre, format or lineup) | 38 |
+| Both halves present | 32 |
+| Assessed by Jev | 50 / 50 eligible |
+| Characterized as a distinct experience (dance floor, festival, seated) | 3 |
+| Direct artist **and** a distinct experience | 2 |
+| Taste-profile tags available | 0 |
+| Cards with an insight, baseline → revised | 43 → 43 |
+| Cards with a model-derived claim | 1 |
+| Cards with a personal claim | 2 |
+| Grounding violations | 0 |
+| Latency | 188ms median, 487ms worst |
+| Spend | $0.0019 total, $0.000038 per candidate |
+
+The pipeline works end to end: on the SIDEPIECE card, Jev's dance-floor
+characterization of a published Dance/Electronic listing with a 10 PM start
+meets the direct artist match and becomes "The listing points to a dance-floor
+set from SIDEPIECE, who is already in your listening" (`inferred`). On Escape,
+a documented festival classification meets a direct match without the model at
+all (`verified`).
+
+It is also rare, and the report says why rather than loosening the rules:
+
+- **Jev mostly answers "live performance".** Of 50 assessed candidates, 30
+  were characterized as a live performance and 17 as unknown; three were a
+  distinct experience (two festivals, one dance floor). The answer varies
+  slightly between runs: an earlier run the same day also characterized Kyle
+  Watson 360° as a dance-floor set. A permitted listing usually carries a title, a genre and
+  a start time, which is not much to characterize from.
+- **Taste tags are empty.** `topTags` is derived during Last.fm expansion from
+  the seed artists' genres. The current snapshot has none, so the tag
+  comparison cannot fire. Fixing that is a taste-expansion change, not an
+  inference change.
+- **Source coverage remains the dominant bottleneck.** Only 38 of 98
+  candidates carry any descriptive fact a model could characterize, and 25
+  carry no permitted evidence at all.
+
+The cards still improved where it matters for trust. Before this revision the
+published projection carried "No additional entry restriction is verified" on
+15 cards and the same "confirm the schedule" line on 28. Both were generic.
+The first was sometimes false: `Josh Baker (21+)` is 21+. Now neither appears,
+and the unknown-finish gap shows only where a late start makes it consequential
+(2 cards).
+
+The refresh keeps its 24-call cap, but the cap is now spent only on candidates
+that have model-eligible evidence. Before, SeatGeek-only rows at the top of the
+ranking held slots they could never use, and only 8 candidates were assessed
+per refresh. Now 24 are, and `eligibleBeyondBudget` in source health counts
+the rest (26 in this export).
+
+### Grounding defects found in the second pass
+
+- **A SeatGeek title's "21+" was contradicted.** `Josh Baker (21+)` takes its
+  display title from SeatGeek. Framework's title is "Josh Baker", and no
+  structured policy exists. The composer read the absent field as "no
+  additional entry restriction is verified". Absence claims are removed, and
+  permitted titles are now scanned for explicit age markers. Every permitted
+  title is scanned, not only the one chosen for display.
+- **Ticketmaster subgenres were misapplied.** Six of eight Dance/Electronic
+  events (John Summit, Bonobo, Sub Focus, Amtrac, Jason Ross) carried
+  "Amapiano". Subgenre and attraction type/subType are no longer evidence,
+  except under the "Event Style" branch, where the child ("Festival") is the
+  event's type. That exception sits at the type level in real payloads.
+- **Merged evidence was read from one provider.** The composer used a
+  candidate's own `eventEvidence` when present, which is one provider's view,
+  instead of merging every occurrence field by field.
+- **A model inference was cited against facts it never saw.** The old composer
+  supported an inferred experience with the event description. Description is
+  display-only, so the model never received it. Model claims now cite only
+  transmitted facts.
+- **The local and hosted projections disagreed.** The local export published
+  `nightlifeEvidence` and the display view of `eventEvidence` on every row,
+  while the hosted refresh did not. Nothing read them. Both paths now use
+  the shared `toDisplayEvent` in `src/projection.js`, which the engine bundle
+  exports to the Worker. `site/tests/hosted-projection.test.mjs` asserts the
+  hosted row has exactly the local row's fields.
 

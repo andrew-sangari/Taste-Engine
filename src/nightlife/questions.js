@@ -15,7 +15,9 @@
 // v2 removes broad request-fit/friction judgments from the model boundary.
 // They are either deterministic (clock, travel, budget, overlap) or too
 // underspecified to ask without source-backed event facts.
-export const QUESTION_SET_VERSION = 2;
+// v3 removes the last reference to the user's discovery tier from question
+// wording; no question may depend on who the event is for.
+export const QUESTION_SET_VERSION = 3;
 
 // Confidence is reported per Choice/Score answer and is derived from the
 // probability distribution. Below the floor we record `unknown` rather than a
@@ -64,7 +66,7 @@ export const CHOICE_QUESTIONS = {
   novelty: {
     field: 'novelty',
     type: 'choice',
-    instructions: `${SHARED_PREFACE} How novel is this candidate relative to the person's established taste? candidate.adjacentEvidence lists how it reached the shortlist: "similar" and "tag" mean it came from a neighbouring-taste expansion rather than a direct match, and "promoter" means it came from a followed promoter.`,
+    instructions: `${SHARED_PREFACE} How novel is this candidate relative to the person's established taste?`,
     criteria: {
       familiar: 'Squarely inside the established taste, on the supplied discovery evidence.',
       adjacent: 'One step out: a neighbouring sound, scene or promoter.',

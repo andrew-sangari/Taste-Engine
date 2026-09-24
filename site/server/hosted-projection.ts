@@ -6,7 +6,6 @@
 import {
   applyPitcherStats,
   buildExpandedArtistSnapshot,
-  buildSemanticEventInsight,
   buildOverviewBuckets,
   deduplicateCandidates,
   enrichSemanticEventCards,
@@ -42,13 +41,13 @@ import {
   rankCandidates,
   readNightlifeConfig,
   resolveMovieVisual,
-  resolveMusicVisual,
   resolveSeatGeekPerformers,
-  resolveSportsVisual,
   scoreSportsGame,
   selectMovieCandidates,
   summarizeEvidenceCoverage,
   createDecisionInferenceProvider,
+  toDisplayEvent,
+  toDisplaySportsGame,
 } from "./deterministic-engine.js";
 import { buildHostedTasteProfile } from "./taste-profile.ts";
 import { applyHostedFeedbackAdjustments, applyHostedPersonalContext } from "./feedback-learning.ts";
@@ -367,6 +366,8 @@ export async function buildHostedProjection({
     now: generatedAt,
     requiredIds: requiredMusicIds,
     maxCandidates: 24,
+    // Compared locally against Jev's event characterization; never sent to it.
+    preferences: { topTags: array(rankedSnapshot.topTags).map(String) },
   });
   sourceHealth.push(semanticSourceHealth(semanticEnrichment) as SourceHealth);
 
@@ -388,7 +389,6 @@ export async function buildHostedProjection({
     return toDisplayEvent({
       ...record(candidate),
       semanticInsight: semanticEnrichment.byId.get(id) ?? null,
-      semanticAssessment: semanticEnrichment.assessmentById.get(id) ?? null,
     }, nonEmpty(musicAdvisory.byId.get(id)));
   });
   const sportsDisplay = array(sports).map((game) =>
@@ -542,83 +542,6 @@ function addPromoterEvidence(snapshot: Record<string, unknown>, promoterEvents: 
   return { ...snapshot, artists, artistCount: artists.length };
 }
 
-function toDisplayEvent(candidateInput: unknown, localEnhancement: Record<string, unknown> | null) {
-  const candidate = record(candidateInput);
-  const occurrences = array(candidate.sourceOccurrences).map(record);
-  const sourceLinks = [...new Map(occurrences
-    .filter((occurrence) => occurrence.sourceUrl)
-    .map((occurrence) => [
-      `${occurrence.source}|${occurrence.sourceUrl}`,
-      { source: occurrence.source, url: occurrence.sourceUrl },
-    ])).values()];
-  const ranking = { ...record(candidate.ranking) };
-  delete ranking.playlistAffinity;
-  delete ranking.topItemsAffinity;
-  delete ranking.corroborationBonus;
-  return {
-    id: candidate.id,
-    title: candidate.title,
-    sourceUrl: candidate.sourceUrl,
-    sources: [...new Set(occurrences.map((occurrence) => occurrence.source))],
-    sourceLinks,
-    eventType: classifyEventType(candidate),
-    startLocal: candidate.startLocal,
-    timeTbd: candidate.timeTbd === true,
-    venue: candidate.venue,
-    performers: array(candidate.performers).map((performer) => ({
-      name: record(performer).name,
-      primary: record(performer).primary === true,
-    })),
-    ticketObservation: candidate.ticketObservation,
-    matchedArtists: array(candidate.matchedArtists).map((artist) => {
-      const value = record(artist);
-      return {
-        spotifyArtistId: value.spotifyArtistId,
-        name: value.name,
-        seedStrength: value.seedStrength,
-        origin: value.origin,
-        matchMethod: value.matchMethod,
-        primary: value.primary,
-      };
-    }),
-    lineupDisplay: sanitizeLineup(candidate.lineupDisplay),
-    visual: candidate.visual ?? resolveMusicVisual(candidate),
-    ranking,
-    semanticInsight: candidate.semanticInsight ?? buildSemanticEventInsight(candidate, candidate.semanticAssessment ?? null),
-    localEnhancement,
-  };
-}
-
-function toDisplaySportsGame(gameInput: unknown, localEnhancement: Record<string, unknown> | null) {
-  const game = record(gameInput);
-  const links = [
-    ...array(game.sourceOccurrences).map(record)
-      .filter((occurrence) => occurrence.sourceUrl)
-      .map((occurrence) => ({ source: occurrence.source, url: occurrence.sourceUrl })),
-    ...array(game.ticketObservations).map(record)
-      .filter((observation) => observation.url)
-      .map((observation) => ({ source: observation.source, url: observation.url })),
-  ];
-  return {
-    id: game.id,
-    source: "mlb",
-    sourceUrl: game.sourceUrl,
-    startLocal: game.startLocal,
-    timeTbd: game.timeTbd === true,
-    venue: game.venue,
-    homeTeam: game.homeTeam,
-    awayTeam: game.awayTeam,
-    series: game.series,
-    sportsContext: game.sportsContext,
-    tags: game.tags,
-    ticketObservations: game.ticketObservations,
-    sourceLinks: [...new Map(links.map((link) => [`${link.source}|${link.url}`, link])).values()],
-    ranking: game.ranking,
-    visual: game.visual ?? resolveSportsVisual(game),
-    localEnhancement,
-  };
-}
-
 async function attachFeedbackSnapshots(items: Array<Record<string, unknown>>, vertical: "music" | "sports") {
   for (const item of items) {
     const date = String(item.startLocal ?? "").slice(0, 10);
@@ -741,36 +664,6 @@ function updateEdmtrainHealth(health: SourceHealth[], fetched: number, enrichmen
     ambiguousMatches: Number(value.ambiguousCount ?? 0),
     unmatchedAuditOnly: Number(value.unmatchedCount ?? 0),
   };
-}
-
-function sanitizeLineup(value: unknown) {
-  if (!isRecord(value)) return null;
-  return {
-    displayTitle: value.displayTitle || null,
-    displayShape: value.displayShape || "general-show",
-    orderedArtists: array(value.orderedArtists).map((item) => {
-      const artist = record(item);
-      return {
-        lineupEntryId: artist.lineupEntryId,
-        displayName: artist.displayName,
-        relation: artist.relation,
-        billingGroupIndex: artist.billingGroupIndex,
-        b2bWithNext: artist.b2bWithNext,
-      };
-    }),
-    totalArtists: Number(value.totalArtists ?? 0),
-    directCount: Number(value.directCount ?? 0),
-    adjacentCount: Number(value.adjacentCount ?? 0),
-    ages: value.ages || null,
-    sourceUrl: value.sourceUrl || null,
-  };
-}
-
-function classifyEventType(event: Record<string, unknown>): string {
-  const title = String(event.title ?? "").toLowerCase();
-  if (title.includes("festival") || array(event.performers).length >= 6) return "festival";
-  if (title.includes("dj set") || title.includes("open to close")) return "dj set";
-  return "concert";
 }
 
 function uniqueArtists(items: unknown[]) {

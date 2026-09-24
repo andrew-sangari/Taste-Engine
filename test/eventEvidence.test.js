@@ -35,7 +35,7 @@ test('Ticketmaster normalizes field-level evidence without making descriptive co
   const model = serializeEventEvidenceForModel(evidence);
   const display = serializeEventEvidenceForDisplay(evidence);
 
-  assert.deepEqual(model.publishedFacts.classification, ['Music', 'Dance/Electronic', 'House']);
+  assert.deepEqual(model.publishedFacts.classification, ['Music', 'Dance/Electronic']);
   assert.equal(model.publishedFacts.endTime, '2026-10-03T01:00:00');
   assert.equal(model.publishedFacts.description, undefined);
   assert.ok(model.knownUnknowns.includes('description'));
@@ -96,7 +96,7 @@ test('card insight is a useful, source-linked no-op-safe projection that cannot 
   }, RETRIEVED);
   event.ranking = { utility: 88 };
   const insight = buildSemanticEventInsight(event);
-  assert.match(insight.summary, /Published classification/);
+  assert.match(insight.summary, /Ticketmaster classifies it as Dance\/Electronic/);
   assert.equal(insight.whatToExpect.status, 'verified');
   assert.equal(insight.whatToExpect.evidence[0].source, 'Ticketmaster');
   assert.equal(insight.worthChecking.status, 'not known');

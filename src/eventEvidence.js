@@ -176,12 +176,14 @@ export function buildEventEvidence(candidate) {
       }
     }
   }
+  reconcileTitleAgePolicy(facts, conflicts);
   const missing = new Set();
   for (const evidence of evidenceItems) {
     for (const field of evidence.withheldOrMissing ?? []) missing.add(field);
   }
   for (const field of EVIDENCE_FIELDS) {
     if (!facts[field]) missing.add(field);
+    else missing.delete(field);
   }
   return {
     schemaVersion: EVENT_EVIDENCE_SCHEMA_VERSION,
@@ -190,6 +192,58 @@ export function buildEventEvidence(candidate) {
     conflicts,
     withheldOrMissing: [...missing]
   };
+}
+
+/**
+ * The explicit age restriction a piece of event text states, or null.
+ *
+ * Deliberately narrow: only an unambiguous marker such as "21+", "18 and over"
+ * or "All Ages" counts. It says nothing about any other admission rule, and the
+ * absence of a marker is not evidence that an event is unrestricted.
+ */
+export function ageRestrictionFromText(text) {
+  const value = String(text ?? '');
+  const plus = value.match(/(?:^|[^\d])(21|18)\s*\+/);
+  if (plus) return `${plus[1]}+`;
+  const over = value.match(/\b(21|18)\s*(?:and|&)\s*(?:over|up|older)\b/i);
+  if (over) return `${over[1]}+`;
+  if (/\ball[\s-]+ages\b/i.test(value)) return 'All ages';
+  return null;
+}
+
+/**
+ * A permitted title that states an age restriction is age-policy evidence, even
+ * though no structured policy field was published. Without this, the absence of
+ * the structured field reads as "nothing restricts entry" while the listing
+ * itself says 21+.
+ *
+ * The derived fact keeps the title's provider, link and rights, and records
+ * `derivedFrom: 'title'` so a claim built on it can say where it came from.
+ * When a structured policy also exists and disagrees, both are kept and the
+ * disagreement is recorded as a conflict rather than silently resolved.
+ */
+function reconcileTitleAgePolicy(facts, conflicts) {
+  // Every permitted title counts, not only the one selected for display: two
+  // providers can title the same night differently, and only one may say 21+.
+  const titles = [facts.title, ...(conflicts.title ?? [])].filter(Boolean);
+  const title = titles.find((fact) => ageRestrictionFromText(fact.value));
+  const stated = title ? ageRestrictionFromText(title.value) : null;
+  if (!stated) return;
+  const derived = {
+    ...title,
+    field: 'agePolicy',
+    value: stated,
+    derivedFrom: 'title'
+  };
+  const policy = facts.agePolicy;
+  if (!policy) {
+    facts.agePolicy = derived;
+    return;
+  }
+  const published = ageRestrictionFromText(policy.value);
+  if (published && published !== stated) {
+    conflicts.agePolicy = [...(conflicts.agePolicy ?? []), derived];
+  }
 }
 
 /**
@@ -221,19 +275,33 @@ export function serializeEventEvidenceForDisplay(evidence) {
   const facts = {};
   for (const [field, fact] of Object.entries(evidence?.permittedFacts ?? {})) {
     if (!fact.permission?.display) continue;
-    facts[field] = {
-      value: fact.value,
-      provider: fact.provider,
-      ...(fact.sourceUrl ? { sourceUrl: fact.sourceUrl } : {}),
-      ...(fact.retrievedAt ? { retrievedAt: fact.retrievedAt } : {}),
-      assertionKind: fact.assertionKind,
-      confidence: fact.confidence
-    };
+    facts[field] = displayFact(fact);
+  }
+  // Disagreements between providers are display evidence too: a card must be
+  // able to say "these sources disagree" instead of silently picking one.
+  const conflicts = {};
+  for (const [field, alternatives] of Object.entries(evidence?.conflicts ?? {})) {
+    if (!facts[field]) continue;
+    const visible = alternatives.filter((fact) => fact?.permission?.display).map(displayFact);
+    if (visible.length) conflicts[field] = visible;
   }
   return {
     schemaVersion: EVENT_EVIDENCE_SCHEMA_VERSION,
     facts,
+    ...(Object.keys(conflicts).length ? { conflicts } : {}),
     withheldOrMissing: [...new Set(evidence?.withheldOrMissing ?? [])]
+  };
+}
+
+function displayFact(fact) {
+  return {
+    value: fact.value,
+    provider: fact.provider,
+    ...(fact.sourceUrl ? { sourceUrl: fact.sourceUrl } : {}),
+    ...(fact.retrievedAt ? { retrievedAt: fact.retrievedAt } : {}),
+    assertionKind: fact.assertionKind,
+    ...(fact.derivedFrom ? { derivedFrom: fact.derivedFrom } : {}),
+    confidence: fact.confidence
   };
 }
 

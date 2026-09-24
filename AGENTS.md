@@ -93,6 +93,8 @@ Everything in the LLM boundary above applies unchanged. Never send SeatGeek-only
 
 Provider selection is configuration. Direct TypeSafe serving is the verified default; the Vercel AI Gateway is an alternate inference route and not a hosting change. No module outside `src/nightlife/providers/` may branch on which provider is active.
 
+Jev characterizes events only; it never receives who an event is for, not even the discovery tier. Personal relevance is compared locally afterwards in `src/nightlife/personalRelevance.js`, and a personal claim requires both an evidenced event attribute and an established preference signal (a direct artist match or a taste-profile tag). A discovery path is not a preference or proof of novelty, and a missing structured field is never stated as an absence.
+
 This layer is advisory only and has no surface of its own. Enrichment appears inside the existing Music and Overview cards as at most a few source-linked claims, each marked verified, inferred, or not known; a candidate with nothing specific to add renders nothing. It must not change the canonical utility score, Fit, Friction, Urgency, Confidence, source facts, publication eligibility, or the learned taste profile. Schedule, travel, budget, and urgency are always recomputed deterministically. Evidence stays out of the published projection and is written to the gitignored `data/` directory for evaluation. There is no standalone nightlife route or form. See `docs/system-one-inference.md`.
 
 ## Automation contract

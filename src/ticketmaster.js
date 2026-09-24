@@ -291,12 +291,32 @@ export function normalizeTicketmasterEvent(event, retrievedAt = new Date()) {
   };
 }
 
+// Only the segment and genre levels are kept as a rule. Ticketmaster's music
+// subgenre is assigned unreliably: in the September 2026 Los Angeles projection
+// six of the eight Dance/Electronic events (John Summit, Bonobo, Sub Focus and
+// others) carried the subgenre "Amapiano", which none of them are. Its
+// attraction type/subType ("Individual", "Musician") describes the act's shape,
+// not the event. Publishing either as a verified classification would state
+// something the event never was, so neither is evidence.
+//
+// The one exception is "Event Style", which names a taxonomy branch rather
+// than a sound or an act. Under it the child level ("Festival") is the event's
+// actual type, so it is kept. Ticketmaster uses it at the genre level and at the
+// type level (festival listings arrive as type "Event Style", subType
+// "Festival"), so both pairs are read.
 function ticketmasterClassifications(event) {
   const values = [];
   for (const classification of event.classifications ?? []) {
-    for (const key of ['segment', 'genre', 'subGenre', 'type', 'subType']) {
-      const value = cleanText(classification?.[key]?.name);
-      if (value) values.push(value);
+    for (const [parent, child] of [['segment', null], ['genre', 'subGenre'], ['type', 'subType']]) {
+      const value = cleanText(classification?.[parent]?.name);
+      const eventStyle = /^event style$/i.test(value);
+      if (parent !== 'type' || eventStyle) {
+        if (value) values.push(value);
+      }
+      if (child && eventStyle) {
+        const detail = cleanText(classification?.[child]?.name);
+        if (detail) values.push(detail);
+      }
     }
   }
   return meaningfulClassifications(values, { provider: 'ticketmaster' });

@@ -303,7 +303,9 @@ const semanticEnrichment = await enrichSemanticEventCards(ranked, {
   provider: createDecisionInferenceProvider(readNightlifeConfig(process.env)),
   now: generatedAt,
   requiredIds: overviewMusicIds,
-  maxCandidates: 24
+  maxCandidates: 24,
+  // Compared locally against Jev's event characterization; never sent to it.
+  preferences: { topTags: artistSnapshot?.topTags ?? [] }
 });
 sourceHealth.push(semanticSourceHealth(semanticEnrichment));
 // Evidence stays out of the published projection: a display row must not become
@@ -315,6 +317,9 @@ const evidenceArtifactPath = resolve('data/nightlife/evidence-latest.json');
 await mkdir(dirname(evidenceArtifactPath), { recursive: true });
 await writeFile(evidenceArtifactPath, `${JSON.stringify({
   generatedAt: new Date(generatedAt).toISOString(),
+  // The profile-scoped signals the personal-relevance comparison reads, so the
+  // live evaluation can reproduce it. Private: this file is never published.
+  preferences: { topTags: artistSnapshot?.topTags ?? [] },
   candidates: ranked.map((candidate) => ({
     id: candidate.id,
     title: candidate.title,
@@ -325,6 +330,8 @@ await writeFile(evidenceArtifactPath, `${JSON.stringify({
     sourceOccurrences: candidate.sourceOccurrences ?? [],
     startLocal: candidate.startLocal ?? null,
     timeTbd: Boolean(candidate.timeTbd),
+    // The same fields the published row already carries for artist matches.
+    matchedArtists: (candidate.matchedArtists ?? []).map(({ name, origin, primary }) => ({ name, origin, primary })),
     ranking: { utility: candidate.ranking?.utility ?? null }
   }))
 }, null, 2)}\n`);
@@ -453,8 +460,7 @@ const exportData = {
   },
   events: ranked.map((candidate) => toDisplayEvent({
     ...candidate,
-    semanticInsight: semanticEnrichment.byId.get(String(candidate.id)) ?? null,
-    semanticAssessment: semanticEnrichment.assessmentById.get(String(candidate.id)) ?? null
+    semanticInsight: semanticEnrichment.byId.get(String(candidate.id)) ?? null
   }, enhancementFor(eventEnhancement.byId.get(candidate.id)))),
   sports: sports.map((game) => toDisplaySportsGame(game, enhancementFor(sportsEnhancement.byId.get(game.id)))),
   movies: tmdb.items,

@@ -31,7 +31,6 @@ export const FIELD_PROVENANCE = {
   advertisedPriceUsd: 'permitted-provider',
   publishedFacts: 'permitted-provider',
   travelMinutesEstimate: 'derived',
-  adjacentEvidence: 'derived',
   knownUnknowns: 'derived'
 };
 
@@ -92,10 +91,7 @@ export function nightlifeEvidenceFor(candidate) {
     namedPerformerCount: namedLineup.filter(Boolean).length,
     // Quoted only when no restricted provider contributed to the merged
     // ticket observation at all.
-    advertisedPriceUsd: !sources.has('seatgeek') && Number.isFinite(price) ? Math.round(price) : null,
-    adjacentEvidence: [...new Set((candidate.matchedArtists ?? [])
-      .map((artist) => artist.origin)
-      .filter((origin) => ['similar', 'tag', 'promoter'].includes(origin)))]
+    advertisedPriceUsd: !sources.has('seatgeek') && Number.isFinite(price) ? Math.round(price) : null
   };
 }
 
@@ -124,10 +120,7 @@ function evidenceFromPublishedRow(candidate) {
       ? { lat: candidate.venue.lat, lon: candidate.venue.lon }
       : null,
     namedPerformerCount: restricted ? 0 : (candidate.performers ?? []).filter((performer) => performer?.name).length,
-    advertisedPriceUsd: !restricted && Number.isFinite(price) ? Math.round(price) : null,
-    adjacentEvidence: [...new Set((candidate.matchedArtists ?? [])
-      .map((artist) => artist.origin)
-      .filter((origin) => ['similar', 'tag', 'promoter'].includes(origin)))]
+    advertisedPriceUsd: !restricted && Number.isFinite(price) ? Math.round(price) : null
   };
 }
 
@@ -187,10 +180,10 @@ export function buildSemanticCandidateInput(candidate, { ref, now = new Date(), 
     if (travel != null) fields.travelMinutesEstimate = travel;
   }
 
-  // Discovery-tier origins are derived labels, not Spotify content: they say
-  // "this reached the shortlist through a similarity or promoter path" without
-  // naming any playlist, artist, rank, or affinity.
-  fields.adjacentEvidence = evidence.adjacentEvidence ?? [];
+  // Nothing about the user crosses this boundary, not even the discovery tier
+  // (similar / tag / promoter) that brought a candidate onto the shortlist. The
+  // characterization must be the same whoever the event is for; relevance to
+  // this profile is compared locally afterwards (personalRelevance.js).
   fields.knownUnknowns = [...new Set([
     ...knownUnknownsFor({ restricted, hasTime, evidence, fields }),
     ...serializedModelEvidence.knownUnknowns

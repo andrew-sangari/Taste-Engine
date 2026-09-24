@@ -96,8 +96,10 @@ test('Spotify-derived and EDMTrain evidence never reaches the payload', () => {
   assert.ok(!/SPOTIFY DERIVED NAME|ANOTHER SPOTIFY NAME/.test(serialized));
   assert.ok(!/EDMTRAIN LINEUP|edmtrain/i.test(serialized));
   assert.ok(!/seedStrength|spotifyArtistId/.test(serialized));
-  // Discovery-tier origins are derived labels and are allowed.
-  assert.deepEqual(payload.candidates[0].adjacentEvidence, ['similar', 'tag']);
+  // Not even the discovery tier crosses the boundary: the characterization
+  // must not vary with who the event is for.
+  assert.equal(payload.candidates[0].adjacentEvidence, undefined);
+  assert.ok(!/\b(?:similar|promoter)\b/.test(JSON.stringify(payload.candidates[0])));
 });
 
 test('permitted provider fields are quoted, including an independently sourced price', () => {
