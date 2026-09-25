@@ -232,7 +232,7 @@ main { overflow-x: clip; }
 .eventBody h3 { font-size: clamp(30px, 4.6vw, 68px); font-weight: 430; letter-spacing: -.055em; line-height: .95; margin: 0; }
 .eventCard:not(.eventFeatured) .eventBody h3 { font-size: clamp(28px, 3vw, 46px); }
 .eventWhy { color: var(--text-secondary); font-size: 15px; font-weight: 400; line-height: 1.45; margin: 24px 0 0; max-width: 620px; }
-.localTake { border-left: 3px solid var(--accent); margin-top: 26px; padding: 4px 0 4px 18px; }
+.localTake { border-left: 3px solid var(--accent); box-sizing: border-box; margin-top: 26px; min-width: 0; padding: 4px 0 4px 18px; width: 100%; }
 .localTake .eyebrow { margin-bottom: 12px; }
 .localTakeLead { color: var(--text-secondary); font-size: 13px; line-height: 1.45; margin: 0 0 12px; max-width: 680px; }
 .localTakeLead strong { color: var(--text-primary); font-family: var(--font-mono), monospace; font-size: 11px; margin-right: 5px; text-transform: uppercase; }
@@ -242,6 +242,28 @@ main { overflow-x: clip; }
 .localTake > div { display: grid; gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .localTake span { color: var(--text-secondary); display: flex; flex-direction: column; font-size: 12px; line-height: 1.4; }
 .localTake strong { font-family: var(--font-mono), monospace; font-size: 11px; margin-bottom: 3px; text-transform: uppercase; }
+.semanticInsightCompact { margin: 10px 0 0; max-width: 100%; min-width: 0; }
+.localTake .semanticInsightChip, .semanticInsightChip { background: var(--accent-wash); border: 1px solid rgba(98, 223, 195, .35); border-radius: 999px; box-sizing: border-box; color: var(--accent-bright); display: block; font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .04em; line-height: 1.35; max-width: 100%; overflow: hidden; padding: 5px 9px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; width: fit-content; }
+.localTake > .semanticInsight, .semanticInsight { border-top: 1px solid var(--line); display: block; gap: 0; grid-template-columns: none; margin-top: 14px; max-width: 100%; min-width: 0; padding-top: 2px; }
+.semanticInsightDetails { max-width: 100%; min-width: 0; }
+.semanticInsightDetails > summary { color: var(--text-secondary); cursor: pointer; font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .06em; padding: 8px 0; text-transform: uppercase; }
+.semanticInsightDetails > section { padding: 3px 0 2px; }
+.semanticInsightSummary { color: var(--text-secondary); font-size: 13px; line-height: 1.45; margin: 0 0 11px; max-width: 680px; }
+.semanticInsightClaims { display: grid; gap: 9px; }
+.semanticInsightClaim { color: var(--text-secondary); display: grid; gap: 2px 8px; grid-template-columns: minmax(108px, max-content) minmax(0, 1fr) max-content; margin: 0; }
+.semanticInsightClaim strong { color: var(--text-primary); font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .04em; margin: 0; text-transform: uppercase; }
+.semanticInsightClaim span { font-size: 12px; line-height: 1.4; }
+.semanticInsightClaim em { color: var(--text-muted); font-family: var(--font-mono), monospace; font-size: 9px; font-style: normal; letter-spacing: .04em; text-transform: uppercase; }
+.semanticInsightClaim.claim-verified strong, .semanticInsightClaim.claim-verified em { color: var(--accent-bright); }
+.semanticInsightClaim.claim-inferred strong, .semanticInsightClaim.claim-inferred em { color: var(--orange); }
+.semanticInsightClaim.claim-unknown strong, .semanticInsightClaim.claim-unknown em { color: var(--text-muted); }
+.semanticEvidence { border-top: 1px solid var(--line); margin-top: 12px; }
+.semanticEvidence summary { color: var(--text-muted); cursor: pointer; font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .06em; padding: 10px 0 3px; text-transform: uppercase; }
+.semanticEvidence ul { display: grid; gap: 7px; list-style: none; margin: 7px 0 0; padding: 0; }
+.semanticEvidence li { color: var(--text-muted); display: flex; flex-wrap: wrap; font-size: 11px; gap: 5px 8px; line-height: 1.4; }
+.semanticEvidence li strong { color: var(--text-secondary); font-family: var(--font-mono), monospace; font-size: 10px; margin: 0; text-transform: uppercase; }
+.semanticEvidence a { color: var(--text-secondary); }
+.semanticEvidence a:hover { color: var(--accent-bright); }
 .scoreBlock { margin-top: 38px; }
 .scoreLabel { display: flex; font-family: var(--font-mono), monospace; font-size: 11px; justify-content: space-between; text-transform: uppercase; }
 .scoreTrack { background: var(--border); height: 4px; margin-top: 10px; }
@@ -414,6 +436,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, summary:focus-visib
   .eventCard, .eventFeatured { border-right: 0 !important; grid-column: auto; min-height: 420px; padding: 28px; }
   .eventSignals { flex-direction: column; align-items: flex-end; }
   .localTake > div, .localTake details > div { grid-template-columns: 1fr; }
+  .semanticInsightClaim { grid-template-columns: 1fr; gap: 1px; }
+  .semanticInsightClaim em { margin-top: 2px; }
   .occurrenceRow { grid-template-columns: 1fr; gap: 5px; }
   .occurrenceLinks { justify-content: flex-start; }
   .movieGrid { grid-template-columns: 1fr; }

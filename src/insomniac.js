@@ -1,4 +1,11 @@
+import { createEvidenceFact, createEventEvidence } from './eventEvidence.js';
+
 const EVENTS_URL = 'https://www.insomniac.com/events/los-angeles-ca/';
+
+// Keep this false until a maintained fixture corpus and a live response have
+// both been reviewed. Callers may still exercise the parser directly, but the
+// production source orchestrators must not count this adapter as coverage.
+export const INSOMNIAC_ADAPTER_VERIFIED = false;
 
 /**
  * Fetch the public Insomniac Los Angeles event calendar. The page is a
@@ -19,7 +26,7 @@ export async function fetchInsomniacEvents({
   const html = await response.text();
   if (isChallengePage(html)) throw new Error('Insomniac event page returned an access challenge.');
   const events = parseInsomniacEvents(html, { pageUrl });
-  if (!events.length && /events found|upcoming events|load more/i.test(html)) {
+  if (!events.length) {
     throw new Error('Insomniac event page shape was not recognized.');
   }
   return events.filter((event) => inDateWindow(event.startDate ?? event.startLocal, startDate, endDate));
@@ -77,18 +84,70 @@ export function normalizeInsomniacEvent(event, retrievedAt = new Date()) {
   const venue = event.venue ?? event.location ?? {};
   const status = cleanText(event.status ?? event.availability ?? 'scheduled').toLowerCase() || 'scheduled';
   const retrieved = new Date(retrievedAt).toISOString();
+  const endLocal = normalizeStartLocal(event.endLocal ?? event.endDate ?? event.end_date ?? event.endTime);
+  const doorsLocal = normalizeStartLocal(event.doorsLocal ?? event.doorsDate ?? event.doors_date ?? event.doors);
+  const classifications = [event.genre, event.category, event.type, event.format]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .map((value) => cleanText(typeof value === 'object' ? value?.name : value))
+    .filter(Boolean);
+  const eventEvidence = createEventEvidence({
+    eventRef: `insomniac:${sourceEventId}`,
+    provider: 'insomniac',
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    facts: {
+      title: insomniacFact(title, 'title', sourceEventId, sourceUrl, retrieved),
+      description: insomniacFact(event.description ?? event.summary ?? null, 'description', sourceEventId, sourceUrl, retrieved, {
+        assertionKind: 'descriptive-copy',
+        permission: { internalUse: true, display: true, modelInput: false, persist: true }
+      }),
+      classification: insomniacFact([...new Set(classifications)], 'classification', sourceEventId, sourceUrl, retrieved),
+      namedLineup: insomniacFact(performers.map((performer) => performer.name), 'namedLineup', sourceEventId, sourceUrl, retrieved),
+      format: insomniacFact(event.format ?? event.eventType ?? null, 'format', sourceEventId, sourceUrl, retrieved),
+      doorTime: insomniacFact(doorsLocal, 'doorTime', sourceEventId, sourceUrl, retrieved),
+      startTime: insomniacFact(startLocal, 'startTime', sourceEventId, sourceUrl, retrieved),
+      endTime: insomniacFact(endLocal, 'endTime', sourceEventId, sourceUrl, retrieved),
+      venueInfo: insomniacFact({
+        name: cleanText(venue.name ?? venue.venue ?? event.venueName),
+        city: cleanText(venue.city ?? event.city),
+        state: cleanText(venue.state ?? venue.stateCode ?? event.state)
+      }, 'venueInfo', sourceEventId, sourceUrl, retrieved),
+      agePolicy: insomniacFact(event.agePolicy ?? event.ageRestriction ?? event.age_restrictions, 'agePolicy', sourceEventId, sourceUrl, retrieved)
+    }
+  });
   return {
     schemaVersion: 1,
     id: `insomniac:${sourceEventId}`,
     source: 'insomniac',
     sourceEventId,
     sourceUrl,
-    sourceOccurrences: [{ source: 'insomniac', sourceEventId, sourceUrl }],
+    sourceOccurrences: [{
+      source: 'insomniac',
+      sourceEventId,
+      sourceUrl,
+      retrievedAt: retrieved,
+      title,
+      startLocal,
+      venue: {
+        sourceId: event.venueId ?? venue.id ? String(event.venueId ?? venue.id) : null,
+        name: cleanText(venue.name ?? venue.venue ?? event.venueName),
+        city: cleanText(venue.city ?? event.city),
+        state: cleanText(venue.state ?? venue.stateCode ?? event.state),
+        lat: numberOrNull(venue.lat ?? venue.latitude),
+        lon: numberOrNull(venue.lon ?? venue.longitude)
+      },
+      performerNames: performers.map((performer) => performer.name),
+      evidence: eventEvidence
+    }],
+    eventEvidence,
     retrievedAt: retrieved,
     title,
     type: isFestival(title, event.type) ? 'music_festival' : 'concert',
     startLocal,
     startUtc: event.startUtc ?? event.startDateTime ?? null,
+    doorsLocal,
+    endLocal,
     timeTbd: !hasTime(startLocal),
     dateTbd: !startLocal,
     status,
@@ -108,6 +167,19 @@ export function normalizeInsomniacEvent(event, retrievedAt = new Date()) {
       observedAt: retrieved
     }
   };
+}
+
+function insomniacFact(value, field, sourceEventId, sourceUrl, retrieved, extra = {}) {
+  return createEvidenceFact({
+    value,
+    field,
+    provider: 'insomniac',
+    sourceEventId,
+    sourceUrl,
+    retrievedAt: retrieved,
+    permission: { internalUse: true, display: true, modelInput: false, persist: true },
+    ...extra
+  });
 }
 
 function coerceEvent(event, pageUrl) {
@@ -224,4 +296,3 @@ function stableId(value) {
   for (const character of String(value)) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
   return `generated-${(hash >>> 0).toString(16)}`;
 }
-

@@ -7,6 +7,7 @@ import { CardActions, calendarInputFrom, planningInputFrom } from "./card-action
 import type { PublicFeedbackSnapshot } from "./feedback-store";
 import { FilterDisclosure } from "./filter-disclosure";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
+import { hasSemanticInsight, SemanticEventInsightView, type SemanticEventInsight } from "./semantic-event-insight";
 import { RecommendationScore, UrgencyChip } from "./signal-texture";
 import { eventAnchor } from "./event-anchor";
 import { daysFromLocalDate, formatLocalDate, formatLocalTime } from "./local-date";
@@ -41,6 +42,7 @@ export type EventItem = {
     whyYou: string;
   };
   localEnhancement?: LocalEnhancement | null;
+  semanticInsight?: SemanticEventInsight | null;
   visual?: RecommendationVisualType;
   feedbackSnapshot?: PublicFeedbackSnapshot | null;
   lineupDisplay?: {
@@ -155,7 +157,7 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
         {lineupPreview.length ? <p className="lineupPreview">Taste matches in the lineup: {lineupPreview.map((artist) => artist.displayName).join(" · ")}</p> : null}
         <p className="eventWhy">{event.ranking.whyYou}</p>
         {event.ranking.artistFit >= 55 && event.ranking.hassleScore >= 6 ? <p className="planningObstacle">Strong fit · planning obstacle: {event.ranking.hassleReasons.join(" · ") || "check logistics before committing"}.</p> : null}
-        {enhancement ? <LocalTake enhancement={enhancement} /> : null}
+        {enhancement || hasSemanticInsight(event.semanticInsight) ? <LocalTake enhancement={enhancement} semanticInsight={event.semanticInsight} /> : null}
         {lineup && lineup.totalArtists > 0 ? <LineupDetails lineup={lineup} /> : null}
       </div>
 
@@ -198,18 +200,20 @@ function LineupDetails({ lineup }: { lineup: NonNullable<EventItem["lineupDispla
   </details>;
 }
 
-function LocalTake({ enhancement }: { enhancement: LocalEnhancement }) {
-  const recommendation = enhancement.recommendation ?? enhancement.personalFit;
+function LocalTake({ enhancement, semanticInsight }: { enhancement?: LocalEnhancement | null; semanticInsight?: SemanticEventInsight | null }) {
+  const recommendation = enhancement?.recommendation ?? enhancement?.personalFit;
   const showLead = isGroundedAdvisory(recommendation);
-  const details = [enhancement.personalFit, enhancement.urgency, enhancement.hassle].filter((entry) => entry && !NO_INFORMATION_ADVISORY.test(entry.explanation));
-  if (!showLead && !details.length) return null;
+  const details = [enhancement?.personalFit, enhancement?.urgency, enhancement?.hassle].filter((entry) => entry && !NO_INFORMATION_ADVISORY.test(entry.explanation));
+  const showSemantic = hasSemanticInsight(semanticInsight);
+  if (!showLead && !details.length && !showSemantic) return null;
   return <div className="localTake">
-    <p className="eyebrow">Taste Engine note</p>
+    {enhancement ? <p className="eyebrow">Taste Engine note</p> : null}
     {showLead && recommendation ? <p className="localTakeLead"><strong>{'verdict' in recommendation ? recommendation.verdict : recommendation.label}</strong> {recommendation.explanation}</p> : null}
+    {showSemantic ? <SemanticEventInsightView insight={semanticInsight} /> : null}
     {details.length ? <details><summary>View fit and friction</summary><div>
-      {enhancement.personalFit && details.includes(enhancement.personalFit) ? <span><strong>Fit {enhancement.personalFit.score}</strong>{enhancement.personalFit.explanation}</span> : null}
-      {enhancement.urgency && details.includes(enhancement.urgency) ? <span><strong>{enhancement.urgency.label}</strong>{enhancement.urgency.explanation}</span> : null}
-      {enhancement.hassle && details.includes(enhancement.hassle) ? <span><strong>Hassle {enhancement.hassle.score}/10</strong>{enhancement.hassle.explanation}</span> : null}
+      {enhancement?.personalFit && details.includes(enhancement.personalFit) ? <span><strong>Fit {enhancement.personalFit.score}</strong>{enhancement.personalFit.explanation}</span> : null}
+      {enhancement?.urgency && details.includes(enhancement.urgency) ? <span><strong>{enhancement.urgency.label}</strong>{enhancement.urgency.explanation}</span> : null}
+      {enhancement?.hassle && details.includes(enhancement.hassle) ? <span><strong>Hassle {enhancement.hassle.score}/10</strong>{enhancement.hassle.explanation}</span> : null}
     </div></details> : null}
   </div>;
 }

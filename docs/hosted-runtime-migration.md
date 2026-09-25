@@ -64,6 +64,16 @@ Hosted advisory passes use:
 
 Ollama Cloud never becomes the ranker or source of canonical facts. Spotify-derived content and SeatGeek-only API materials remain excluded exactly as they are in the local pipeline.
 
+## Card enrichment (System One / Jev)
+
+The hosted refresh runs the same bounded card-enrichment pass as the local export: after deterministic ranking, every candidate with model-eligible evidence — Overview picks first — is characterized from permitted Ticketmaster and Framework evidence, and Music and Overview cards gain source-linked "About this night" claims. See `docs/system-one-inference.md`.
+
+- Route: direct TypeSafe serving, `POST https://api.typesafe.ai/v1/systemone`, bearer `TYPESAFE_AI_API_KEY`. Selected automatically when that key is present.
+- Cost and time: one request per model-eligible candidate, about $0.00004 and 200ms each, at concurrency 4 under a 60-second deadline. On current coverage about 50 of 98 candidates are eligible: roughly 50 requests, $0.002 and a few seconds per refresh. `NIGHTLIFE_MAX_CANDIDATES` (default 200) is a spend ceiling, not a shortlist; anything past it is counted as `eligibleBeyondBudget` in source health and makes the row `partial`.
+- Retries: 429 and 529 are retried with backoff, at most three attempts; 401 and 422 are not.
+- Failure: advisory only. A missing key, a failed call, or even a source-policy guard refusing to serialize a candidate degrades that run to "no enrichment" and never blocks publication. `jev-events` source health reads `not configured`, `active`, `partial`, or `unavailable` accordingly.
+- Privacy: raw assessments and provider probabilities are never published; the projection carries only the composed display claims.
+
 ## Hosted secrets
 
 Set these in the Sites project’s hosted environment settings; never commit them:
@@ -78,6 +88,10 @@ Set these in the Sites project’s hosted environment settings; never commit the
 - `OLLAMA_MODEL`
 - optional `OLLAMA_BASE_URL` (defaults to `https://ollama.com/api`)
 - optional `OLLAMA_TIMEOUT_MS` (defaults to 180000)
+- optional `TYPESAFE_AI_API_KEY` — enables card enrichment; without it cards render unchanged
+- optional `TYPESAFE_AI_MODEL` (defaults to `jev-latest`; pin `jev-1.13.0` once confidence thresholds are tuned, since the alias moves on release)
+- optional `AI_GATEWAY_API_KEY` with `NIGHTLIFE_INFERENCE_PROVIDER=gateway` — alternate route, not yet usable: the Vercel team needs a card on file before the Gateway serves requests
+- optional bounds `NIGHTLIFE_MAX_CANDIDATES`, `NIGHTLIFE_CONCURRENCY`, `NIGHTLIFE_DEADLINE_MS`, `NIGHTLIFE_MAX_COST_USD`
 - source keys used by enabled adapters: `LASTFM_API_KEY`, `SEATGEEK_CLIENT_ID`, `TICKETMASTER_API_KEY`, `TMDB_ACCESS_TOKEN` or `TMDB_API_KEY`, and `EDMTRAIN_CLIENT_KEY`
 - `TASTE_ENGINE_CONFIG_JSON` — version 2 allowlisted shared operational settings plus private per-profile brief, movie, sports, and personal-context configuration
 
@@ -100,6 +114,7 @@ Before the hosted route can refresh taste evidence, connect Spotify from the dep
 5. A protected refresh completes within the request-duration limit.
 6. An external scheduler calls the endpoint on Monday and Thursday without containing product logic.
 7. Two hosted refreshes complete without local repair before the local recovery producer is retired.
+8. With `TYPESAFE_AI_API_KEY` set, a hosted refresh reports `jev-events` as `active` or `partial` and some Music cards carry an **About this night** disclosure; with it unset, the refresh still publishes and the row reads `not configured`.
 
 The guarded local refresh remains a disaster-recovery producer. It may upload a validated snapshot through the protected projection route, but local promotion and Sites publication remain separate operations.
 

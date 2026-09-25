@@ -51,6 +51,7 @@ function buildCandidates(events = [], sports = []) {
     reason: event.ranking.whyYou,
     call: event.ranking.call ?? event.call ?? callLabel(event.ranking.utility),
     localEnhancement: event.localEnhancement,
+    semanticInsight: event.semanticInsight ?? null,
     sources: event.sources,
     eventType: event.eventType,
     visual: event.visual ?? resolveMusicVisual(event),

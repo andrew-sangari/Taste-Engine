@@ -5,6 +5,7 @@ import { RecommendationVisual, type RecommendationVisual as RecommendationVisual
 import { RecommendationScore } from "./signal-texture";
 import { eventHref } from "./event-anchor";
 import { formatLocalDate as formatLaDate } from "./local-date";
+import { SemanticEventInsightView, type SemanticEventInsight } from "./semantic-event-insight";
 
 export type OverviewItem = {
   vertical: 'music' | 'movies' | 'sports';
@@ -23,6 +24,7 @@ export type OverviewItem = {
   bucket?: 'current' | 'plan-ahead';
   visual?: RecommendationVisualType;
   eventType?: string;
+  semanticInsight?: SemanticEventInsight | null;
   feedbackSnapshot?: PublicFeedbackSnapshot | null;
 };
 
@@ -103,6 +105,7 @@ function OverviewCard({ item, index, planAhead = false }: { item: OverviewItem; 
         <h3>{formatEditorialTitle(item.title)}</h3>
         <p className="overviewPlace">{item.venue?.name ?? 'Venue TBD'} · {item.venue?.city ?? 'Los Angeles'}</p>
         <p className="overviewReason">{item.reason}</p>
+        {item.vertical === 'music' ? <SemanticEventInsightView compact insight={item.semanticInsight} /> : null}
         <div className="overviewUtility">
           <RecommendationScore
             confidence={item.confidence}

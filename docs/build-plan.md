@@ -10,6 +10,47 @@ The current order is:
 
 See `docs/hosted-runtime-migration.md` for cutover gates and hosted secret names.
 
+## PR #4 revision: grounded card enrichment
+
+The System One follow-up is a bounded advisory enhancement to the existing
+Music and Overview cards. It does not add a standalone Tonight product,
+request form, competing score, or default itinerary. The implementation order
+is:
+
+1. **Grounded baseline:** mark Insomniac unavailable/unverified, sample the
+   current source mix without printing private payloads, and define the one to
+   three useful facts a card may add.
+2. **Evidence contract:** preserve per-field provider, URL, retrieval time,
+   assertion kind, confidence, and display/model/persistence rights before
+   projection flattening. Audit actual Ticketmaster and Framework fields before
+   normalizing descriptions, classifications, doors, ends, or venue policy.
+3. **Question contract:** characterize the event first, then compare to a
+   separately permitted preference representation. Omit questions whose facts
+   are absent; keep schedule, travel, overlap, budget, urgency, and canonical
+   rank deterministic. Version evidence/context/questions/provider/response
+   cache keys.
+4. **Card integration:** progressively disclose a shared enrichment object in
+   EventCard/LocalTake and its Overview counterpart. A thin or restricted
+   candidate is a truthful no-op; no model-status banner or probability grid
+   appears to ordinary users. Bound or cache calls instead of fanning out on
+   every render.
+5. **Evaluation:** run the source-diverse synthetic gate and compare useful
+   information, source support, unsupported/overconfident claims, rights,
+   no-op behavior, latency, spend, and unchanged canonical order. Ranking
+   activation requires a separate reviewed before/after and rollback plan.
+
+The offline Phase E gate is intentionally network- and credential-free:
+
+```text
+node scripts/evaluate-nightlife-enrichment.js
+node --test test/nightlifeEnrichmentEvaluation.test.js
+```
+
+It uses 24 synthetic candidates across Ticketmaster, Framework, merged
+occurrences, SeatGeek-only restricted records, and unavailable Insomniac
+states. See `docs/system-one-inference.md` for the provider and evidence
+policy.
+
 ## Phase 0 — build the thin vertical slice (2–3 days)
 
 1. Extract the Spotify auth, token refresh, playlist enumeration, playlist-track, playlist-artist, and Last.fm tag modules from `Playlist Sync` into this project.
@@ -110,6 +151,13 @@ For the personal prototype:
 - scheduled Codex tasks only after the scripts are deterministic and idempotent
 
 Each ingestion run should be safe to repeat. Each brief should record the candidate snapshot, scoring version, and evidence used so a ranking can be reconstructed later.
+
+For this revision, defer “Build a night around this,” nearby-event selection,
+automatic multi-stop plans, a per-event preference questionnaire, canonical
+ranking changes, and new third-party discovery adapters. Gateway response
+parity remains unverified until a live evaluation response can be observed.
+Insomniac repair is separately gated on real permitted fixtures and an
+end-to-end candidate test; its current adapter presence is not coverage.
 
 ## First backlog
 

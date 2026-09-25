@@ -2,7 +2,7 @@ import { buildArtistSnapshot } from './spotifyTaste.js';
 import { normalizeSeatGeekEvent } from './seatgeek.js';
 import { normalizeTicketmasterEvent } from './ticketmaster.js';
 import { normalizeFrameworkEvent } from './framework.js';
-import { normalizeInsomniacEvent } from './insomniac.js';
+import { INSOMNIAC_ADAPTER_VERIFIED, normalizeInsomniacEvent } from './insomniac.js';
 import { normalizeMlbGame, normalizeStandings } from './mlb.js';
 import {
   enrichSportsGames,
@@ -173,7 +173,7 @@ export function normalizeFixtureInputs(fixture, { generatedAt, retrievedAt, time
     ...sortRaw(providers.seatgeek).map((event) => normalizeSeatGeekEvent(event, retrievedAt)),
     ...sortRaw(providers.ticketmaster).map((event) => normalizeTicketmasterEvent(event, retrievedAt)),
     ...sortRaw(providers.framework).map((event) => normalizeFrameworkEvent(event, retrievedAt)),
-    ...sortRaw(providers.insomniac).map((event) => normalizeInsomniacEvent(event, retrievedAt))
+    ...(INSOMNIAC_ADAPTER_VERIFIED ? sortRaw(providers.insomniac).map((event) => normalizeInsomniacEvent(event, retrievedAt)) : [])
   ];
   const baseSnapshot = buildArtistSnapshot({
     evidence: fixture.taste?.playlists ?? [],
@@ -218,7 +218,7 @@ export function normalizeFixtureInputs(fixture, { generatedAt, retrievedAt, time
       sourceHealth('seatgeek', 'active', providers.seatgeek?.length ?? 0, 0),
       sourceHealth('ticketmaster', 'active', providers.ticketmaster?.length ?? 0, 0),
       sourceHealth('framework', 'active', providers.framework?.length ?? 0, 0),
-      sourceHealth('insomniac', 'active', providers.insomniac?.length ?? 0, 0),
+      sourceHealth('insomniac', INSOMNIAC_ADAPTER_VERIFIED ? 'active' : 'unavailable', INSOMNIAC_ADAPTER_VERIFIED ? providers.insomniac?.length ?? 0 : 0, INSOMNIAC_ADAPTER_VERIFIED ? 0 : 1),
       sourceHealth('mlb', 'active', games.length, 0),
       sourceHealth('tmdb', 'active', movies.length, 0)
     ]

@@ -1,0 +1,209 @@
+import { containsUnsupportedModelClaim } from '../diagnostics.js';
+import {
+  DEFAULT_CERTAINTY_THRESHOLDS,
+  QUESTION_SET_VERSION,
+  buildQuestionSet,
+  certaintyBand
+} from './questions.js';
+
+// The internal decision contract. Every provider adapter maps its own answers
+// into exactly this shape; nothing downstream of `assessCandidates` sees a
+// provider-specific field, probability, or confidence number.
+// v3: event characterization only. The goal-driven dimensions (context fit,
+// music fit, late-night fit, novelty) and friction flags are gone.
+export const DECISION_SCHEMA_VERSION = 3;
+
+export const CERTAINTY_BANDS = ['high', 'moderate', 'low'];
+
+export class DecisionSchemaError extends Error {}
+
+const EVENT_DIMENSIONS = {
+  experienceCharacter: { allowed: ['dance_floor', 'live_performance', 'seated_listening', 'festival_multi_stage', 'mixed_or_other', 'unknown'], questionId: 'event_experience' },
+  musicCharacter: { allowed: ['electronic_dance', 'band_or_live', 'mixed_lineup', 'named_style', 'unknown'], questionId: 'music_character' },
+  participationFormat: { allowed: ['standing_or_floor', 'seated', 'mixed', 'not_published', 'unknown'], questionId: 'participation_format' },
+  scheduleCharacter: { allowed: ['published_late_window', 'published_early_window', 'published_event_window', 'unknown'], questionId: 'schedule_character' },
+  entryPolicy: { allowed: ['age_restricted', 'all_ages', 'policy_other', 'unknown'], questionId: 'entry_policy' },
+  venueCharacter: { allowed: ['club_or_dance_room', 'concert_hall', 'outdoor_or_festival', 'other_published', 'unknown'], questionId: 'venue_character' }
+};
+
+/**
+ * Map one candidate's raw typed answers into a `SemanticAssessment`.
+ *
+ * Three things are deliberately *not* taken from the model:
+ *
+ * - A dimension the candidate's evidence could not support was never asked and
+ *   is `unknown`; an answer below the confidence floor is banded to `unknown`.
+ * - `evidenceRefs` and `unknowns` are deterministic: they are what the
+ *   serializer actually supplied and actually withheld.
+ * - `reason` is composed by `composeReason` from the typed answers. The model
+ *   generates no text at all, so it cannot assert a fact about an event.
+ *
+ * Raw probabilities and confidence stay in `signals`, which is provider-scoped
+ * diagnostic data. They are never presented as calibrated cross-provider
+ * probabilities and never reach the site surface.
+ */
+export function assessmentFromAnswers(answers, {
+  candidateRef,
+  input,
+  certaintyThresholds = DEFAULT_CERTAINTY_THRESHOLDS
+} = {}) {
+  if (!candidateRef) throw new DecisionSchemaError('An assessment requires a candidate ref.');
+  if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+    throw new DecisionSchemaError('Provider answers must be an object keyed by question id.');
+  }
+
+  const questionSet = buildQuestionSet({ input });
+  const assessment = {
+    candidateRef,
+    schemaVersion: DECISION_SCHEMA_VERSION,
+    questionSetVersion: QUESTION_SET_VERSION
+  };
+  const certainty = {};
+  const signals = {};
+  let answeredCount = 0;
+
+  for (const [field, { allowed, questionId }] of Object.entries(EVENT_DIMENSIONS)) {
+    const answer = questionSet[questionId] ? answers[questionId] : null;
+    if (answer == null) {
+      assessment[field] = 'unknown';
+      certainty[field] = 'low';
+      continue;
+    }
+    const choice = validateChoiceAnswer(answer, questionId, questionSet);
+    const band = certaintyBand(choice.confidence, certaintyThresholds);
+    // A value the model is not reasonably sure of is recorded as unknown, not
+    // as a weak rating. "We could not tell" and "this is not that" are
+    // different answers and the surface shows them differently.
+    const value = band === 'low' ? 'unknown' : choice.choice;
+    if (!allowed.includes(value)) {
+      throw new DecisionSchemaError(`Provider returned an unsupported ${field} value.`);
+    }
+    assessment[field] = value;
+    certainty[field] = band;
+    signals[questionId] = { choice: choice.choice, confidence: round(choice.confidence), probabilities: roundAll(choice.probabilities) };
+    answeredCount += 1;
+  }
+
+  assessment.evidenceRefs = [...(input?.evidenceRefs ?? [])];
+  assessment.unknowns = [...(input?.fields?.knownUnknowns ?? [])];
+  assessment.certainty = certainty;
+  assessment.signals = signals;
+  assessment.answeredQuestionCount = answeredCount;
+  assessment.reason = composeReason(assessment, input);
+
+  if (containsUnsupportedModelClaim(assessment.reason)) {
+    throw new DecisionSchemaError('Composed reason made an unsupported availability claim.');
+  }
+  return assessment;
+}
+
+/**
+ * A diagnostic sentence built from typed answers and supplied evidence only.
+ * Every clause is traceable to a fact the serializer actually sent. The cards
+ * do not render it; `cardInsight.js` composes what users read.
+ */
+export function composeReason(assessment, input) {
+  const fields = input?.fields ?? {};
+  const published = fields.publishedFacts ?? {};
+  const parts = [];
+  const experience = {
+    dance_floor: 'Published details describe a dance-floor experience',
+    live_performance: 'Published details describe a live-performance experience',
+    seated_listening: 'Published details describe a seated listening experience',
+    festival_multi_stage: 'Published details describe a festival or multi-stage program',
+    mixed_or_other: 'Published details describe a mixed or other event format'
+  }[assessment.experienceCharacter];
+  if (experience && (published.format || published.description || published.classification || published.venueInfo)) parts.push(experience);
+
+  const music = {
+    electronic_dance: 'published music details point to electronic dance music',
+    band_or_live: 'published music details point to a band or live program',
+    mixed_lineup: 'published music details describe a mixed lineup',
+    named_style: 'published music details name a specific style'
+  }[assessment.musicCharacter];
+  if (music && (published.classification || published.description || published.namedLineup)) parts.push(music);
+
+  const participation = {
+    standing_or_floor: 'the published format is standing or floor-oriented',
+    seated: 'the published format is seated',
+    mixed: 'the published format includes seated and floor participation',
+    not_published: 'the event does not publish a participation format'
+  }[assessment.participationFormat];
+  if (participation && (published.format || published.venueInfo || published.description)) parts.push(participation);
+
+  const schedule = {
+    published_late_window: 'published event times establish a late-running window',
+    published_early_window: 'published event times establish an early-evening window',
+    published_event_window: 'published event times establish a bounded event window'
+  }[assessment.scheduleCharacter];
+  if (schedule && published.endTime) parts.push(schedule);
+
+  const entry = {
+    age_restricted: 'the published entry policy is age-restricted',
+    all_ages: 'the published entry policy is all-ages',
+    policy_other: 'the event publishes an entry policy'
+  }[assessment.entryPolicy];
+  if (entry && published.agePolicy) parts.push(entry);
+
+  const venue = {
+    club_or_dance_room: 'published venue metadata describes a club or dance room',
+    concert_hall: 'published venue metadata describes a concert hall',
+    outdoor_or_festival: 'published venue metadata describes an outdoor or festival setting',
+    other_published: 'published venue metadata establishes another room character'
+  }[assessment.venueCharacter];
+  if (venue && published.venueInfo) parts.push(venue);
+
+  if (!parts.length) return 'Published event details were insufficient for a typed characterization.';
+  const lead = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+  return `${lead}${parts.length > 1 ? `; ${parts.slice(1).join(', ')}` : ''}.`;
+}
+
+/**
+ * Validate a full provider response for one candidate before it is mapped.
+ * Extra question ids are rejected: an adapter may not smuggle its own
+ * dimensions into the contract.
+ */
+export function validateAnswerEnvelope(answers, { expectedQuestionIds } = {}) {
+  if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+    throw new DecisionSchemaError('Provider response did not contain an answers map.');
+  }
+  const expected = new Set(expectedQuestionIds ?? []);
+  for (const id of Object.keys(answers)) {
+    if (!expected.has(id)) throw new DecisionSchemaError(`Provider answered an unrequested question (${id}).`);
+  }
+  return answers;
+}
+
+function validateChoiceAnswer(answer, questionId, questionSet = null) {
+  if (answer.type && answer.type !== 'choice') {
+    throw new DecisionSchemaError(`Question ${questionId} expected a choice answer.`);
+  }
+  const definition = questionSet?.[questionId];
+  if (!definition) throw new DecisionSchemaError(`Unknown choice question ${questionId}.`);
+  const allowed = Object.keys(definition.criteria);
+  if (typeof answer.choice !== 'string' || !allowed.includes(answer.choice)) {
+    throw new DecisionSchemaError(`Question ${questionId} returned an option outside its criteria.`);
+  }
+  const confidence = Number(answer.confidence);
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+    throw new DecisionSchemaError(`Question ${questionId} returned an out-of-range confidence.`);
+  }
+  const probabilities = answer.probabilities ?? {};
+  if (probabilities && typeof probabilities === 'object') {
+    for (const key of Object.keys(probabilities)) {
+      if (!allowed.includes(key)) {
+        throw new DecisionSchemaError(`Question ${questionId} returned a probability for an unknown option.`);
+      }
+    }
+  }
+  return { choice: answer.choice, confidence, probabilities };
+}
+
+function round(value) {
+  return Number.isFinite(value) ? Number(value.toFixed(3)) : null;
+}
+
+function roundAll(probabilities) {
+  if (!probabilities || typeof probabilities !== 'object') return {};
+  return Object.fromEntries(Object.entries(probabilities).map(([key, value]) => [key, round(Number(value))]));
+}

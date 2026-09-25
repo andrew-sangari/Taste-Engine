@@ -52,8 +52,13 @@ npm run verify:release
 - the Worker entry point exists;
 - packaged Sites hosting metadata exactly matches the tracked declaration;
 - every tracked D1 migration is included in the package;
-- application identity is embedded; and
-- obvious secret assignments are absent from the bundle.
+- application identity is embedded;
+- obvious secret assignments are absent from the bundle, including the inference keys `TYPESAFE_AI_API_KEY` and `AI_GATEWAY_API_KEY`; and
+- every web font is served as a packaged `/assets/` file that exists in the build.
+
+The font check guards a silent failure. Fonts are fetched at build time into the gitignored `site/.vinext` cache, whose CSS records the absolute path it was created at. A cache carried across a moved or copied checkout keeps pointing at the old location, the build ships those raw paths as font URLs, every font 404s, and the site falls back to a system typeface with no error. A clean checkout is unaffected, but a working-tree build — including the local recovery producer — is not. If the check fails, delete `site/.vinext` and rebuild.
+
+Screenshot baselines must be recorded from a build that passes this check. Baselines captured while the fonts were 404ing encode a fallback typeface and will fail against every correct build.
 
 Run the browser suites sequentially because both use `site/dist`:
 
@@ -75,7 +80,7 @@ npm --prefix site run test:browser:empty
 7. Build the site-rooted source commit from `site/`, using only a short-lived per-command Sites credential. Never persist a managed Sites remote or credential in local Git configuration.
 8. With refreshes still quiesced, apply the packaged D1 migrations and deploy the same verified `site/dist` artifact. Save the resulting deployment version.
 9. During the single-profile cutover, have the original owner sign in and call Spotify status once. This is deliberately mutating: it binds the legacy profile and lazily replaces plaintext tokens with ciphertext.
-10. Check `/api/health` for the expected release/schema versions and `ready`, then load the signed-in root page and verify the original projection. Only then resume the scheduler.
+10. Check `/api/health` for the expected release/schema versions and `ready`, then load the signed-in root page and verify the original projection. Run one protected refresh and confirm the `jev-events` source-health row reads `not configured`, `active`, or `partial` as expected for the configured key. Only then resume the scheduler.
 
 The pre-profile deployment is not a safe rollback target after step 9 or after any profile-scoped snapshot is written. Old code treats recommendations globally and cannot read encrypted tokens. After that boundary, recovery means deploying a forward, profile-aware repair. The destructive fallback is restoring the pre-migration D1 backup together with the old code, which discards all post-backup profile state. Keep the last known-good profile-aware release as the ordinary rollback baseline after cutover; never run pre-profile code against an active migrated database.
 
@@ -149,6 +154,8 @@ Repository changes cannot perform these provider-side actions:
 - Keep the Sites D1 binding named `DB`, apply migration 0003 while refreshes are paused, and preserve the current access policy while adding only intended friends.
 - Register exactly `https://<deployed-host>/api/spotify/callback` in the Spotify application. If the Spotify app is restricted to development/test users, add each friend there as well.
 - Set `SPOTIFY_CLIENT_ID`, `SPOTIFY_TOKEN_ENCRYPTION_KEY`, `TASTE_REFRESH_SECRET`, `TASTE_ENGINE_ENV`, `TASTE_LEGACY_PROFILE_EMAIL`, `TASTE_ALLOWED_PROFILE_EMAILS`, and version 2 `TASTE_ENGINE_CONFIG_JSON` in Sites hosted settings. Set source/Ollama keys only for enabled adapters.
+- Optionally set `TYPESAFE_AI_API_KEY` to enable card enrichment. It is advisory: without it every refresh still publishes and cards render unchanged. Pin `TYPESAFE_AI_MODEL=jev-1.13.0` if you want answers to stay stable across vendor releases.
+- The Vercel AI Gateway route additionally needs a card on file for the Vercel team; until then it answers `customer_verification_required` and should stay unselected.
 - Store the same refresh secret in the scheduler Worker and deploy the revised Monday/Thursday schedule.
 - Verify and preserve the deployed Sites access policy. Authentication establishes identity; the access policy decides which trusted people may enter the application.
 
@@ -161,3 +168,5 @@ No new database provider, object store, Kubernetes layer, generalized platform, 
 - Automatic token-encryption-key rotation is omitted. Reconnect is the small-system recovery procedure.
 - A second hosted staging project is not assumed. Preview and production are explicit runtime labels, but a separate provider project should be added only when credentials and ownership are available.
 - Parallel multi-profile refresh is omitted. Serial refresh is safer for the current source rate limits and small trusted-user count.
+- Semantic assessments stay advisory. Letting them influence canonical fit, hassle, or published order is a separate activation with before/after evaluation and rollback, not part of this release.
+- Insomniac discovery stays disabled until its extractor is repaired and validated with captured permitted fixtures.

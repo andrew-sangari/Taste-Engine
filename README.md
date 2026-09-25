@@ -79,7 +79,7 @@ Concert retrieval now merges and deduplicates:
 - exact SeatGeek performer resolution followed by performer-ID event queries, which catches billing-name differences and support appearances.
 - optional Ticketmaster Discovery API results;
 - Framework's public artist roster, used as an exact promoter watchlist to expand SeatGeek performer and Ticketmaster attraction lookups;
-- all upcoming events from Framework's public structured calendar and the followed Insomniac Los Angeles calendar, treated as explicitly followed promoters and allowed to fail independently;
+- all upcoming events from Framework's public structured calendar; the followed Insomniac Los Angeles adapter remains explicitly unavailable until it is verified against permitted fixtures;
 - Dodgers home games from MLB Stats API, with standings, probable-pitcher, and optional ticket-source enrichment.
 
 TMDB is a candidate source rather than a recommendation authority. Its output is constrained by `config/movies.json`: preferred genres, people, companies, keywords, exclusions, minimum popularity, and a hard candidate cap. Each shortlisted film retains cast/crew, genre, keyword, company, runtime, and US release-type metadata. It remains “format verification pending” until scheduled discovery confirms a meaningful engagement at a configured priority theater.
@@ -106,6 +106,22 @@ The next upcoming candidates may also receive four separate local advisory passe
 The event explorer supports date-window and event-type filters, personal-fit/date/urgency/hassle sorting, urgent-only and low-hassle views, a source-health jump link, and UI-only collation of repeat appearances by the same primary artist. The mixed Overview explicitly queues its selected music and sports candidates ahead of the general Ollama advisory cap. Source health is grouped by Music, Sports, Movies, and Editorial. Festivals remain separate occurrences except when cross-source listings represent the same dated festival event.
 
 For music advisory passes, intentionally absent lineup, genre, or identity detail is uncertainty rather than a reason to skip; missing-evidence skips fall back to the deterministic call. Optional `EDMTRAIN_CLIENT_KEY` enables documented-API lineup enrichment only for confidently matched existing events. Unmatched results stay in a private audit and EDMTrain payloads never enter Ollama.
+
+### Source-grounded event characterization
+
+Music and Overview cards can show one compact semantic-insight chip when a permitted provider publishes enough useful event detail. Expanding **About this night** reveals up to three evidence-linked claims and a **How do we know?** disclosure. Sparse events remain unchanged.
+
+Behind the disclosure is an optional System One evaluation model (Jev). It answers only narrow questions enabled by field-level Ticketmaster or Framework evidence, returns calibrated typed answers, and generates no prose. Deterministic code composes every displayed sentence, preserves explicit unknowns, and cannot alter canonical score, rank, Fit, Friction, Urgency, or Confidence. A future contextual “build a night” workflow remains deferred.
+
+```text
+TYPESAFE_AI_API_KEY=
+```
+
+That one key is enough; direct TypeSafe serving is the default route and the Vercel AI Gateway (`AI_GATEWAY_API_KEY`) is an alternate route, not a hosting change. With no key the cards render exactly as they did before, from published evidence alone. One candidate costs about $0.00004 and returns in roughly 200ms, and enrichment runs once per refresh rather than per page view.
+
+The same source policy applies as everywhere else: SeatGeek-only material, Spotify Content and Spotify-derived preference evidence, EDMTrain payloads, and private context never reach the model. A candidate backed only by a restricted source keeps its normal card and simply gains no enrichment. Withheld evidence is listed as *not known* and never counted against a candidate. Schedule, travel, budget and urgency stay deterministic, and nothing here changes the canonical ranking, the published projection, or the learned taste profile.
+
+Use `npm run nightlife:probe` to check the route end to end, `npm run evaluation:nightlife` for the offline gold-set gate (no credentials or network needed), and `npm run nightlife:cards` to measure evidence coverage, claim support, latency and spend against the real projection. See `docs/system-one-inference.md`.
 
 ### Automation requirements
 

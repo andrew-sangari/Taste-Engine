@@ -140,7 +140,7 @@ export default async function Home() {
           </li>
           <li className="methodStep">
             <span className="methodNode">02</span>
-            <strong>Retrieve</strong><p>Music comes from independent SeatGeek, Ticketmaster, Framework, and Insomniac paths. MLB defines Dodgers games; TMDB keeps a refined theatrical film shortlist.</p>
+            <strong>Retrieve</strong><p>Music comes from independent SeatGeek, Ticketmaster, and Framework paths. Insomniac remains explicitly unavailable until its adapter is verified. MLB defines Dodgers games; TMDB keeps a refined theatrical film shortlist.</p>
           </li>
           <li className="methodStep">
             <span className="methodNode">03</span>
@@ -148,7 +148,7 @@ export default async function Home() {
           </li>
           <li className="methodStep">
             <span className="methodNode">04</span>
-            <strong>Explain</strong><p>Deterministic scores make the call. Ollama editorial enrichment may add concise prose and advisories from explicitly allowed non-Spotify fields, but it cannot add candidates, change rankings, or make unsupported scarcity claims.</p>
+            <strong>Explain</strong><p>Deterministic scores make the call. Source-grounded Jev characterization may clarify an event card, and Ollama may add concise editorial prose from explicitly allowed fields. Neither can add candidates, change rankings, or make unsupported scarcity claims.</p>
           </li>
         </ol>
       </section>
@@ -268,7 +268,7 @@ function summarizeSourceHealth(sources: SourceHealth[]) {
 }
 
 function sourceCategory(source: string) {
-  if (["seatgeek", "ticketmaster", "framework", "framework-artists", "insomniac", "edmtrain", "ollama-events", "spotify-top-artists"].includes(source)) return "Music";
+  if (["seatgeek", "ticketmaster", "framework", "framework-artists", "insomniac", "edmtrain", "jev-events", "ollama-events", "spotify-top-artists"].includes(source)) return "Music";
   if (["mlb", "sports-seatgeek", "sports-ticketmaster", "ollama-sports"].includes(source)) return "Sports";
   if (source === "tmdb") return "Movies";
   if (source === "ollama" || source === "ollama-overview") return "Editorial";
@@ -283,6 +283,7 @@ function sourceLabel(source: string) {
     "framework-artists": "Framework artist roster",
     edmtrain: "EDMTrain lineup enrichment",
     insomniac: "Insomniac events",
+    "jev-events": "Jev event characterization",
     "ollama-events": "Ollama music advisories",
     "spotify-top-artists": "Spotify Top Artists",
     mlb: "MLB schedule",
@@ -313,6 +314,9 @@ function formatSourceDetails(details: Record<string, string | number | null>) {
   }
   if (details.reusedPasses != null) {
     return Number(details.reusedPasses) > 0 ? `${details.reusedPasses} prior passes retained across ${details.reusedItems ?? 0} unchanged items` : "no prior passes needed";
+  }
+  if (details.evidenceCount != null || details.modelEligibleCount != null) {
+    return `${Number(details.evidenceCount ?? 0)} evidenced · ${Number(details.modelEligibleCount ?? 0)} model-eligible`;
   }
   const windows = [
     ["shortTerm", "short"],

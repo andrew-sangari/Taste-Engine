@@ -245,7 +245,7 @@ async function runPasses({
 export function buildHostedMusicVector(event: AdvisoryItem, index: number): Record<string, unknown> & { ref: string } {
   const occurrences = array(event.sourceOccurrences).map(record);
   const sources = new Set(occurrences.map((occurrence) => String(occurrence.source ?? "")));
-  const allowed = occurrences.find((occurrence) => ["ticketmaster", "framework", "insomniac"].includes(String(occurrence.source)));
+  const allowed = occurrences.find((occurrence) => ["ticketmaster", "framework"].includes(String(occurrence.source)));
   const ranking = record(event.ranking);
   const start = new Date(String(event.startLocal ?? ""));
   return {
@@ -376,7 +376,7 @@ function validateEditorial(value: Record<string, unknown>, allowedRefs: Set<stri
 function editorialCandidates(projection: Record<string, unknown>) {
   const music = array(projection.events).map(record).flatMap((event) => {
     const occurrence = array(event.sourceLinks).map(record)
-      .find((link) => ["ticketmaster", "framework", "insomniac"].includes(String(link.source)));
+      .find((link) => ["ticketmaster", "framework"].includes(String(link.source)));
     if (!occurrence) return [];
     return [{
       ref: event.id,

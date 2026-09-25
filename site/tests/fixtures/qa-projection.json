@@ -221,6 +221,29 @@
         "urgency": "watch",
         "whyYou": "A promoter-followed festival shape with enough direct signal to inspect the lineup."
       },
+      "semanticInsight": {
+        "summary": "Published format: an open-air lineup with room to roam.",
+        "whatToExpect": {
+          "text": "A multi-artist festival setting rather than a focused club set.",
+          "status": "verified",
+          "evidence": [{ "source": "Framework", "url": "https://example.com/synthetic/night-market", "retrievedAt": "2026-07-12T11:30:00.000-07:00", "status": "verified" }]
+        },
+        "whyItMayFit": {
+          "text": "The published lineup shape supports a selective, exploratory recommendation.",
+          "status": "inferred",
+          "evidence": [{ "source": "Framework", "url": "https://example.com/synthetic/night-market", "retrievedAt": "2026-07-12T11:30:00.000-07:00", "status": "inferred" }]
+        },
+        "worthPlanning": {
+          "text": "The early evening start is useful planning context for a longer venue footprint.",
+          "status": "verified",
+          "evidence": [{ "source": "Framework", "url": "https://example.com/synthetic/night-market", "retrievedAt": "2026-07-12T11:30:00.000-07:00", "status": "verified" }]
+        },
+        "worthChecking": {
+          "text": "Set order and door policy are not published in this fixture.",
+          "status": "not known",
+          "evidence": []
+        }
+      },
       "visual": {
         "kind": "texture",
         "variant": "music-crowd-silhouette"
@@ -251,6 +274,13 @@
         "confidence": "exploratory",
         "urgency": "safe to wait",
         "whyYou": "The fit is promising enough to keep visible even though the event has no declared visual or ticket price."
+      },
+      "semanticInsight": {
+        "worthChecking": {
+          "text": "Set order and door policy are not published in this fixture.",
+          "status": "not known",
+          "evidence": []
+        }
       },
       "visual": { "kind": "none" }
     },
@@ -553,6 +583,29 @@
       "reason": "A promoter-followed festival shape with enough direct signal to inspect the lineup.",
       "call": "Selective",
       "bucket": "current",
+      "semanticInsight": {
+        "summary": "Published format: an open-air lineup with room to roam.",
+        "whatToExpect": {
+          "text": "A multi-artist festival setting rather than a focused club set.",
+          "status": "verified",
+          "evidence": [{ "source": "Framework", "url": "https://example.com/synthetic/night-market", "retrievedAt": "2026-07-12T11:30:00.000-07:00", "status": "verified" }]
+        },
+        "whyItMayFit": {
+          "text": "The published lineup shape supports a selective, exploratory recommendation.",
+          "status": "inferred",
+          "evidence": [{ "source": "Framework", "url": "https://example.com/synthetic/night-market", "retrievedAt": "2026-07-12T11:30:00.000-07:00", "status": "inferred" }]
+        },
+        "worthPlanning": {
+          "text": "The early evening start is useful planning context for a longer venue footprint.",
+          "status": "verified",
+          "evidence": [{ "source": "Framework", "url": "https://example.com/synthetic/night-market", "retrievedAt": "2026-07-12T11:30:00.000-07:00", "status": "verified" }]
+        },
+        "worthChecking": {
+          "text": "Set order and door policy are not published in this fixture.",
+          "status": "not known",
+          "evidence": []
+        }
+      },
       "visual": { "kind": "texture", "variant": "music-crowd-silhouette" }
     },
     {

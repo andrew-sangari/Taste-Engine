@@ -90,13 +90,23 @@ function mergeInto(target, incoming) {
 function sourceOccurrencesFor(candidate) {
   const existing = Array.isArray(candidate.sourceOccurrences) && candidate.sourceOccurrences.length
     ? candidate.sourceOccurrences
-    : [{ source: candidate.source, sourceEventId: candidate.sourceEventId, sourceUrl: candidate.sourceUrl }];
+    : [{
+      source: candidate.source,
+      sourceEventId: candidate.sourceEventId,
+      sourceUrl: candidate.sourceUrl,
+      retrievedAt: candidate.retrievedAt,
+      evidence: candidate.eventEvidence
+    }];
   return existing.map((occurrence) => ({
     ...occurrence,
     title: occurrence.title ?? candidate.title,
     startLocal: occurrence.startLocal ?? candidate.startLocal,
     venue: occurrence.venue ?? candidate.venue,
-    performerNames: occurrence.performerNames ?? (candidate.performers ?? []).map((performer) => performer.name)
+    performerNames: occurrence.performerNames ?? (candidate.performers ?? []).map((performer) => performer.name),
+    retrievedAt: occurrence.retrievedAt ?? candidate.retrievedAt,
+    evidence: occurrence.evidence
+      ?? occurrence.eventEvidence
+      ?? (!occurrence.source || occurrence.source === candidate.source ? candidate.eventEvidence : null)
   }));
 }
 

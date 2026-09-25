@@ -5,6 +5,10 @@ config/personal-context.json
 /data/
 config/feedback.local.json
 .env
+.env.local
+site/.dev.vars
+node_modules/
+.claude/settings.local.json
 .DS_Store
 
 # design-sync
