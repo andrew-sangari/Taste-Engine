@@ -14,7 +14,7 @@ The hosted Sites runtime now owns the production read-only Spotify path, ported 
 - playlist artist summaries with track counts and sample tracks
 - Last.fm artist tags
 
-Playlist Sync remains the local parity and recovery implementation during cutover. Production stores tokens, selected playlists, and replaceable Top Artists windows in D1 and must not depend on its localhost endpoints.
+The local path has the same ownership: `src/spotifyClient.js`, `src/topArtists.js` and `src/artistTags.js` replace the former dependency on the sibling Playlist Sync service, so no other project has to be running. Production stores tokens, selected playlists, and replaceable Top Artists windows in D1 and must not depend on its localhost endpoints.
 
 ### Spotify evidence rules
 
@@ -109,7 +109,7 @@ Do not scrape it. Its current terms prohibit crawling, scraping, or harvesting m
 
 ### EDMTrain
 
-Use only the documented API with the locally configured client key; never scrape it. The authorized scope is enrichment-only: same-date canonical events may receive ordered lineup, B2B grouping, age, and source-link metadata only after a confident venue/title/artist match. EDMTrain never creates a candidate, receives a ranking bonus merely for being present, or supplies model input. Ambiguous and unmatched records remain in a private audit artifact, and API failure leaves the rest of the projection intact.
+Use only the documented API with the locally configured client key; never scrape it. The authorized scope is enrichment plus one narrow exception. Same-date canonical events may receive ordered lineup, B2B grouping, age, and source-link metadata only after a confident venue/title/artist match. The exception, authorized by the owner on 2026-11-11: a festival-flagged record whose name is exactly a destination-watchlist name, inside the watch area, for an edition no ticketing API lists yet, becomes an announced destination candidate that links to EDMTrain and states no ticket facts; the ticketing listing replaces it once one exists. Otherwise EDMTrain never creates a candidate. It never receives a ranking bonus merely for being present and never supplies model input: an announcement-only candidate is left out of every model pass. Ambiguous and unmatched records remain in a private audit artifact, and API failure leaves the rest of the projection intact.
 
 ### Eventbrite
 

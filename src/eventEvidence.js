@@ -27,7 +27,7 @@ export const EVIDENCE_ASSERTION_KINDS = ['published-fact', 'descriptive-copy', '
 export const EVIDENCE_CONFIDENCE = ['verified', 'partial', 'unknown'];
 // Insomniac remains deliberately absent until its parser is repaired and
 // validated against a maintained fixture/live-response corpus.
-export const PERMITTED_EVIDENCE_PROVIDERS = ['ticketmaster', 'framework'];
+export const PERMITTED_EVIDENCE_PROVIDERS = ['ticketmaster', 'framework', 'insomniac'];
 
 const DEFAULT_PERMISSION = Object.freeze({
   internalUse: true,

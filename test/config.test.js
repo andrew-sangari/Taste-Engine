@@ -8,7 +8,8 @@ test('normalizes Spotify seed playlists', () => {
     playlists: [{ id: 'one', name: 'One', weight: 2 }]
   });
 
-  assert.equal(config.playlistSyncBaseUrl, 'http://127.0.0.1:4317');
+  assert.equal('playlistSyncBaseUrl' in config, false, 'a legacy Playlist Sync URL is accepted and ignored');
+  assert.deepEqual(Object.keys(config), ['maxTracksPerPlaylist', 'playlists']);
   assert.equal(config.maxTracksPerPlaylist, 500);
   assert.deepEqual(config.playlists[0], { id: 'one', name: 'One', enabled: true, weight: 2 });
 });

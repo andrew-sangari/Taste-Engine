@@ -173,3 +173,37 @@ test('rejects unsupported scarcity claims from local editorial output', async ()
   assert.equal(editorial.status, 'deterministic fallback');
   assert.match(editorial.warning, /unsupported scarcity claim/);
 });
+
+test('a Rams game is named from the ESPN schedule and never called a Dodgers game', async () => {
+  const rams = { id: 'nfl:1', source: 'espn', league: 'nfl', startLocal: '2026-07-15T17:15:00', homeTeam: { name: 'Los Angeles Rams', shortName: 'Rams' }, awayTeam: { name: 'Green Bay Packers', shortName: 'Packers' }, venue: { name: 'SoFi Stadium' }, ranking: { confidence: 'high', interestScore: 80, urgency: 'unknown', hassleScore: 5 } };
+  const dodgers = { id: 'mlb:1', source: 'mlb', league: 'mlb', startLocal: '2026-07-20T19:10:00', homeTeam: { name: 'Los Angeles Dodgers', shortName: 'LA Dodgers' }, awayTeam: { name: 'San Diego Padres', shortName: 'Padres' }, venue: { name: 'Dodger Stadium' }, ranking: { confidence: 'high', interestScore: 70, urgency: 'unknown', hassleScore: 4 } };
+  const mixed = { ...projection, sports: [rams, dodgers], overview: [{ id: 'nfl:1', vertical: 'sports', score: 67, startLocal: rams.startLocal }] };
+  mixed.editorialCandidates = buildEditorialCandidates({ events: mixed.events, sports: mixed.sports });
+  const input = buildEditorialInput(mixed);
+  assert.equal(input.overviewSportsTeam, 'Rams');
+  assert.equal(input.sportsTeams, 'Dodgers and Rams');
+  const serialized = serializeEditorialInput(input);
+  const sent = serialized.namedCandidates.find((candidate) => candidate.ref === 'nfl:1');
+  assert.deepEqual({ provenance: sent.provenance, title: sent.title, venue: sent.venue }, { provenance: 'espn', title: 'Packers at Rams', venue: 'SoFi Stadium' });
+  assert.equal(serialized.overviewSportsTeam, 'Rams');
+
+  const brief = await generateEditorialBrief({ projection: mixed, fetchImpl: async () => new Response('nope', { status: 500 }) });
+  assert.match(brief.lead, /this Wednesday Rams game is the strongest immediate option/);
+  assert.doesNotMatch(JSON.stringify(brief), /Dodgers game is the strongest/);
+  assert.ok(brief.decisionNotes.includes('2 Dodgers and Rams home games are available as a separate sports lane.'));
+});
+
+test('a candidate known only from an EDMTrain announcement is never named to the model', () => {
+  const announced = {
+    id: 'edmtrain:9',
+    title: 'DO NOT SEND FESTIVAL',
+    startLocal: '2027-03-13T00:00:00',
+    venue: { name: 'DO NOT SEND PARK' },
+    ranking: { confidence: 'medium', urgency: 'unknown', artistFit: 0, hassleScore: 2 },
+    sourceOccurrences: [{ source: 'edmtrain', sourceEventId: '9', sourceUrl: 'https://edmtrain.example/9', title: 'DO NOT SEND FESTIVAL', startLocal: '2027-03-13T00:00:00', venue: { name: 'DO NOT SEND PARK' } }]
+  };
+  const [candidate] = buildEditorialCandidates({ events: [announced] });
+  assert.equal(candidate.named, false);
+  const input = buildEditorialInput({ ...projection, events: [announced], editorialCandidates: [candidate] });
+  assert.doesNotMatch(JSON.stringify(serializeEditorialInput(input)), /DO NOT SEND|edmtrain\.example/);
+});

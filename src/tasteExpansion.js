@@ -1,10 +1,5 @@
 import { getSimilarArtists, getTopArtistsForTag } from './lastfm.js';
-import { normalizeArtistName } from './ranking.js';
-
-const NOISY_TAGS = new Set([
-  'albums i own', 'awesome', 'favorite', 'favorites', 'female vocalists', 'male vocalists',
-  'seen live', 'spotify', 'under 2000 listeners', 'under 5000 listeners'
-]);
+import { NOISY_TAGS, normalizeArtistName } from './ranking.js';
 
 export function topRecurringTags(snapshot, limit = 5) {
   const totals = new Map();
@@ -91,7 +86,7 @@ export async function buildExpandedArtistSnapshot(snapshot, config, {
   return {
     version: 1,
     generatedAt: new Date(generatedAt).toISOString(),
-    source: 'playlist-sync+lastfm',
+    source: 'spotify+lastfm',
     sourceGeneratedAt: snapshot.generatedAt,
     playlistCount: snapshot.playlistCount,
     sourceArtistCount: snapshot.sourceArtistCount ?? sourceArtists.filter((artist) => artist.evidence?.length).length,

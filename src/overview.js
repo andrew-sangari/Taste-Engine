@@ -1,4 +1,4 @@
-import { normalizeArtistName } from './ranking.js';
+import { callLabel, normalizeArtistName } from './ranking.js';
 import { resolveMusicVisual, resolveSportsVisual } from './visuals.js';
 import { localDateDifference } from './localDate.js';
 
@@ -11,6 +11,7 @@ export function buildOverviewBuckets(events = [], sports = [], {
   currentDays = 14,
   planAheadLimit = 3,
   planAheadMinScore = 55,
+  currentMinScore = 28,
   horizonDays = null
 } = {}) {
   const candidates = buildCandidates(events, sports);
@@ -18,8 +19,20 @@ export function buildOverviewBuckets(events = [], sports = [], {
     const days = daysFrom(candidate.startLocal, now);
     return days != null && days >= 0 && days <= currentDays;
   });
-  const currentRepresentatives = selectRepresentativeCandidates(currentPool).slice(0, 5);
-  const current = currentRepresentatives.map((candidate) => ({ ...toOverviewDisplay(candidate), bucket: 'current' }));
+  // The shortlist is allowed to be short. Up to five dates that clear the
+  // personal-value bar; when none does, at most one clearly labelled
+  // "only if" fallback rather than five weak cards presented as picks.
+  const representatives = selectRepresentativeCandidates(currentPool).filter((candidate) => candidate.call !== 'skip');
+  const clearing = representatives.filter((candidate) => candidate.score >= currentMinScore).slice(0, 5);
+  const fallback = !clearing.length && representatives[0] && representatives[0].score >= currentMinScore * 0.6
+    ? [representatives[0]]
+    : [];
+  const currentRepresentatives = clearing.length ? clearing : fallback;
+  const current = currentRepresentatives.map((candidate) => ({
+    ...toOverviewDisplay(candidate),
+    bucket: 'current',
+    ...(clearing.length ? {} : { fallback: true })
+  }));
   const currentIds = new Set(current.map((candidate) => candidate.id));
   const currentGroups = new Set(currentRepresentatives.map((candidate) => candidate.overviewGroupKey));
   const planAhead = selectRepresentatives(candidates.filter((candidate) => {
@@ -56,6 +69,9 @@ function buildCandidates(events = [], sports = []) {
     eventType: event.eventType,
     visual: event.visual ?? resolveMusicVisual(event),
     feedbackSnapshot: event.feedbackSnapshot ?? null,
+    feedbackKeys: event.feedbackKeys ?? null,
+    discovery: event.ranking.discovery ?? null,
+    feedbackAdjustment: event.ranking.feedbackAdjustment ?? null,
     overviewGroupKey: overviewMusicGroupKey(event)
   })), ...sports.map((game) => ({
     vertical: 'sports',
@@ -73,9 +89,12 @@ function buildCandidates(events = [], sports = []) {
     call: game.ranking.call ?? game.call ?? callLabel(game.ranking.utility),
     localEnhancement: game.localEnhancement,
     sources: [...new Set((game.ticketObservations ?? []).map((observation) => observation.source))],
-    eventType: 'baseball',
+    eventType: game.league === 'nfl' ? 'football' : 'baseball',
+    league: game.league ?? 'mlb',
     visual: game.visual ?? resolveSportsVisual(game),
     feedbackSnapshot: game.feedbackSnapshot ?? null,
+    feedbackKeys: game.feedbackKeys ?? null,
+    feedbackAdjustment: game.ranking.feedbackAdjustment ?? null,
     overviewGroupKey: `sports:${game.series?.id ?? normalizeArtistName(game.awayTeam?.name ?? game.id)}`
   }))].sort(overviewComparator);
 }
@@ -109,12 +128,15 @@ function overviewMusicGroupKey(event) {
 
 function friendlySportsTitle(game) {
   const opponent = friendlyTeamName(game.awayTeam);
-  return `Dodgers vs. ${opponent}`;
+  // Rows published before a second home team existed carry no usable home
+  // team; they were all Dodgers games.
+  const home = game.homeTeam?.name || game.homeTeam?.shortName ? friendlyTeamName(game.homeTeam) : 'Dodgers';
+  return `${home} vs. ${opponent}`;
 }
 
 function friendlyTeamName(team = {}) {
   const name = String(team.name ?? team.shortName ?? 'Opponent');
-  const known = ['Diamondbacks', 'Padres', 'Giants', 'Yankees', 'Mets', 'Cubs', 'Cardinals', 'Astros', 'Red Sox', 'Braves', 'Phillies', 'Brewers', 'Marlins', 'Nationals', 'Reds', 'Pirates', 'Rockies', 'Tigers', 'Twins', 'White Sox', 'Guardians', 'Rays', 'Blue Jays', 'Orioles', 'Royals', 'Angels', 'Athletics', 'Mariners', 'Rangers'];
+  const known = ['Dodgers', 'Diamondbacks', 'Padres', 'Giants', 'Yankees', 'Mets', 'Cubs', 'Cardinals', 'Astros', 'Red Sox', 'Braves', 'Phillies', 'Brewers', 'Marlins', 'Nationals', 'Reds', 'Pirates', 'Rockies', 'Tigers', 'Twins', 'White Sox', 'Guardians', 'Rays', 'Blue Jays', 'Orioles', 'Royals', 'Angels', 'Athletics', 'Mariners', 'Rangers'];
   const match = known.find((label) => name.toLocaleLowerCase().includes(label.toLocaleLowerCase()));
   if (match) return match;
   return String(team.shortName ?? name).replace(/^Arizona$/i, 'Diamondbacks').replace(/^Los Angeles\s+/i, '').trim();
@@ -124,13 +146,6 @@ function overviewComparator(left, right) {
   const scoreDelta = right.score - left.score;
   if (Math.abs(scoreDelta) <= 5 && left.vertical !== right.vertical) return left.vertical === 'music' ? -1 : 1;
   return scoreDelta || String(left.startLocal).localeCompare(String(right.startLocal));
-}
-
-function callLabel(score) {
-  if (score >= 75) return 'Strong fit';
-  if (score >= 55) return 'Selective';
-  if (score >= 40) return 'Wildcard';
-  return 'Watch';
 }
 
 function daysFrom(value, now) {

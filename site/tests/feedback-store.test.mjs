@@ -18,6 +18,10 @@ import {
   storageKeyForProfile,
   unexportedRecords,
   upcomingPlanning,
+  recordInterest,
+  withdrawFeedback,
+  feedbackForSnapshot,
+  hasFeedbackForSnapshot,
 } from "../app/feedback-store.ts";
 
 const NOW = "2026-07-13T18:00:00.000Z";
@@ -149,6 +153,34 @@ test("attendance and explicit Not for me map to existing journal states and reje
   assert.equal(negative.records["site-negative"].record.status, "lost-interest");
   negative = recordNotForMe(negative, snapshot, ["artist"], { now: NOW, uuid: "again" });
   assert.equal(negative.records["site-again"], undefined);
+});
+
+test("triage interest is graded, supersedable, undoable, and freezes display keys", () => {
+  const snapshot = { ...musicInput("event:triage", "2026-08-01").feedbackSnapshot, feedbackKeys: { artist: [{ key: "artist:example", label: "Example" }] } };
+  let store = recordInterest(emptyStore(), snapshot, "in", { now: NOW, uuid: "in" });
+  assert.equal(store.records["site-in"].record.status, "interested");
+  assert.equal(store.records["site-in"].record.rating, 5);
+  assert.deepEqual(store.records["site-in"].record.feedbackKeys, snapshot.feedbackKeys);
+  assert.equal(feedbackForSnapshot(store, snapshot).status, "interested");
+
+  // A later pass supersedes the interest; the latest record is the answer.
+  store = recordNotForMe(store, snapshot, ["venue"], { now: "2026-07-20T12:00:00.000Z", uuid: "pass" });
+  assert.equal(feedbackForSnapshot(store, snapshot).status, "lost-interest");
+
+  // Undo appends a withdrawal instead of rewriting history.
+  store = withdrawFeedback(store, snapshot, { now: "2026-07-21T12:00:00.000Z", uuid: "undo" });
+  assert.equal(store.records["site-undo"].record.status, "withdrawn");
+  assert.equal(feedbackForSnapshot(store, snapshot), null);
+  assert.equal(hasFeedbackForSnapshot(store, snapshot), false);
+});
+
+test("an attended outcome carries its grade and what made it", () => {
+  const item = history();
+  const store = confirmHistoryFeedback(emptyStore(), item, "attended-worth-it", ["recovery"], { now: NOW, uuid: "graded", rating: 5, signalTags: ["production", "bogus"] });
+  const record = store.records["site-graded"].record;
+  assert.equal(record.rating, 5);
+  assert.deepEqual(record.signalTags, ["production"]);
+  assert.deepEqual(record.reasonCodes, ["recovery"]);
 });
 
 test("non-attendance and lost-interest records require a classified reason", () => {

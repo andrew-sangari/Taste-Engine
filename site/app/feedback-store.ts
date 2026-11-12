@@ -5,7 +5,13 @@
 export type FeedbackVertical = "music" | "sports";
 export type PlanningVertical = FeedbackVertical | "movies";
 
+// Display-derived keys saying what feedback about an event can teach
+// (artist, venue, promoter, kind of night). Frozen into each record so an
+// outcome still counts after the event has left the projection.
+export type FeedbackKeys = Record<string, Array<{ key: string; label: string }>>;
+
 export type PublicFeedbackSnapshot = {
+  feedbackKeys?: FeedbackKeys | null;
   feedbackSnapshotId: string;
   canonicalEventId: string;
   eventDateLocal: string;
@@ -17,6 +23,7 @@ export type RecommendationHistoryItem = {
   historyId: string;
   canonicalEventId: string;
   feedbackSnapshotId: string | null;
+  feedbackKeys?: FeedbackKeys | null;
   vertical: PlanningVertical;
   title: string;
   dateLocal: string;
@@ -55,9 +62,14 @@ export const FEEDBACK_STATUSES = [
   "wanted-to-attend",
   "lost-interest",
   "did-not-attend-logistical",
+  "interested",
+  "withdrawn",
 ] as const;
 export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
-export const FEEDBACK_REASON_CODES = ["artist", "lineup", "production", "crowd", "venue", "timing", "hassle", "price", "distance", "availability", "calendar", "other", "legacy-unknown"] as const;
+export const FEEDBACK_REASON_CODES = ["artist", "lineup", "production", "crowd", "venue", "timing", "hassle", "price", "distance", "availability", "calendar", "recovery", "other", "legacy-unknown"] as const;
+export const FEEDBACK_SIGNAL_TAGS = ["artist", "venue", "production", "crowd", "timing", "hassle", "price", "lineup"] as const;
+export type FeedbackSignalTag = (typeof FEEDBACK_SIGNAL_TAGS)[number];
+export type FeedbackDetail = { rating?: number | null; signalTags?: FeedbackSignalTag[]; replace?: boolean };
 export type FeedbackReasonCode = (typeof FEEDBACK_REASON_CODES)[number];
 
 export type SiteFeedbackImportRecord = {
@@ -73,6 +85,7 @@ export type SiteFeedbackImportRecord = {
   rating: number | null;
   signalTags: string[];
   notes: null;
+  feedbackKeys?: FeedbackKeys;
   recordedAt: string;
 };
 
@@ -102,6 +115,7 @@ export type LocalFeedbackStore = {
   historyResponses: Record<string, HistoryResponse>;
   records: Record<string, BrowserFeedbackRecord>;
   exportBatches: Record<string, ExportBatch>;
+  settings?: { learning?: { value: boolean; updatedAt: string }; planning?: { value: PlanConstraints; updatedAt: string } };
 };
 
 export const STORAGE_KEY = "taste-engine.feedback.v3";
@@ -135,6 +149,7 @@ export function loadStore(
         historyResponses: asRecord(parsed.historyResponses),
         records: asRecord(parsed.records),
         exportBatches: asRecord(parsed.exportBatches),
+        settings: asRecord(parsed.settings),
       };
     }
     const prior = allowLegacyFallback
@@ -149,6 +164,7 @@ export function loadStore(
         historyResponses: asRecord(parsed.historyResponses),
         records: asRecord(parsed.records),
         exportBatches: asRecord(parsed.exportBatches),
+        settings: asRecord(parsed.settings),
       };
     }
     const legacy = allowLegacyFallback ? storage?.getItem(LEGACY_STORAGE_KEY) : null;
@@ -203,10 +219,37 @@ export function setPlanningIntent(
       updatedAt: now,
       lastReconciledAt: null,
     };
-  const planning = { ...store.planning };
-  if (!item.saved && !item.held) delete planning[itemId];
-  else planning[itemId] = item;
-  return { ...store, planning };
+  // A removed plan stays as an unsaved, unheld row rather than disappearing,
+  // so the removal itself can reach the server and other devices.
+  return { ...store, planning: { ...store.planning, [itemId]: item } };
+}
+
+// Whether the person's own feedback adjusts the ranking they see. On unless
+// they switch it off.
+export function learningEnabled(store: LocalFeedbackStore): boolean {
+  return store.settings?.learning?.value !== false;
+}
+
+export function setLearning(store: LocalFeedbackStore, value: boolean, now: string): LocalFeedbackStore {
+  return { ...store, settings: { ...store.settings, learning: { value, updatedAt: now } } };
+}
+
+// The limits the person plans within (nights a week, budget, window). The
+// solver normalizes them; an absent setting means its defaults.
+export type PlanConstraints = {
+  windowDays: number;
+  nightsPerWeek: number;
+  budgetUsd: number | null;
+  avoidBackToBack: boolean;
+  includeTrips: boolean;
+};
+
+export function planConstraints(store: LocalFeedbackStore): PlanConstraints | null {
+  return store.settings?.planning?.value ?? null;
+}
+
+export function setPlanConstraints(store: LocalFeedbackStore, value: PlanConstraints, now: string): LocalFeedbackStore {
+  return { ...store, settings: { ...store.settings, planning: { value, updatedAt: now } } };
 }
 
 export function clearPlanning(store: LocalFeedbackStore, itemId: string): LocalFeedbackStore {
@@ -282,16 +325,17 @@ export function confirmHistoryFeedback(
   history: RecommendationHistoryItem,
   status: FeedbackStatus,
   reasonCodes: FeedbackReasonCode[],
-  { now, uuid }: { now: string; uuid: string },
+  { now, uuid, ...detail }: { now: string; uuid: string } & FeedbackDetail,
 ): LocalFeedbackStore {
   if (store.historyResponses[history.historyId] || !history.feedbackSnapshotId || history.vertical === "movies") return store;
   const result = createFeedbackRecord(store, {
     feedbackSnapshotId: history.feedbackSnapshotId,
+    feedbackKeys: history.feedbackKeys ?? null,
     canonicalEventId: history.canonicalEventId,
     eventDateLocal: history.dateLocal,
     eventTitleSnapshot: history.title,
     vertical: history.vertical,
-  }, status, reasonCodes, { now, uuid });
+  }, status, reasonCodes, { now, uuid, ...detail });
   const feedbackId = feedbackForHistory(result, history)?.record.feedbackId ?? null;
   return {
     ...result,
@@ -308,13 +352,44 @@ export function recordNotForMe(
   reasonCodes: FeedbackReasonCode[],
   options: { now: string; uuid: string },
 ): LocalFeedbackStore {
-  return createFeedbackRecord(store, snapshot, "lost-interest", reasonCodes, options);
+  // A pass may supersede earlier pre-event interest, but never duplicates an
+  // answer that is already recorded.
+  const replace = feedbackForSnapshot(store, snapshot)?.status === "interested";
+  return createFeedbackRecord(store, snapshot, "lost-interest", reasonCodes, { ...options, replace });
+}
+
+// Records are append-only. The latest one for an event is its current
+// answer; a `withdrawn` record means there is none.
+export function feedbackForSnapshot(store: LocalFeedbackStore, snapshot: PublicFeedbackSnapshot | null): SiteFeedbackImportRecord | null {
+  if (!snapshot) return null;
+  // On an identical timestamp the record written later wins.
+  let latest: SiteFeedbackImportRecord | null = null;
+  for (const { record } of Object.values(store.records)) {
+    const sameEvent = record.feedbackSnapshotId === snapshot.feedbackSnapshotId
+      || (record.canonicalEventId === snapshot.canonicalEventId && record.eventDateLocal === snapshot.eventDateLocal);
+    if (sameEvent && (!latest || record.recordedAt >= latest.recordedAt)) latest = record;
+  }
+  return latest && latest.status !== "withdrawn" ? latest : null;
 }
 
 export function hasFeedbackForSnapshot(store: LocalFeedbackStore, snapshot: PublicFeedbackSnapshot | null): boolean {
-  if (!snapshot) return false;
-  return Object.values(store.records).some(({ record }) => record.feedbackSnapshotId === snapshot.feedbackSnapshotId
-    || (record.canonicalEventId === snapshot.canonicalEventId && record.eventDateLocal === snapshot.eventDateLocal));
+  return feedbackForSnapshot(store, snapshot) != null;
+}
+
+// Triage: a fast pre-event read. "in" is a commitment-level yes, "curious" a
+// weak one. Both are graded far below an attended outcome by the policy.
+export function recordInterest(
+  store: LocalFeedbackStore,
+  snapshot: PublicFeedbackSnapshot,
+  level: "in" | "curious",
+  options: { now: string; uuid: string },
+): LocalFeedbackStore {
+  return createFeedbackRecord(store, snapshot, "interested", [], { ...options, rating: level === "in" ? 5 : 3, replace: true });
+}
+
+export function withdrawFeedback(store: LocalFeedbackStore, snapshot: PublicFeedbackSnapshot, options: { now: string; uuid: string }): LocalFeedbackStore {
+  if (!feedbackForSnapshot(store, snapshot)) return store;
+  return createFeedbackRecord(store, snapshot, "withdrawn", [], { ...options, replace: true });
 }
 
 function createFeedbackRecord(
@@ -322,9 +397,9 @@ function createFeedbackRecord(
   snapshot: PublicFeedbackSnapshot,
   status: FeedbackStatus,
   reasonCodes: FeedbackReasonCode[],
-  { now, uuid }: { now: string; uuid: string },
+  { now, uuid, rating = null, signalTags = [], replace = false }: { now: string; uuid: string } & FeedbackDetail,
 ): LocalFeedbackStore {
-  if (hasFeedbackForSnapshot(store, snapshot)) return store;
+  if (!replace && hasFeedbackForSnapshot(store, snapshot)) return store;
   const classifiedReasons = [...new Set(reasonCodes)].filter((reason): reason is FeedbackReasonCode => (FEEDBACK_REASON_CODES as readonly string[]).includes(reason));
   // Attendance can stand on its own. Every non-attendance or loss-of-interest
   // outcome must say what happened so that the durable replay never has to
@@ -342,9 +417,10 @@ function createFeedbackRecord(
     eventTitleSnapshot: snapshot.eventTitleSnapshot,
     status,
     reasonCodes: classifiedReasons,
-    rating: null,
-    signalTags: [],
+    rating: Number.isInteger(rating) && rating! >= 1 && rating! <= 5 ? rating : null,
+    signalTags: [...new Set(signalTags)].filter((tag) => (FEEDBACK_SIGNAL_TAGS as readonly string[]).includes(tag)),
     notes: null,
+    ...(snapshot.feedbackKeys && Object.keys(snapshot.feedbackKeys).length ? { feedbackKeys: snapshot.feedbackKeys } : {}),
     recordedAt: now,
   };
   return { ...store, records: { ...store.records, [feedbackId]: { record, firstExportTriggeredAt: null, exportBatchId: null } } };
@@ -387,7 +463,10 @@ function daysSince(dateLocal: string, todayKey: string): number {
 }
 
 function feedbackForHistory(store: LocalFeedbackStore, item: RecommendationHistoryItem): BrowserFeedbackRecord | null {
-  return Object.values(store.records).find(({ record }) => record.feedbackSnapshotId === item.feedbackSnapshotId
+  // A pre-event "interested" is not an outcome: the night still needs a check-in.
+  return Object.values(store.records)
+    .filter(({ record }) => record.status !== "interested" && record.status !== "withdrawn")
+    .find(({ record }) => record.feedbackSnapshotId === item.feedbackSnapshotId
     || (record.canonicalEventId === item.canonicalEventId && record.eventDateLocal === item.dateLocal)) ?? null;
 }
 

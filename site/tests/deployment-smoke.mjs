@@ -7,19 +7,15 @@ import { resolveReleaseMetadata } from "../build/release-metadata.mjs";
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const distRoot = resolve(siteRoot, "dist");
 
-await assertFile(resolve(distRoot, "server/index.js"));
-assert.deepEqual(
-  JSON.parse(await readFile(resolve(distRoot, ".openai/hosting.json"), "utf8")),
-  JSON.parse(await readFile(resolve(siteRoot, ".openai/hosting.json"), "utf8")),
-  "packaged hosting metadata must match the validated source",
-);
-
+// The site is a Next.js build written to `dist/` and deployed to Vercel, which
+// builds it again from source. This checks the properties of that build that
+// must hold before any deployment.
+await assertFile(resolve(distRoot, "BUILD_ID"));
 const sourceMigrations = await migrationFiles(resolve(siteRoot, "drizzle"));
-const packagedMigrations = await migrationFiles(resolve(distRoot, ".openai/drizzle"));
-assert.deepEqual(packagedMigrations, sourceMigrations, "every D1 migration must be packaged");
+assert.ok(sourceMigrations.some((path) => path.endsWith(".sql")), "the Postgres migration must exist");
 
-const serverBundle = await readFile(resolve(distRoot, "server/index.js"), "utf8");
-const clientBundle = await readableBundleText(resolve(distRoot, "client"));
+const serverBundle = await readableBundleText(resolve(distRoot, "server"));
+const clientBundle = await readableBundleText(resolve(distRoot, "static"));
 const expectedRelease = resolveReleaseMetadata();
 assert.match(serverBundle, /taste-engine-site/, "the application identity must be present in the release bundle");
 assert.ok(serverBundle.includes(expectedRelease.release), "the bundle must contain the release label for the source tree that produced it");
@@ -27,28 +23,27 @@ if (expectedRelease.sourceState === "dirty") {
   assert.match(expectedRelease.release, /\.dirty$/, "dirty source trees must never masquerade as clean releases");
   assert.equal(expectedRelease.releasable, false);
 }
-for (const forbidden of ["SPOTIFY_TOKEN_ENCRYPTION_KEY=", "TASTE_REFRESH_SECRET=", "OLLAMA_API_KEY=", "TYPESAFE_AI_API_KEY=", "AI_GATEWAY_API_KEY="]) {
+for (const forbidden of ["SPOTIFY_TOKEN_ENCRYPTION_KEY=", "TASTE_REFRESH_SECRET=", "CRON_SECRET=", "DATABASE_URL=", "OLLAMA_API_KEY=", "TYPESAFE_AI_API_KEY=", "AI_GATEWAY_API_KEY="]) {
   assert.doesNotMatch(serverBundle, new RegExp(forbidden), `the release bundle must not contain ${forbidden}`);
 }
-for (const serverOnlyName of ["SPOTIFY_TOKEN_ENCRYPTION_KEY", "TASTE_REFRESH_SECRET", "TYPESAFE_AI_API_KEY", "AI_GATEWAY_API_KEY", "refresh_token", "access_token"]) {
+for (const serverOnlyName of ["SPOTIFY_TOKEN_ENCRYPTION_KEY", "TASTE_REFRESH_SECRET", "CRON_SECRET", "DATABASE_URL", "TYPESAFE_AI_API_KEY", "AI_GATEWAY_API_KEY", "refresh_token", "access_token"]) {
   assert.equal(clientBundle.includes(serverOnlyName), false, `client assets must not contain server-only identifier ${serverOnlyName}`);
 }
+// The previous host's identity headers must not be read anywhere.
+assert.equal(serverBundle.includes("oai-authenticated-user-email"), false, "no code may trust the retired identity headers");
 
-// Fonts are fetched at build time into a gitignored cache whose CSS records the
-// absolute filesystem path it was created at. A cache carried across a moved or
-// copied checkout keeps pointing at the old location, and the build then ships
-// those raw paths as font URLs: every font 404s and the site silently falls back
-// to a system typeface. Clean checkouts are unaffected, but a working-tree
-// recovery build is not, so this is a hard release stop rather than a warning.
-const fontUrls = [...`${serverBundle}\n${clientBundle}`.matchAll(/url\(\s*['"]?([^'")]+?\.woff2)['"]?\s*\)/g)].map((match) => match[1]);
+// Fonts are downloaded at build time and must ship as packaged assets, never
+// as a path on the build machine.
+const fontUrls = [...clientBundle.matchAll(/url\(\s*['"]?([^'")]+?\.woff2)['"]?\s*\)/g)].map((match) => match[1]);
 assert.ok(fontUrls.length > 0, "the release bundle must declare its web fonts");
 for (const url of new Set(fontUrls)) {
-  assert.match(url, /^\/assets\//, `font URL must be a packaged asset, not a build-machine path: ${url} (delete site/.vinext and rebuild)`);
-  await assertFile(resolve(distRoot, "client", url.slice(1)));
+  const packaged = url.match(/(?:^|\/)(media\/[^/]+\.woff2)$/)?.[1];
+  assert.ok(packaged, `font URL must be a packaged asset, not a build-machine path: ${url}`);
+  await assertFile(resolve(distRoot, "static", packaged));
 }
 
 const sqlMigrationCount = sourceMigrations.filter((path) => path.endsWith(".sql")).length;
-console.log(`Deployment smoke passed: ${sqlMigrationCount} SQL migrations, ${new Set(fontUrls).size} packaged fonts, and a complete Worker bundle.`);
+console.log(`Deployment smoke passed: ${sqlMigrationCount} SQL migration(s), ${new Set(fontUrls).size} packaged fonts, and a complete Next.js build.`);
 
 async function assertFile(path) {
   const details = await stat(path);

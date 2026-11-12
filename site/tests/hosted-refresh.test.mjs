@@ -9,7 +9,7 @@ import {
   rankCandidates,
 } from "../server/deterministic-engine.js";
 import { readHostedPipelineConfig } from "../server/hosted-config.ts";
-import { buildHostedMusicVector } from "../server/hosted-advisory.ts";
+import { buildHostedMusicVector, sportsVector } from "../server/hosted-advisory.ts";
 import { runOllamaCloudStructuredPass } from "../server/ollama-cloud.ts";
 import {
   getLastfmSimilarArtists,
@@ -247,4 +247,13 @@ test("Last.fm remains independently optional", async () => {
   } finally {
     if (priorKey !== undefined) process.env.LASTFM_API_KEY = priorKey;
   }
+});
+
+test("hosted sports vectors carry the league and nothing that names a team or source", () => {
+  const ranking = { opponentQuality: 12, pitchingScore: 0, leverageScore: 6, convenienceScore: 8, interestScore: 80, hassleScore: 5, urgency: "unknown", confidence: "high" };
+  const rams = sportsVector({ id: "nfl:1", league: "nfl", source: "espn", startLocal: "2026-11-25T17:15:00", homeTeam: { name: "DO NOT SEND" }, ranking }, 0);
+  const dodgers = sportsVector({ id: "mlb:1", startLocal: "2027-04-01T19:10:00", ranking }, 1);
+  assert.equal(rams.league, "nfl");
+  assert.equal(dodgers.league, "mlb");
+  assert.doesNotMatch(JSON.stringify([rams, dodgers]), /DO NOT SEND|espn/);
 });

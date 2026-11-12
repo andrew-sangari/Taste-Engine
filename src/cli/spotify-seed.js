@@ -12,12 +12,16 @@ const outputPath = resolve(options.output ?? 'data/taste/artists.json');
 
 try {
   const config = await loadSpotifySeedConfig(configPath);
+  if (!process.env.LASTFM_API_KEY) {
+    console.log('LASTFM_API_KEY is not set: artist tags come from MusicBrainz at one lookup per second, so uncached artists can add a few minutes.');
+  }
   const evidence = await fetchSpotifyPlaylistEvidence(config);
   const topArtists = await fetchSpotifyTopArtistEvidence(config);
-  const snapshot = buildArtistSnapshot({ ...evidence, topArtists });
+  const snapshot = buildArtistSnapshot({ evidence: evidence.evidence, warnings: evidence.warnings, topArtists });
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);
   console.log(`Wrote ${snapshot.artistCount} artists from ${snapshot.playlistCount} playlists to ${outputPath}`);
+  console.log(`Artist tags: ${evidence.tagProvider}, ${evidence.tagLookups} new lookup(s). Top Artists: ${topArtists.status}.`);
   if (snapshot.warnings.length > 0) {
     console.log(`${snapshot.warnings.length} source warning(s) were preserved in the snapshot.`);
   }

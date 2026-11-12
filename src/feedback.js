@@ -1,7 +1,5 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { buildOverviewBuckets } from './overview.js';
-import { normalizeArtistName } from './ranking.js';
 
 export const FEEDBACK_ACTIONS = ['record', 'revoke', 'replace'];
 export const FEEDBACK_STATUSES = [
@@ -9,7 +7,11 @@ export const FEEDBACK_STATUSES = [
   'attended-not-worth-it',
   'wanted-to-attend',
   'lost-interest',
-  'did-not-attend-logistical'
+  'did-not-attend-logistical',
+  // Pre-event interest from triage, and an explicit undo. Both are read only
+  // by the shared policy in feedbackPolicy.js.
+  'interested',
+  'withdrawn'
 ];
 export const LEGACY_FEEDBACK_STATUSES = Object.freeze({
   'skipped-still-interested': 'wanted-to-attend',
@@ -17,7 +19,7 @@ export const LEGACY_FEEDBACK_STATUSES = Object.freeze({
 });
 export const FEEDBACK_REASON_CODES = [
   'artist', 'lineup', 'production', 'crowd', 'venue', 'timing', 'hassle',
-  'price', 'distance', 'availability', 'calendar', 'other', 'legacy-unknown'
+  'price', 'distance', 'availability', 'calendar', 'recovery', 'other', 'legacy-unknown'
 ];
 export const FEEDBACK_SIGNAL_TAGS = [
   'artist',
@@ -29,60 +31,16 @@ export const FEEDBACK_SIGNAL_TAGS = [
   'price',
   'lineup'
 ];
-export const FEEDBACK_SIGNAL_CATEGORIES = ['artist', 'venue', 'promoterOrSeries', 'eventShape'];
 
+// Capture and storage only. How feedback changes ranking is the shared policy
+// (feedbackPolicy.js); whether it may is the reviewed activation record
+// (feedbackActivation.js). Neither is configurable here, so a config edit can
+// never switch learning on.
 const DEFAULT_FEEDBACK_CONFIG = {
   enabled: true,
-  applyToPublishedRanking: false,
-  policyVersion: 3,
-  decayHalfLifeDays: 180,
   journalPath: 'data/taste/feedback.jsonl',
   statePath: 'data/taste/feedback-state.json',
-  reportPath: 'data/taste/feedback-report.json',
-  weights: {
-    'attended-worth-it': 1,
-    'attended-not-worth-it': 1,
-    'wanted-to-attend': 0.25,
-    'lost-interest': 0.5,
-    'did-not-attend-logistical': 0
-  },
-  adjustments: {
-    artist: 4,
-    venue: 2,
-    promoterOrSeries: 2,
-    eventShape: 1
-  },
-  maxTotalAdjustment: 8,
-  thresholds: {
-    artist: {
-      minIndependentEvents: 2,
-      minAttendedEvents: 2,
-      minEffectiveWeight: 2,
-      minDominantFraction: 0.75,
-      minMargin: 1.5
-    },
-    venue: {
-      minIndependentEvents: 3,
-      minAttendedEvents: 3,
-      minEffectiveWeight: 3,
-      minDominantFraction: 0.75,
-      minMargin: 2
-    },
-    promoterOrSeries: {
-      minIndependentEvents: 3,
-      minAttendedEvents: 3,
-      minEffectiveWeight: 3,
-      minDominantFraction: 0.75,
-      minMargin: 2
-    },
-    eventShape: {
-      minIndependentEvents: 4,
-      minAttendedEvents: 4,
-      minEffectiveWeight: 4,
-      minDominantFraction: 0.75,
-      minMargin: 3
-    }
-  }
+  reportPath: 'data/taste/feedback-report.json'
 };
 
 export async function loadFeedbackConfig(path = 'config/feedback.json') {
@@ -99,47 +57,14 @@ export async function loadFeedbackConfig(path = 'config/feedback.json') {
 export function normalizeFeedbackConfig(input = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Feedback config must be an object');
   const value = input.feedback && typeof input.feedback === 'object' ? input.feedback : input;
-  const config = {
+  // Retired keys (applyToPublishedRanking, weights, thresholds, adjustments)
+  // are accepted and ignored so an older config file still loads.
+  return {
     enabled: booleanValue(value.enabled, DEFAULT_FEEDBACK_CONFIG.enabled, 'enabled'),
-    applyToPublishedRanking: booleanValue(value.applyToPublishedRanking, DEFAULT_FEEDBACK_CONFIG.applyToPublishedRanking, 'applyToPublishedRanking'),
-    policyVersion: positiveInteger(value.policyVersion ?? DEFAULT_FEEDBACK_CONFIG.policyVersion, 'policyVersion'),
-    decayHalfLifeDays: positiveNumber(value.decayHalfLifeDays ?? DEFAULT_FEEDBACK_CONFIG.decayHalfLifeDays, 'decayHalfLifeDays'),
     journalPath: pathValue(value.journalPath ?? DEFAULT_FEEDBACK_CONFIG.journalPath, 'journalPath'),
     statePath: pathValue(value.statePath ?? DEFAULT_FEEDBACK_CONFIG.statePath, 'statePath'),
-    reportPath: pathValue(value.reportPath ?? DEFAULT_FEEDBACK_CONFIG.reportPath, 'reportPath'),
-    weights: {},
-    adjustments: {},
-    maxTotalAdjustment: positiveNumber(value.maxTotalAdjustment ?? DEFAULT_FEEDBACK_CONFIG.maxTotalAdjustment, 'maxTotalAdjustment'),
-    thresholds: {}
+    reportPath: pathValue(value.reportPath ?? DEFAULT_FEEDBACK_CONFIG.reportPath, 'reportPath')
   };
-
-  const weights = value.weights && typeof value.weights === 'object' ? value.weights : {};
-  for (const status of FEEDBACK_STATUSES) {
-    config.weights[status] = nonNegativeNumber(weights[status] ?? DEFAULT_FEEDBACK_CONFIG.weights[status], `weights.${status}`);
-  }
-
-  const adjustments = value.adjustments && typeof value.adjustments === 'object' ? value.adjustments : {};
-  for (const category of FEEDBACK_SIGNAL_CATEGORIES) {
-    config.adjustments[category] = positiveNumber(adjustments[category] ?? DEFAULT_FEEDBACK_CONFIG.adjustments[category], `adjustments.${category}`);
-  }
-
-  const thresholds = value.thresholds && typeof value.thresholds === 'object' ? value.thresholds : {};
-  for (const category of FEEDBACK_SIGNAL_CATEGORIES) {
-    const defaults = DEFAULT_FEEDBACK_CONFIG.thresholds[category];
-    const threshold = thresholds[category] && typeof thresholds[category] === 'object' ? thresholds[category] : {};
-    const normalized = {
-      minIndependentEvents: positiveInteger(threshold.minIndependentEvents ?? defaults.minIndependentEvents, `${category}.minIndependentEvents`),
-      minAttendedEvents: positiveInteger(threshold.minAttendedEvents ?? defaults.minAttendedEvents, `${category}.minAttendedEvents`),
-      minEffectiveWeight: positiveNumber(threshold.minEffectiveWeight ?? defaults.minEffectiveWeight, `${category}.minEffectiveWeight`),
-      minDominantFraction: fractionValue(threshold.minDominantFraction ?? defaults.minDominantFraction, `${category}.minDominantFraction`),
-      minMargin: positiveNumber(threshold.minMargin ?? defaults.minMargin, `${category}.minMargin`)
-    };
-    if (normalized.minAttendedEvents > normalized.minIndependentEvents) {
-      throw new Error(`${category}.minAttendedEvents cannot exceed minIndependentEvents`);
-    }
-    config.thresholds[category] = normalized;
-  }
-  return config;
 }
 
 export function validateFeedbackRecord(record) {
@@ -190,6 +115,8 @@ export function normalizeFeedbackRecord(input) {
     feedbackSnapshotId: input?.feedbackSnapshotId == null ? undefined : input.feedbackSnapshotId,
     recordedAt: input?.recordedAt
   };
+  const feedbackKeys = normalizeFeedbackKeys(input?.feedbackKeys);
+  if (feedbackKeys) record.feedbackKeys = feedbackKeys;
   if (typeof record.feedbackId === 'string') record.feedbackId = record.feedbackId.trim();
   if (typeof record.supersedesFeedbackId === 'string') record.supersedesFeedbackId = record.supersedesFeedbackId.trim();
   if (typeof record.canonicalEventId === 'string') record.canonicalEventId = record.canonicalEventId.trim();
@@ -414,23 +341,9 @@ export function replayFeedbackRecords(records = []) {
   };
 }
 
-export function deriveFeedbackState(records = [], { journalIssues = [], config = normalizeFeedbackConfig({}), now = new Date() } = {}) {
-  const normalizedConfig = normalizeFeedbackConfig(config);
+export function deriveFeedbackState(records = [], { journalIssues = [] } = {}) {
   const replay = replayFeedbackRecords(records);
   const activeRecords = replay.activeRecords;
-  const eventOutcomes = summarizeEvents(activeRecords);
-  const signalBuckets = Object.fromEntries(FEEDBACK_SIGNAL_CATEGORIES.map((category) => [category, new Map()]));
-  for (const record of activeRecords) {
-    for (const evidence of evidenceEntries(record)) {
-      const bucket = signalBuckets[evidence.category];
-      const existing = bucket.get(evidence.id) ?? [];
-      existing.push(record);
-      bucket.set(evidence.id, existing);
-    }
-  }
-  const signals = Object.fromEntries(FEEDBACK_SIGNAL_CATEGORIES.map((category) => [category, [...signalBuckets[category].entries()]
-    .map(([id, signalRecords]) => summarizeSignal(category, id, signalRecords, normalizedConfig, now))
-    .sort((left, right) => left.id.localeCompare(right.id))]));
   const ignored = [
     ...journalIssues.map((issue) => ({ source: 'journal', line: issue.line, code: issue.code, reason: issue.reason })),
     ...replay.issues.map((issue) => ({
@@ -443,22 +356,15 @@ export function deriveFeedbackState(records = [], { journalIssues = [], config =
   ].sort(ignoreComparator);
   const outcomesByStatus = Object.fromEntries(FEEDBACK_STATUSES.map((status) => [status, 0]));
   for (const record of activeRecords) outcomesByStatus[record.status] += 1;
-  const allSignals = FEEDBACK_SIGNAL_CATEGORIES.flatMap((category) => signals[category]);
   return {
-    schemaVersion: 1,
-    policyVersion: normalizedConfig.policyVersion,
+    schemaVersion: 2,
     validRecordCount: replay.validRecords.length,
     activeFeedbackCount: activeRecords.length,
     revokedCount: replay.revokedRecords.length,
     malformedCount: journalIssues.length + replay.issues.length,
     outcomesByStatus,
     activeRecords: activeRecords.map(redactRecord),
-    eventOutcomes,
-    signals,
-    signalSummary: {
-      eligibleCount: allSignals.filter((signal) => signal.eligible).length,
-      ineligibleCount: allSignals.filter((signal) => !signal.eligible).length
-    },
+    eventOutcomes: summarizeEvents(activeRecords),
     ignored,
     ignoredFeedbackIds: replay.invalidFeedbackIds,
     ignoredEventIds: replay.invalidEventIds
@@ -495,104 +401,28 @@ export function snapshotFeedbackEvent(event, { allowMissing = false } = {}) {
   };
 }
 
-export function simulateFeedback({ projection = {}, state, config = normalizeFeedbackConfig({}), now = null, planAheadMinScore = 55 } = {}) {
-  const normalizedConfig = normalizeFeedbackConfig(config);
-  const candidates = projectionCandidates(projection);
-  const signalIndex = buildSignalIndex(normalizedConfig.enabled ? state?.signals ?? {} : {});
-  const activeRecords = normalizedConfig.enabled ? state?.activeRecords ?? [] : [];
-  const evaluations = candidates.map((candidate) => evaluateCandidate(candidate, signalIndex, activeRecords, normalizedConfig));
-  const ranks = assignRanks(evaluations);
-  const overview = simulateOverview(projection, evaluations, { now, planAheadMinScore });
-  const candidateIds = new Set(candidates.map((candidate) => candidate.id).filter(Boolean));
-  const unmatchedActiveFeedbackIds = activeRecords
-    .filter((record) => !candidateIds.has(record.canonicalEventId))
-    .map((record) => record.feedbackId)
-    .sort();
-  const shadowRankingDiffs = evaluations
-    .filter((evaluation) => evaluation.proposedAdjustment !== 0 || evaluation.rankChanged)
-    .map(toShadowDiff)
-    .sort((left, right) => left.canonicalEventId.localeCompare(right.canonicalEventId));
-  const titleSnapshotMismatches = evaluations.flatMap((evaluation) => evaluation.snapshotMismatchFeedbackIds.map((feedbackId) => ({
-    feedbackId,
-    canonicalEventId: evaluation.canonicalEventId
-  }))).sort((left, right) => `${left.canonicalEventId}|${left.feedbackId}`.localeCompare(`${right.canonicalEventId}|${right.feedbackId}`));
-  const capped = evaluations.filter((evaluation) => evaluation.capApplied);
-  return {
-    candidateCount: candidates.length,
-    evaluableCandidateCount: evaluations.filter((evaluation) => evaluation.baselineScore != null).length,
-    evaluations,
-    shadowRankingDiffs,
-    overview,
-    capUsage: {
-      capAppliedCount: capped.length,
-      cappedMagnitude: round(capped.reduce((sum, evaluation) => sum + Math.abs(evaluation.proposedAdjustment), 0)),
-      maxTotalAdjustment: normalizedConfig.maxTotalAdjustment
-    },
-    unmatchedActiveFeedbackIds,
-    titleSnapshotMismatches
-  };
-}
 
-export function buildFeedbackReport({ state, simulation, config = normalizeFeedbackConfig({}) } = {}) {
-  const normalizedConfig = normalizeFeedbackConfig(config);
-  const allSignals = FEEDBACK_SIGNAL_CATEGORIES.flatMap((category) => (state?.signals?.[category] ?? []).map((signal) => ({ ...signal, category })));
-  return {
-    schemaVersion: 1,
-    policyVersion: normalizedConfig.policyVersion,
-    feedback: {
-      enabled: normalizedConfig.enabled,
-      applyToPublishedRanking: normalizedConfig.applyToPublishedRanking,
-      publicationApplication: normalizedConfig.applyToPublishedRanking ? 'validated deterministic adjustment' : 'shadow only'
-    },
-    validRecordCount: state?.validRecordCount ?? 0,
-    activeFeedbackCount: state?.activeFeedbackCount ?? 0,
-    revokedCount: state?.revokedCount ?? 0,
-    malformedCount: state?.malformedCount ?? 0,
-    outcomesByStatus: state?.outcomesByStatus ?? Object.fromEntries(FEEDBACK_STATUSES.map((status) => [status, 0])),
-    eligibleSignals: allSignals.filter((signal) => signal.eligible),
-    ineligibleSignals: allSignals.filter((signal) => !signal.eligible),
-    shadowCandidateCount: simulation?.candidateCount ?? 0,
-    shadowRankingDiffs: simulation?.shadowRankingDiffs ?? [],
-    shadowEvaluations: simulation?.evaluations ?? [],
-    potentialOverviewChanges: simulation?.overview?.potentialChanges ?? [],
-    overview: simulation?.overview ?? emptyOverviewSimulation(),
-    capUsage: simulation?.capUsage ?? { capAppliedCount: 0, cappedMagnitude: 0, maxTotalAdjustment: normalizedConfig.maxTotalAdjustment },
-    titleSnapshotMismatches: simulation?.titleSnapshotMismatches ?? [],
-    unmatchedActiveFeedbackIds: simulation?.unmatchedActiveFeedbackIds ?? [],
-    recordsIgnored: state?.ignored ?? []
-  };
-}
 
-export function applyFeedbackAdjustmentsToCandidates(candidates, simulation, config = normalizeFeedbackConfig({})) {
-  const normalizedConfig = normalizeFeedbackConfig(config);
-  if (!normalizedConfig.enabled || !normalizedConfig.applyToPublishedRanking) return candidates;
-  const evaluations = new Map((simulation?.evaluations ?? []).map((evaluation) => [evaluation.canonicalEventId, evaluation]));
-  return candidates.map((candidate) => {
-    const evaluation = evaluations.get(candidate.id);
-    if (!evaluation?.thresholdMet || evaluation.blockedByHardExclusion || evaluation.proposedAdjustment === 0 || !candidate.ranking || !Number.isFinite(evaluation.proposedFinalScore)) return candidate;
-    const safeAdjustment = {
-      applied: true,
-      scoreDelta: evaluation.proposedAdjustment,
-      categories: evaluation.evidenceCategories,
-      supportingOutcomeCount: evaluation.supportingActiveFeedbackIds.length,
-      policyVersion: normalizedConfig.policyVersion
-    };
-    return {
-      ...candidate,
-      ranking: {
-        ...candidate.ranking,
-        utility: evaluation.proposedFinalScore,
-        feedbackAdjustment: safeAdjustment
-      }
-    };
-  });
-}
 
 async function writeAtomicText(path, content) {
   await mkdir(dirname(path), { recursive: true });
   const temporaryPath = `${path}.tmp`;
   await writeFile(temporaryPath, content, 'utf8');
   await rename(temporaryPath, path);
+}
+
+// Display-derived keys frozen at capture time (see feedbackPolicy.js).
+function normalizeFeedbackKeys(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const keys = {};
+  for (const [category, entries] of Object.entries(value).slice(0, 8)) {
+    if (!/^[a-z]{3,12}$/.test(category) || !Array.isArray(entries)) continue;
+    const list = entries.slice(0, 16)
+      .filter((entry) => entry && typeof entry.key === 'string' && entry.key.startsWith(`${category}:`) && entry.key.length <= 200)
+      .map((entry) => ({ key: entry.key, label: String(entry.label ?? '').slice(0, 120) }));
+    if (list.length) keys[category] = list;
+  }
+  return Object.keys(keys).length ? keys : null;
 }
 
 function validateEvidenceSnapshot(value, errors) {
@@ -616,73 +446,7 @@ function normalizeEvidenceSnapshot(value) {
   };
 }
 
-function evidenceEntries(record) {
-  const snapshot = record.evidenceSnapshot;
-  const entries = [];
-  for (const id of snapshot.canonicalArtistIds) entries.push({ category: 'artist', id });
-  if (snapshot.canonicalVenueId) entries.push({ category: 'venue', id: snapshot.canonicalVenueId });
-  for (const id of snapshot.promoterOrSeriesIds) entries.push({ category: 'promoterOrSeries', id });
-  const eventShape = normalizeEventShape(snapshot.eventShape);
-  if (eventShape) entries.push({ category: 'eventShape', id: eventShape });
-  return entries;
-}
 
-function summarizeSignal(category, id, records, config, now) {
-  const positiveStatuses = new Set(['attended-worth-it', 'wanted-to-attend']);
-  const attendedStatuses = new Set(['attended-worth-it', 'attended-not-worth-it']);
-  let positiveWeight = 0;
-  let negativeWeight = 0;
-  const eventIds = new Set();
-  const attendedEventIds = new Set();
-  const statusCounts = Object.fromEntries(FEEDBACK_STATUSES.map((status) => [status, 0]));
-  for (const record of records) {
-    eventIds.add(record.canonicalEventId);
-    statusCounts[record.status] += 1;
-    const weight = (config.weights[record.status] ?? 0) * feedbackDecay(record.recordedAt, now, config.decayHalfLifeDays);
-    if (contributesTaste(record)) {
-      if (positiveStatuses.has(record.status)) positiveWeight += weight;
-      else negativeWeight += weight;
-    }
-    if (attendedStatuses.has(record.status)) attendedEventIds.add(record.canonicalEventId);
-  }
-  const totalWeight = positiveWeight + negativeWeight;
-  const direction = positiveWeight === negativeWeight ? 'neutral' : positiveWeight > negativeWeight ? 'positive' : 'negative';
-  const dominantWeight = Math.max(positiveWeight, negativeWeight);
-  const dominantFraction = totalWeight ? dominantWeight / totalWeight : 0;
-  const margin = Math.abs(positiveWeight - negativeWeight);
-  const threshold = config.thresholds[category];
-  const checks = [
-    [eventIds.size >= threshold.minIndependentEvents, 'insufficient independent event outcomes'],
-    [attendedEventIds.size >= threshold.minAttendedEvents, 'insufficient attended outcomes'],
-    [totalWeight >= threshold.minEffectiveWeight, 'insufficient effective evidence weight'],
-    [dominantFraction >= threshold.minDominantFraction, 'mixed evidence is below the confidence fraction'],
-    [margin >= threshold.minMargin, 'evidence margin is below the confidence threshold'],
-    [direction !== 'neutral', 'positive and negative evidence are balanced']
-  ];
-  const failedCheck = checks.find(([passed]) => !passed);
-  const eligible = !failedCheck;
-  return {
-    category,
-    id,
-    eventIds: [...eventIds].sort(),
-    feedbackIds: records.map((record) => record.feedbackId).sort(),
-    statusCounts,
-    totalOutcomes: records.length,
-    attendedOutcomes: attendedEventIds.size,
-    positiveWeight: round(positiveWeight),
-    negativeWeight: round(negativeWeight),
-    totalWeight: round(totalWeight),
-    direction,
-    dominantFraction: round(dominantFraction),
-    margin: round(margin),
-    mixedEvidence: positiveWeight > 0 && negativeWeight > 0,
-    mostRecentOutcomeDate: latest(records.map((record) => record.eventDateLocal)),
-    mostRecentRecordedAt: latest(records.map((record) => record.recordedAt)),
-    eligible,
-    adjustment: eligible ? round((direction === 'positive' ? 1 : -1) * config.adjustments[category]) : 0,
-    eligibilityReason: eligible ? 'threshold met' : failedCheck[1]
-  };
-}
 
 function summarizeEvents(records) {
   const byEvent = new Map();
@@ -694,8 +458,6 @@ function summarizeEvents(records) {
   return [...byEvent.entries()].map(([canonicalEventId, eventRecords]) => {
     const statuses = Object.fromEntries(FEEDBACK_STATUSES.map((status) => [status, 0]));
     for (const record of eventRecords) statuses[record.status] += 1;
-    const positive = eventRecords.filter((record) => ['attended-worth-it', 'wanted-to-attend'].includes(record.status) && contributesTaste(record)).length;
-    const negative = eventRecords.filter((record) => !['attended-worth-it', 'wanted-to-attend'].includes(record.status) && contributesTaste(record)).length;
     const first = eventRecords[0];
     return {
       canonicalEventId,
@@ -704,211 +466,21 @@ function summarizeEvents(records) {
       eventTitleSnapshot: first.eventTitleSnapshot,
       evidenceSnapshot: first.evidenceSnapshot,
       statuses,
-      mixedEvidence: positive > 0 && negative > 0,
-      mostRecentOutcomeDate: latest(eventRecords.map((record) => record.eventDateLocal)),
-      mostRecentRecordedAt: latest(eventRecords.map((record) => record.recordedAt))
+      mostRecentOutcomeDate: eventRecords.map((record) => record.eventDateLocal).sort().at(-1) ?? null,
+      mostRecentRecordedAt: eventRecords.map((record) => record.recordedAt).sort().at(-1) ?? null
     };
   }).sort((left, right) => left.canonicalEventId.localeCompare(right.canonicalEventId));
 }
 
-function projectionCandidates(projection) {
-  const pools = [
-    ['music', Array.isArray(projection.events) ? projection.events : []],
-    ['sports', Array.isArray(projection.sports) ? projection.sports : []],
-    ['movies', Array.isArray(projection.movies) ? projection.movies : []]
-  ];
-  const seen = new Set();
-  const candidates = [];
-  for (const [vertical, items] of pools) {
-    for (const item of items) {
-      const id = firstText(item?.canonicalEventId, item?.id);
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      const snapshot = snapshotFeedbackEvent(item, { allowMissing: true });
-      const baselineScore = baselineScoreFor(item);
-      candidates.push({
-        vertical,
-        id,
-        item,
-        snapshot,
-        baselineScore,
-        startLocal: firstText(item?.startLocal, item?.releaseDate),
-        snapshotError: snapshot.missing.length ? snapshot.missing : null
-      });
-    }
-  }
-  return candidates;
-}
 
-function evaluateCandidate(candidate, signalIndex, activeRecords, config) {
-  const snapshot = candidate.snapshot;
-  const categoryIds = {
-    artist: snapshot.evidenceSnapshot.canonicalArtistIds,
-    venue: snapshot.evidenceSnapshot.canonicalVenueId ? [snapshot.evidenceSnapshot.canonicalVenueId] : [],
-    promoterOrSeries: snapshot.evidenceSnapshot.promoterOrSeriesIds,
-    eventShape: normalizeEventShape(snapshot.evidenceSnapshot.eventShape) ? [normalizeEventShape(snapshot.evidenceSnapshot.eventShape)] : []
-  };
-  const categoryEffects = [];
-  for (const category of FEEDBACK_SIGNAL_CATEGORIES) {
-    const signal = chooseStrongestSignal(categoryIds[category], category, signalIndex);
-    if (!signal) continue;
-    categoryEffects.push({
-      category,
-      entityId: signal.id,
-      adjustment: signal.adjustment,
-      eligible: signal.eligible,
-      mixedEvidence: signal.mixedEvidence,
-      eligibilityReason: signal.eligibilityReason,
-      supportingActiveFeedbackIds: signal.feedbackIds
-    });
-  }
-  const thresholdMet = categoryEffects.some((effect) => effect.eligible && effect.adjustment !== 0);
-  const rawAdjustment = thresholdMet ? categoryEffects.filter((effect) => effect.eligible).reduce((sum, effect) => sum + effect.adjustment, 0) : 0;
-  const blockedByHardExclusion = Boolean(candidate.item?.ranking?.excluded);
-  const unclampedAdjustment = blockedByHardExclusion ? 0 : rawAdjustment;
-  const proposedAdjustment = clamp(unclampedAdjustment, -config.maxTotalAdjustment, config.maxTotalAdjustment);
-  const baselineScore = Number.isFinite(candidate.baselineScore) ? round(candidate.baselineScore) : null;
-  const proposedFinalScore = baselineScore == null ? null : round(baselineScore + proposedAdjustment);
-  const snapshotMismatchFeedbackIds = activeRecords
-    .filter((record) => record.canonicalEventId === candidate.id && (
-      record.eventTitleSnapshot !== snapshot.eventTitleSnapshot || record.eventDateLocal !== snapshot.eventDateLocal
-    ))
-    .map((record) => record.feedbackId)
-    .sort();
-  const categories = categoryEffects.filter((effect) => effect.eligible && effect.adjustment !== 0).map((effect) => effect.category);
-  return {
-    vertical: candidate.vertical,
-    canonicalEventId: candidate.id,
-    baselineScore,
-    proposedAdjustment,
-    proposedFinalScore,
-    rawAdjustment,
-    capApplied: proposedAdjustment !== unclampedAdjustment,
-    thresholdMet,
-    blockedByHardExclusion,
-    evidenceCategory: categories.length === 0 ? 'none' : categories.length === 1 ? categories[0] : 'multiple',
-    evidenceCategories: categories,
-    supportingActiveFeedbackIds: [...new Set(categoryEffects.filter((effect) => effect.eligible).flatMap((effect) => effect.supportingActiveFeedbackIds))].sort(),
-    categoryEffects,
-    snapshotMismatchFeedbackIds,
-    snapshotError: candidate.snapshotError,
-    baselineRank: null,
-    proposedRank: null,
-    rankChanged: false
-  };
-}
 
-function assignRanks(evaluations) {
-  const groups = new Map();
-  for (const evaluation of evaluations) {
-    if (evaluation.baselineScore == null) continue;
-    const group = groups.get(evaluation.vertical) ?? [];
-    group.push(evaluation);
-    groups.set(evaluation.vertical, group);
-  }
-  for (const group of groups.values()) {
-    const baselineOrder = [...group].sort(scoreComparator((evaluation) => evaluation.baselineScore));
-    baselineOrder.forEach((evaluation, index) => { evaluation.baselineRank = index + 1; });
-    const proposedOrder = [...group].sort((left, right) => {
-      const scoreDelta = (right.proposedFinalScore ?? right.baselineScore) - (left.proposedFinalScore ?? left.baselineScore);
-      return scoreDelta || left.baselineRank - right.baselineRank;
-    });
-    proposedOrder.forEach((evaluation, index) => {
-      evaluation.proposedRank = index + 1;
-      evaluation.rankChanged = evaluation.proposedRank !== evaluation.baselineRank;
-    });
-  }
-  return evaluations;
-}
 
-function simulateOverview(projection, evaluations, { now = null, planAheadMinScore = 55 } = {}) {
-  const current = Array.isArray(projection.overview) ? projection.overview : [];
-  const currentPlanAhead = Array.isArray(projection.overviewPlanAhead) ? projection.overviewPlanAhead : [];
-  const evaluationById = new Map(evaluations.map((evaluation) => [evaluation.canonicalEventId, evaluation]));
-  const applyScore = (item) => {
-    const evaluation = evaluationById.get(item.id);
-    if (!evaluation || evaluation.proposedFinalScore == null || !item.ranking) return item;
-    return { ...item, ranking: { ...item.ranking, utility: evaluation.proposedFinalScore } };
-  };
-  const proposedBuckets = buildOverviewBuckets(
-    (projection.events ?? []).map(applyScore),
-    (projection.sports ?? []).map(applyScore),
-    {
-      now: validDate(now) ? new Date(now) : validDate(projection.generatedAt) ? new Date(projection.generatedAt) : new Date(0),
-      currentDays: 14,
-      planAheadMinScore,
-      horizonDays: Number.isFinite(projection.horizon?.days) ? projection.horizon.days : null
-    }
-  );
-  const currentMembership = membershipMap(current, currentPlanAhead);
-  const proposedMembership = membershipMap(proposedBuckets.current, proposedBuckets.planAhead);
-  const ids = [...new Set([...currentMembership.keys(), ...proposedMembership.keys()])].sort();
-  const potentialChanges = ids
-    .map((id) => ({ id, from: currentMembership.get(id) ?? null, to: proposedMembership.get(id) ?? null }))
-    .filter((change) => change.from !== change.to);
-  return {
-    currentIds: current.map((item) => item.id).filter(Boolean),
-    currentPlanAheadIds: currentPlanAhead.map((item) => item.id).filter(Boolean),
-    proposedIds: proposedBuckets.current.map((item) => item.id).filter(Boolean),
-    proposedPlanAheadIds: proposedBuckets.planAhead.map((item) => item.id).filter(Boolean),
-    potentialChanges
-  };
-}
 
-function buildSignalIndex(signals) {
-  const index = new Map();
-  for (const category of FEEDBACK_SIGNAL_CATEGORIES) {
-    for (const signal of signals[category] ?? []) index.set(`${category}:${signal.id}`, signal);
-  }
-  return index;
-}
 
-function chooseStrongestSignal(ids, category, index) {
-  return ids
-    .map((id) => index.get(`${category}:${id}`))
-    .filter((signal) => signal?.eligible)
-    .sort((left, right) => Math.abs(right.adjustment) - Math.abs(left.adjustment) || left.id.localeCompare(right.id))[0] ?? null;
-}
 
-function toShadowDiff(evaluation) {
-  return {
-    canonicalEventId: evaluation.canonicalEventId,
-    vertical: evaluation.vertical,
-    baselineScore: evaluation.baselineScore,
-    proposedAdjustment: evaluation.proposedAdjustment,
-    proposedFinalScore: evaluation.proposedFinalScore,
-    evidenceCategory: evaluation.evidenceCategory,
-    evidenceCategories: evaluation.evidenceCategories,
-    supportingActiveFeedbackIds: evaluation.supportingActiveFeedbackIds,
-    thresholdMet: evaluation.thresholdMet,
-    capApplied: evaluation.capApplied,
-    blockedByHardExclusion: evaluation.blockedByHardExclusion,
-    baselineRank: evaluation.baselineRank,
-    proposedRank: evaluation.proposedRank,
-    rankChanged: evaluation.rankChanged
-  };
-}
 
-function membershipMap(current, planAhead) {
-  const map = new Map();
-  for (const item of current) if (item?.id) map.set(item.id, 'current');
-  for (const item of planAhead) if (item?.id && !map.has(item.id)) map.set(item.id, 'plan-ahead');
-  return map;
-}
 
-function baselineScoreFor(item) {
-  const value = item?.ranking?.utility ?? item?.tasteScore ?? item?.candidateScore;
-  const score = Number(value);
-  return Number.isFinite(score) ? score : null;
-}
 
-function scoreComparator(getScore) {
-  return (left, right) => {
-    const delta = getScore(right) - getScore(left);
-    if (delta) return delta;
-    return String(left.canonicalEventId).localeCompare(String(right.canonicalEventId));
-  };
-}
 
 function redactRecord(record) {
   const { notes: _notes, ...safe } = record;
@@ -919,25 +491,8 @@ function legacyReasons(input) {
   return Object.hasOwn(LEGACY_FEEDBACK_STATUSES, String(input?.status ?? '')) ? ['legacy-unknown'] : [];
 }
 
-function contributesTaste(record) {
-  if (['attended-worth-it', 'attended-not-worth-it', 'wanted-to-attend'].includes(record.status)) return true;
-  if (record.status !== 'lost-interest') return false;
-  // A legacy “not for me” entry had no reason. Preserve it as history, but do
-  // not guess whether it was taste, price, timing, or a one-off constraint.
-  return record.reasonCodes.some((reason) => ['artist', 'lineup', 'production', 'crowd', 'venue'].includes(reason));
-}
 
-function feedbackDecay(recordedAt, now, halfLifeDays) {
-  const recorded = new Date(recordedAt).getTime();
-  const reference = new Date(now).getTime();
-  if (!Number.isFinite(recorded) || !Number.isFinite(reference)) return 1;
-  const ageDays = Math.max(0, (reference - recorded) / 86_400_000);
-  return 2 ** (-ageDays / halfLifeDays);
-}
 
-function safeFeedbackIds(ids) {
-  return ids.filter((id) => safeText(id, 200));
-}
 
 function sortRecords(records) {
   return [...records].sort((left, right) => left.feedbackId.localeCompare(right.feedbackId));
@@ -966,10 +521,7 @@ function ignoreComparator(left, right) {
     .localeCompare(`${right.source}|${right.line ?? 0}|${right.code}|${right.canonicalEventId ?? ''}|${(right.feedbackIds ?? []).join(',')}`);
 }
 
-function normalizeEventShape(value) {
-  const normalized = normalizeArtistName(value);
-  return normalized || null;
-}
+
 
 function sportsTitle(event) {
   if (!event?.awayTeam && !event?.homeTeam) return null;
@@ -982,9 +534,6 @@ function firstText(...values) {
   return values.find((value) => typeof value === 'string' && value.trim())?.trim() ?? null;
 }
 
-function latest(values) {
-  return values.filter(Boolean).sort((left, right) => String(right).localeCompare(String(left)))[0] ?? null;
-}
 
 function sortStrings(values) {
   return Array.isArray(values) && values.every((value) => typeof value === 'string') ? [...new Set(values.map((value) => value.trim()))].filter(Boolean).sort() : values;
@@ -1013,17 +562,8 @@ function validDate(value) {
   return value != null && Number.isFinite(new Date(value).getTime());
 }
 
-function emptyOverviewSimulation() {
-  return { currentIds: [], currentPlanAheadIds: [], proposedIds: [], proposedPlanAheadIds: [], potentialChanges: [] };
-}
 
-function round(value) {
-  return Math.round(value * 100) / 100;
-}
 
-function clamp(value, minimum, maximum) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
 
 function booleanValue(value, fallback, name) {
   if (value == null) return fallback;
@@ -1036,26 +576,6 @@ function pathValue(value, name) {
   return value.trim();
 }
 
-function positiveNumber(value, name) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) throw new Error(`${name} must be greater than zero`);
-  return number;
-}
 
-function nonNegativeNumber(value, name) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0) throw new Error(`${name} must be zero or greater`);
-  return number;
-}
 
-function positiveInteger(value, name) {
-  const number = positiveNumber(value, name);
-  if (!Number.isInteger(number)) throw new Error(`${name} must be an integer`);
-  return number;
-}
 
-function fractionValue(value, name) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0 || number > 1) throw new Error(`${name} must be greater than zero and at most one`);
-  return number;
-}

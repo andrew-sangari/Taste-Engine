@@ -85,6 +85,10 @@ function mergeInto(target, incoming) {
     }
   }
   if (target.ticketObservation.lowestPriceUsd == null) target.ticketObservation.lowestPriceUsd = incoming.ticketObservation.lowestPriceUsd;
+  // Facts about the night that only one source may carry survive the merge.
+  if (!target.destination && incoming.destination) target.destination = incoming.destination;
+  if (incoming.promoters?.length) target.promoters = [...new Set([...(target.promoters ?? []), ...incoming.promoters])];
+  if (!target.eventName && incoming.eventName) target.eventName = incoming.eventName;
 }
 
 function sourceOccurrencesFor(candidate) {

@@ -8,8 +8,7 @@ const previewDir = resolve(root, 'data/taste/workflow/previews/latest');
 const manifestPath = resolve(root, 'data/taste/workflow/latest-validation.json');
 
 try {
-  const feedback = JSON.parse(await readFile(resolve(root, 'config/feedback.json'), 'utf8'));
-  const validation = await validatePreview({ previewDir, acceptedDir: root, feedbackApplicationEnabled: feedback?.feedback?.applyToPublishedRanking === true });
+  const validation = await validatePreview({ previewDir, acceptedDir: root, rebaseline: process.argv.includes('--rebaseline') });
   if (!validation.ok) throw new Error(validation.errors.map((item) => item.code).join(', '));
   await writeValidationManifest(manifestPath, await createValidationManifest({ previewDir, validation }));
   console.log(`Preview validated: ${previewDir}`);

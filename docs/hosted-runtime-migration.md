@@ -5,15 +5,24 @@
 Taste Engine production is moving from “local pipeline plus hosted projection” to a private hosted application:
 
 ```text
-External scheduler
-  -> protected Sites refresh route
+Vercel Cron (Monday and Thursday)
+  -> /api/cron/refresh (CRON_SECRET) -> the protected refresh
   -> source adapters + deterministic normalization/ranking
   -> optional sequential Ollama Cloud advisory passes
-  -> D1 recommendation snapshot
-  -> Sites UI + D1 feedback
+  -> Postgres recommendation snapshot (Supabase)
+  -> Next.js site on Vercel + Postgres feedback, Supabase Auth sign-in
 ```
 
-The workload is small. Data volume and deterministic scoring do not justify a production dependency on the desktop. The hosted application now owns the complete refresh; the only external component is a scheduler that invokes its protected route.
+The workload is small. Data volume and deterministic scoring do not justify a production dependency on the desktop. The hosted application owns the complete refresh.
+
+On 2026-11-11 the owner moved the target host from ChatGPT Sites + Cloudflare D1 to **Vercel + Supabase**. What changed, and only this:
+
+- **Runtime:** the site is a stock Next.js app (`next build`, output in `site/dist`); the Worker entry, vinext and the Sites packaging step are gone.
+- **Database:** Postgres through `DATABASE_URL` (Supabase's transaction pooler). The hand-written SQL is unchanged in meaning and runs through the statement adapter in `site/db/index.ts`; tests and local development use in-process PGlite. One migration, `site/drizzle/0000_initial_postgres.sql`, creates every table with row level security enabled and no policies.
+- **Identity:** a Supabase Auth session (email one-time code), verified with Supabase on every request. The injected `oai-authenticated-*` headers are no longer read anywhere. The email allowlist is unchanged and fails closed.
+- **Scheduler:** Vercel Cron. The Cloudflare Worker in `site/scheduler/` stays in the repository, undeployed, as the fallback if a refresh outgrows Vercel's 300-second function limit; it would call `/api/admin/refresh` exactly as before.
+
+Existing hosted data does not move by itself: feedback is re-imported from the site's export, and Spotify is reconnected once on the new domain.
 
 ## Canonical state
 
@@ -43,7 +52,7 @@ Taste Engine now owns the hosted read-only Spotify path copied from Playlist Syn
 - explicit profile-scoped disconnect deletion of tokens and derived Spotify snapshots
 - application-layer AES-256-GCM encryption for access and refresh tokens
 
-Playlist Sync remains a local development and recovery tool. Production does not call a localhost Playlist Sync URL.
+The local recovery path reads Spotify through Taste Engine's own client (`npm run spotify:connect`); Playlist Sync is no longer used anywhere. Production does not call localhost.
 
 The Spotify app must allow this exact redirect:
 
@@ -76,7 +85,11 @@ The hosted refresh runs the same bounded card-enrichment pass as the local expor
 
 ## Hosted secrets
 
-Set these in the Sites project’s hosted environment settings; never commit them:
+Set these in the Vercel project's environment variables; never commit them:
+
+- `DATABASE_URL` — the Supabase transaction-pooler connection string
+- `SUPABASE_URL` and `SUPABASE_ANON_KEY` (or `SUPABASE_PUBLISHABLE_KEY`) — used only to verify sign-in
+- `CRON_SECRET` — at least 24 random characters; Vercel Cron sends it as a bearer token
 
 - `SPOTIFY_CLIENT_ID`
 - `SPOTIFY_TOKEN_ENCRYPTION_KEY` — a base64/base64url-encoded 32-byte key
@@ -98,24 +111,24 @@ Set these in the Sites project’s hosted environment settings; never commit the
 Both administrative routes use `Authorization: Bearer <TASTE_REFRESH_SECRET>`:
 
 - `POST /api/admin/projection` uploads an already validated projection for an explicit `profileId`. It remains a migration and recovery path.
-- `POST /api/admin/refresh` runs the complete pipeline for an explicit `profileId`, or serially for all enabled connected profiles when omitted: Spotify evidence, Last.fm expansion, Framework/Insomniac calendars, SeatGeek and Ticketmaster discovery, EDMTrain matched-lineup enrichment, MLB and ticket observations, TMDB selection, deterministic normalization/deduplication/ranking, source-safe Ollama Cloud advisory passes, validation, and atomic profile-scoped D1 publication.
+- `POST /api/admin/refresh` runs the complete pipeline for an explicit `profileId`, or serially for all enabled connected profiles when omitted: Spotify evidence, Last.fm expansion, Framework/Insomniac calendars, SeatGeek and Ticketmaster discovery, EDMTrain matched-lineup enrichment, MLB and ticket observations, TMDB selection, deterministic normalization/deduplication/ranking, source-safe Ollama Cloud advisory passes, validation, and atomic profile-scoped publication.
 - `POST /api/runtime/refresh` runs the same pipeline for the signed-in owner without exposing the administrative secret.
 
-An incomplete or invalid run never replaces the active projection. The hosted taste snapshot and recommendation projection become active together in one D1 batch.
+An incomplete or invalid run never replaces the active projection. The hosted taste snapshot and recommendation projection become active together in one database transaction.
 
 Before the hosted route can refresh taste evidence, connect Spotify from the deployed site’s Taste tab and select at least one playlist. `SPOTIFY_CLIENT_ID` identifies the app but does not authorize access to a Spotify account.
 
 ## Operating checks
 
-1. ChatGPT-signed-in feedback survives devices without an export/import step.
+1. Signed-in feedback survives devices without an export/import step.
 2. Hosted Spotify connection, playlist selection, token refresh, and all three Top Artists windows pass.
 3. Every source adapter runs independently and emits the grouped source-health contract.
 4. Deterministic output matches the local golden fixtures and the advisory safety suite passes.
-5. A protected refresh completes within the request-duration limit.
+5. A protected refresh completes within Vercel's 300-second function limit; if it does not, deploy the fallback scheduler and split the advisory passes.
 6. An external scheduler calls the endpoint on Monday and Thursday without containing product logic.
 7. Two hosted refreshes complete without local repair before the local recovery producer is retired.
 8. With `TYPESAFE_AI_API_KEY` set, a hosted refresh reports `jev-events` as `active` or `partial` and some Music cards carry an **About this night** disclosure; with it unset, the refresh still publishes and the row reads `not configured`.
 
-The guarded local refresh remains a disaster-recovery producer. It may upload a validated snapshot through the protected projection route, but local promotion and Sites publication remain separate operations.
+The guarded local refresh remains a disaster-recovery producer. It may upload a validated snapshot through the protected projection route, but local promotion and deployment remain separate operations.
 
 See [Deployment and profile operations](deployment-and-profiles.md) for the clean-checkout release procedure, version contract, minimum profile boundary, and ordered migration/external actions.

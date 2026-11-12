@@ -1,0 +1,51 @@
+{
+  "fixtureNote": "Synthetic. Shaped like the documented SeatGeek /events response for q=Proper NYE; every id, title, price and URL here is invented. Real SeatGeek payloads are not stored in this repository.",
+  "events": [
+    {
+      "id": 900001,
+      "type": "music_festival",
+      "title": "Proper NYE/NYD - Thursday",
+      "short_title": "Proper NYE/NYD - Thursday",
+      "url": "https://seatgeek.example/proper-nye-nyd-thursday/900001",
+      "datetime_local": "2026-12-31T16:00:00",
+      "datetime_utc": "2027-01-01T00:00:00",
+      "time_tbd": false,
+      "date_tbd": false,
+      "status": "normal",
+      "venue": { "id": 7001, "name": "Petco Park", "city": "San Diego", "state": "CA", "location": { "lat": 32.7073, "lon": -117.1566 } },
+      "performers": [{ "id": 5001, "name": "Proper NYE/NYD", "primary": true }],
+      "stats": { "listing_count": 12, "lowest_price": 189, "average_price": 240 }
+    },
+    {
+      "id": 900002,
+      "type": "music_festival",
+      "title": "Proper NYE/NYD - Friday",
+      "short_title": "Proper NYE/NYD - Friday",
+      "url": "https://seatgeek.example/proper-nye-nyd-friday/900002",
+      "datetime_local": "2027-01-01T14:00:00",
+      "datetime_utc": "2027-01-01T22:00:00",
+      "time_tbd": false,
+      "date_tbd": false,
+      "status": "normal",
+      "venue": { "id": 7001, "name": "Petco Park", "city": "San Diego", "state": "CA", "location": { "lat": 32.7073, "lon": -117.1566 } },
+      "performers": [{ "id": 5001, "name": "Proper NYE/NYD", "primary": true }],
+      "stats": { "listing_count": 9, "lowest_price": 149, "average_price": 200 }
+    },
+    {
+      "id": 900003,
+      "type": "concert",
+      "title": "Proper NYE Rooftop Party",
+      "short_title": "Proper NYE Rooftop Party",
+      "url": "https://seatgeek.example/proper-nye-rooftop-party/900003",
+      "datetime_local": "2026-12-31T21:00:00",
+      "datetime_utc": "2027-01-01T03:00:00",
+      "time_tbd": false,
+      "date_tbd": false,
+      "status": "normal",
+      "venue": { "id": 7099, "name": "Example Rooftop", "city": "Denver", "state": "CO", "location": { "lat": 39.7392, "lon": -104.9903 } },
+      "performers": [{ "id": 5099, "name": "Example DJ", "primary": true }],
+      "stats": { "listing_count": 3, "lowest_price": 60, "average_price": 75 }
+    }
+  ],
+  "meta": { "total": 3, "per_page": 50, "page": 1 }
+}

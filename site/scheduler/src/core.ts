@@ -72,11 +72,18 @@ export async function runRefresh(env: SchedulerEnv): Promise<Record<string, unkn
   });
   const payload = await response.json().catch(() => null) as {
     projectionPublished?: boolean;
+    publishedProfileCount?: number;
     publicationBlockers?: string[];
     [key: string]: unknown;
   } | null;
   if (!response.ok || !payload) {
     const blocker = payload?.publicationBlockers?.[0] ?? `HTTP ${response.status}`;
+    throw new Error(`Taste Engine refresh did not publish: ${blocker}`);
+  }
+  // HTTP 200 with nothing published is a failed run, not a success: throw so
+  // the Workflow step retries and the failure is visible.
+  if (payload.publishedProfileCount === 0 && payload.projectionPublished === false) {
+    const blocker = payload.publicationBlockers?.[0] ?? "no profile published";
     throw new Error(`Taste Engine refresh did not publish: ${blocker}`);
   }
   return payload;

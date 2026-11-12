@@ -44,9 +44,15 @@ export function buildEditorialInput(projection, personalContext = {}) {
       if (days <= 30) upcomingWindows.next30Days += 1;
     }
   }
+  const sportsTeams = new Set();
+  const next14Teams = new Set();
   for (const game of projection.sports ?? []) {
+    sportsTeams.add(homeTeamLabel(game));
     const days = daysFromNow(game.startLocal, now);
-    if (days != null && days <= 14 && days >= 0) next14.sports += 1;
+    if (days != null && days <= 14 && days >= 0) {
+      next14.sports += 1;
+      next14Teams.add(homeTeamLabel(game));
+    }
   }
   for (const movie of projection.movies ?? []) {
     const days = daysFromNow(movie.releaseDate, now);
@@ -85,6 +91,10 @@ export function buildEditorialInput(projection, personalContext = {}) {
     next14Days: next14,
     overview,
     overviewPriority: overview[0]?.vertical ?? null,
+    // Team labels come from the MLB and ESPN schedules, never from a ticket source.
+    sportsTeams: teamPhrase(sportsTeams),
+    next14SportsTeams: teamPhrase(next14Teams.size ? next14Teams : sportsTeams),
+    overviewSportsTeam: homeTeamLabel((projection.sports ?? []).find((game) => game.id === overview.find((candidate) => candidate.vertical === 'sports')?.ref)),
     namedCandidates,
     personalContext: safePersonalContext,
     sourceHealth: (projection.sourceHealth ?? []).map(({ source, status }) => ({ source, status }))
@@ -96,7 +106,9 @@ export function buildEditorialCandidates({ events = [], sports = [], movies = []
     const sources = new Set(event.sourceOccurrences?.map((occurrence) => occurrence.source) ?? event.sources ?? []);
     const ticketmasterOccurrence = event.sourceOccurrences?.find((occurrence) => occurrence.source === 'ticketmaster');
     const allowedOccurrence = ticketmasterOccurrence ?? event.sourceOccurrences?.find((occurrence) => occurrence.source !== 'seatgeek');
-    const named = Boolean(allowedOccurrence) && (!sources.has('seatgeek') || sources.has('ticketmaster'));
+    // An EDMTrain announcement is displayed with its link but is never model
+    // input, so a candidate known only from EDMTrain stays unnamed.
+    const named = Boolean(allowedOccurrence) && allowedOccurrence.source !== 'edmtrain' && (!sources.has('seatgeek') || sources.has('ticketmaster'));
     return {
       ref: event.id,
       vertical: 'music',
@@ -113,11 +125,12 @@ export function buildEditorialCandidates({ events = [], sports = [], movies = []
       whyYou: event.ranking?.whyYou ?? ''
     };
   });
-  const baseball = sports.map((game) => ({
+  const games = sports.map((game) => ({
     ref: game.id,
     vertical: 'sports',
     named: true,
-    provenance: 'mlb',
+    // The schedule's own source: MLB Stats API for the Dodgers, ESPN for the Rams.
+    provenance: game.source === 'espn' ? 'espn' : 'mlb',
     title: `${game.awayTeam?.shortName || game.awayTeam?.name || 'Away'} at ${game.homeTeam?.shortName || game.homeTeam?.name || 'Home'}`,
     startLocal: game.startLocal,
     venue: game.venue?.name ?? null,
@@ -142,11 +155,11 @@ export function buildEditorialCandidates({ events = [], sports = [], movies = []
     hassleScore: movie.hassle ?? null,
     whyYou: movie.reasons?.[0] ?? ''
   }));
-  return [...music, ...baseball, ...film];
+  return [...music, ...games, ...film];
 }
 
 export function serializeEditorialInput(input) {
-  const allowedProvenance = new Set(['ticketmaster', 'framework', 'mlb', 'tmdb']);
+  const allowedProvenance = new Set(['ticketmaster', 'framework', 'mlb', 'espn', 'tmdb']);
   return {
     schemaVersion: input.schemaVersion,
     horizonDays: input.horizonDays,
@@ -161,6 +174,7 @@ export function serializeEditorialInput(input) {
     next14Days: input.next14Days,
     overview: (input.overview ?? []).map(({ ref, vertical, startLocal }) => ({ ref, vertical, startLocal })),
     overviewPriority: input.overviewPriority,
+    overviewSportsTeam: input.overviewSportsTeam,
     namedCandidates: (input.namedCandidates ?? []).map((candidate) => {
       const safe = {
         ref: candidate.ref,
@@ -197,8 +211,8 @@ export function deterministicEditorial(projection, status = 'deterministic fallb
   const immediateDay = weekdayForLocalDate(input.overview.find((candidate) => candidate.vertical === 'sports')?.startLocal) ?? 'upcoming';
   const lead = input.concertCandidateCount || sports
     ? sportsLeadsNow
-      ? `Music leads the broader shortlist, but this ${immediateDay} Dodgers game is the strongest immediate option. The remaining dates can wait for a clearer music signal.`
-      : `The next two weeks hold ${input.next14Days.music} music candidate${input.next14Days.music === 1 ? '' : 's'} and ${input.next14Days.sports} Dodgers game${input.next14Days.sports === 1 ? '' : 's'}; music leads the broader shortlist, with sports as a selective second lane.`
+      ? `Music leads the broader shortlist, but this ${immediateDay} ${input.overviewSportsTeam} game is the strongest immediate option. The remaining dates can wait for a clearer music signal.`
+      : `The next two weeks hold ${input.next14Days.music} music candidate${input.next14Days.music === 1 ? '' : 's'} and ${input.next14Days.sports} ${input.next14SportsTeams} game${input.next14Days.sports === 1 ? '' : 's'}; music leads the broader shortlist, with sports as a selective second lane.`
     : 'The current horizon is quiet enough that staying home remains a reasonable call.';
   return {
     mode: 'deterministic',
@@ -211,7 +225,7 @@ export function deterministicEditorial(projection, status = 'deterministic fallb
     lead,
     decisionNotes: [
       `${input.upcomingWindows.next14Days} total concert candidates land in the next two weeks.`,
-      sports ? `${sports} Dodgers home games are available as a separate sports lane.` : 'No sports schedule currently contributes to the overview.',
+      sports ? `${sports} ${input.sportsTeams} home games are available as a separate sports lane.` : 'No sports schedule currently contributes to the overview.',
       input.movieCandidateCount ? `${input.movieCandidateCount} movie candidates remain in their own vertical.` : 'The movie vertical is waiting for a configured, refined candidate source.'
     ].slice(0, 3),
     skipCall: verdict === 'do not waste your time' ? 'Do not force a plan this weekend; the current evidence does not clear the personal-value bar.' : 'Skip anything that requires a weaker fit or unnecessary coordination.',
@@ -279,6 +293,17 @@ export async function generateEditorialBrief({
   }
 }
 
+// The followed home team of a game, as the schedule names it.
+function homeTeamLabel(game) {
+  const league = String(game?.league ?? game?.sportsContext?.league ?? '').toLowerCase();
+  return league === 'nfl' || String(game?.id ?? '').startsWith('nfl:') ? 'Rams' : 'Dodgers';
+}
+
+function teamPhrase(teams) {
+  const names = [...teams].sort();
+  return names.length ? names.join(' and ') : 'Dodgers';
+}
+
 function alignEditorialWithOverview(editorial, input) {
   if (input.overviewPriority !== 'sports') return editorial;
   const lead = editorial.lead.trim();
@@ -293,7 +318,7 @@ function alignEditorialWithOverview(editorial, input) {
 
   const sportsDate = input.overview.find((candidate) => candidate.vertical === 'sports')?.startLocal;
   const day = weekdayForLocalDate(sportsDate) ?? 'upcoming';
-  const bridge = `Music leads the broader shortlist, but this ${day} Dodgers game is the strongest immediate option.`;
+  const bridge = `Music leads the broader shortlist, but this ${day} ${input.overviewSportsTeam ?? 'Dodgers'} game is the strongest immediate option.`;
   return {
     ...editorial,
     lead: `${bridge} ${cleanedLead}`.trim().slice(0, 520)

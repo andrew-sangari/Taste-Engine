@@ -7,7 +7,9 @@ const startedAt = Date.now();
 
 try {
   const spotifyStartedAt = Date.now();
-  await run(process.execPath, ['src/cli/spotify-seed.js']);
+  // --skip-seed keeps the last valid Spotify snapshot (Spotify not connected)
+  // while every other source is still refreshed.
+  if (!process.argv.includes('--skip-seed')) await run(process.execPath, ['src/cli/spotify-seed.js']);
   await run(process.execPath, ['scripts/expand-taste.js']);
   printTiming('Spotify/Last.fm', Date.now() - spotifyStartedAt);
 

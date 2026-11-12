@@ -1,4 +1,4 @@
-import { getD1 } from "../db/index.ts";
+import { getDatabase } from "../db/index.ts";
 import type { ProfileScope } from "./profiles";
 
 export const MISS_CLASSIFICATIONS = [
@@ -20,7 +20,7 @@ export async function createRecommendationMiss(profile: ProfileScope, input: unk
   if (!eventUrl && !eventDetails) throw new RecommendationMissInputError("Add an event URL or a short description.");
   const missId = `miss-${crypto.randomUUID()}`;
   const submittedAt = new Date().toISOString();
-  await getD1().prepare(`
+  await getDatabase().prepare(`
     INSERT INTO recommendation_misses
       (miss_id, owner_email, profile_id, event_url, event_details, submitted_at, resolution_stage)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'untriaged')
@@ -37,7 +37,7 @@ export async function classifyRecommendationMiss(profile: ProfileScope, input: u
   }
   const resolutionNote = optionalText(value.resolutionNote, 2_000);
   const resolvedAt = classification === "resolved" ? new Date().toISOString() : null;
-  const result = await getD1().prepare(`
+  const result = await getDatabase().prepare(`
     UPDATE recommendation_misses
     SET resolution_stage = ?1, resolution_note = ?2, resolved_at = ?3
     WHERE miss_id = ?4 AND profile_id = ?5
@@ -51,7 +51,7 @@ export async function classifyRecommendationMiss(profile: ProfileScope, input: u
 // source-review candidate for a human to inspect.
 export async function sourceReviewCandidates(profile: ProfileScope, now = new Date()) {
   const since = new Date(now.getTime() - 90 * 86_400_000).toISOString();
-  const result = await getD1().prepare(`
+  const result = await getDatabase().prepare(`
     SELECT event_url, submitted_at
     FROM recommendation_misses
     WHERE profile_id = ?1

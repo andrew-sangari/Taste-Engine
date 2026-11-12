@@ -1,54 +1,14 @@
-import { getD1 } from "../db/index.ts";
+import { getDatabase } from "../db/index.ts";
 import type { ProfileScope } from "./profiles";
 import { releaseMetadata } from "./release.ts";
 
-const MAX_FEEDBACK_STATE_BYTES = 1_500_000;
-const MAX_PROJECTION_BYTES = 3_000_000;
-
-export async function readFeedbackState(profile: ProfileScope): Promise<unknown | null> {
-  const row = await getD1()
-    .prepare("SELECT state_json FROM feedback_state WHERE profile_id = ?1")
-    .bind(profile.id)
-    .first<{ state_json: string }>();
-  if (!row?.state_json) return null;
-  try {
-    const state = JSON.parse(row.state_json) as Record<string, unknown>;
-    const records = await readFeedbackRecords(profile);
-    if (!records.length || !state || typeof state !== "object") return state;
-    return {
-      ...state,
-      records: Object.fromEntries(records.map((record) => [String(record.feedbackId), { record, firstExportTriggeredAt: null, exportBatchId: null }])),
-    };
-  } catch {
-    return null;
-  }
-}
-
-export async function writeFeedbackState(profile: ProfileScope, state: unknown): Promise<string> {
-  assertFeedbackState(state);
-  const stateJson = JSON.stringify(state);
-  if (new TextEncoder().encode(stateJson).byteLength > MAX_FEEDBACK_STATE_BYTES) {
-    throw new PersistenceInputError("Feedback state is too large.");
-  }
-  const updatedAt = new Date().toISOString();
-  await writeFeedbackRecords(profile, feedbackRecordsFromState(state), updatedAt);
-  await getD1()
-    .prepare(`
-      INSERT INTO feedback_state (owner_email, profile_id, state_json, updated_at)
-      VALUES (?1, ?2, ?3, ?4)
-      ON CONFLICT(profile_id) DO UPDATE SET
-        owner_email = excluded.owner_email,
-        state_json = excluded.state_json,
-        updated_at = excluded.updated_at
-    `)
-    .bind(profile.email, profile.id, stateJson, updatedAt)
-    .run();
-  return updatedAt;
-}
+// Postgres would store more, but a projection is read whole on every page
+// load: keep the published row under 2 MB, the size the pipeline is validated for.
+const MAX_PROJECTION_BYTES = 1_900_000;
 
 export async function readFeedbackRecords(profile: ProfileScope): Promise<Array<Record<string, unknown>>> {
-  const result = await getD1().prepare(`
-    SELECT record_json FROM feedback_records WHERE profile_id = ?1 ORDER BY recorded_at ASC, feedback_id ASC
+  const result = await getDatabase().prepare(`
+    SELECT record_json FROM feedback_records WHERE profile_id = ?1 ORDER BY recorded_at COLLATE "C" ASC, feedback_id COLLATE "C" ASC
   `).bind(profile.id).all<{ record_json: string }>();
   return (result.results ?? []).flatMap((row) => {
     try {
@@ -63,7 +23,7 @@ export async function writeFeedbackRecords(profile: ProfileScope, records: Array
   const projection = await readActiveProjection(profile.id);
   const statements = records.map((record) => enrichFeedbackEvidence(record, projection))
     .filter((record) => safeText(record.feedbackId) && safeText(record.canonicalEventId) && safeText(record.eventDateLocal) && safeText(record.status) && safeText(record.recordedAt))
-    .map((record) => getD1().prepare(`
+    .map((record) => getDatabase().prepare(`
       INSERT INTO feedback_records (owner_email, profile_id, feedback_id, canonical_event_id, event_date_local, status, recorded_at, record_json, evidence_json, received_at)
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
       ON CONFLICT(profile_id, feedback_id) DO NOTHING
@@ -79,7 +39,7 @@ export async function writeFeedbackRecords(profile: ProfileScope, records: Array
       record.evidenceSnapshot ? JSON.stringify(record.evidenceSnapshot) : null,
       receivedAt,
     ));
-  if (statements.length) await getD1().batch(statements);
+  if (statements.length) await getDatabase().batch(statements);
 }
 
 function enrichFeedbackEvidence(record: Record<string, unknown>, projection: unknown): Record<string, unknown> {
@@ -93,6 +53,10 @@ function enrichFeedbackEvidence(record: Record<string, unknown>, projection: unk
       || (String(value.id ?? "") === String(record.canonicalEventId ?? "") && String(value.startLocal ?? "").slice(0, 10) === String(record.eventDateLocal ?? ""));
   }) as Record<string, unknown> | undefined;
   if (!candidate) return record;
+  // Keys the client could not freeze itself (an older client, an import).
+  if (!record.feedbackKeys && candidate.feedbackKeys && typeof candidate.feedbackKeys === "object") {
+    record = { ...record, feedbackKeys: candidate.feedbackKeys };
+  }
   const venue = candidate.venue && typeof candidate.venue === "object" ? candidate.venue as Record<string, unknown> : {};
   const series = candidate.series && typeof candidate.series === "object" ? candidate.series as Record<string, unknown> : {};
   const artists = array(candidate.matchedArtists).map((artist) => artist && typeof artist === "object" ? artist as Record<string, unknown> : {})
@@ -103,7 +67,7 @@ function enrichFeedbackEvidence(record: Record<string, unknown>, projection: unk
       canonicalArtistIds: [...new Set(artists)].sort(),
       canonicalVenueId: typeof venue.sourceId === "string" ? venue.sourceId : null,
       promoterOrSeriesIds: typeof series.id === "string" ? [series.id] : [],
-      eventShape: typeof candidate.eventType === "string" ? candidate.eventType : candidate.source === "mlb" ? "baseball" : null,
+      eventShape: typeof candidate.eventType === "string" ? candidate.eventType : candidate.league === "nfl" ? "football" : candidate.source === "mlb" ? "baseball" : null,
     },
   };
 }
@@ -111,7 +75,7 @@ function enrichFeedbackEvidence(record: Record<string, unknown>, projection: unk
 function array(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 
 export async function readActiveProjection(profileId: string): Promise<unknown | null> {
-  const row = await getD1()
+  const row = await getDatabase()
     .prepare(`
       SELECT payload_json
       FROM recommendation_snapshots
@@ -144,7 +108,7 @@ export async function publishProjection(profileId: string, payload: unknown): Pr
   const createdAt = new Date().toISOString();
   const codeVersion = releaseMetadata().release;
   const dataSchemaVersion = Number((payload as { schemaVersion?: unknown }).schemaVersion ?? 5);
-  const db = getD1();
+  const db = getDatabase();
   await db.batch([
     db.prepare("UPDATE recommendation_snapshots SET active = 0 WHERE profile_id = ?1 AND active = 1").bind(profileId),
     db.prepare(`
@@ -168,30 +132,6 @@ export function hasRefreshAuthorization(request: Request): boolean {
   const configured = process.env.TASTE_REFRESH_SECRET ?? "";
   const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
   return configured.length >= 24 && constantTimeEqual(configured, supplied);
-}
-
-function assertFeedbackState(value: unknown): asserts value is { version: 2 | 3 } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new PersistenceInputError("Feedback state must be an object.");
-  }
-  const input = value as Record<string, unknown>;
-  if (input.version !== 2 && input.version !== 3) throw new PersistenceInputError("Unsupported feedback state version.");
-  for (const key of ["planning", "historyResponses", "records", "exportBatches"]) {
-    if (!input[key] || typeof input[key] !== "object" || Array.isArray(input[key])) {
-      throw new PersistenceInputError(`Feedback state field ${key} must be an object.`);
-    }
-  }
-}
-
-function feedbackRecordsFromState(value: unknown): Array<Record<string, unknown>> {
-  const state = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  const entries = state.records && typeof state.records === "object" && !Array.isArray(state.records)
-    ? Object.values(state.records as Record<string, unknown>) : [];
-  return entries.flatMap((entry) => {
-    const wrapped = entry && typeof entry === "object" && !Array.isArray(entry) ? entry as Record<string, unknown> : {};
-    const record = wrapped.record;
-    return record && typeof record === "object" && !Array.isArray(record) ? [record as Record<string, unknown>] : [];
-  });
 }
 
 function safeText(value: unknown): value is string {

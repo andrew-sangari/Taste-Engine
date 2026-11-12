@@ -1,68 +1,125 @@
-export async function fetchSpotifyPlaylistEvidence(config, fetchImpl = fetch) {
+import { artistTagKey, resolveArtistTags } from './artistTags.js';
+import { readTagCache, writeTagCache } from './artistTagsCache.js';
+import { getSpotifyAuthStatus, getSpotifyPlaylistArtists } from './spotifyClient.js';
+import { refreshTopArtists, removeTopArtistsCache } from './topArtists.js';
+
+// MusicBrainz is limited to one request per second, so its per-run budget is
+// small and the persistent cache fills over a few runs. Last.fm has no such
+// limit and is looked up in full, as before.
+const MUSICBRAINZ_LOOKUPS_PER_RUN = 200;
+const LASTFM_LOOKUPS_PER_RUN = 2000;
+
+export async function fetchSpotifyPlaylistEvidence(config, deps = {}) {
+  const {
+    getPlaylistArtists = getSpotifyPlaylistArtists,
+    resolveTags = resolveArtistTags,
+    readCache = readTagCache,
+    writeCache = writeTagCache,
+    tagCachePath = undefined,
+    lastFmApiKey = process.env.LASTFM_API_KEY || null,
+    maxTagLookups = lastFmApiKey ? LASTFM_LOOKUPS_PER_RUN : MUSICBRAINZ_LOOKUPS_PER_RUN,
+    now = new Date()
+  } = deps;
   const evidence = [];
   const warnings = [];
 
   for (const playlist of config.playlists.filter((item) => item.enabled)) {
-    const url = new URL('/api/spotify/playlist-artists', `${config.playlistSyncBaseUrl}/`);
-    url.searchParams.set('playlistId', playlist.id);
-    url.searchParams.set('limit', String(config.maxTracksPerPlaylist));
-
-    let response;
+    let artists;
     try {
-      response = await fetchImpl(url);
+      artists = await getPlaylistArtists(playlist.id, config.maxTracksPerPlaylist);
     } catch (error) {
-      throw new Error(`Could not reach Playlist Sync at ${config.playlistSyncBaseUrl}. Start it and connect Spotify first. ${error.message}`);
+      if (Number(error?.statusCode) === 401) {
+        throw new Error(/spotify:connect/.test(error.message) ? error.message : `Spotify is not connected. Run \`npm run spotify:connect\` first. ${error.message}`);
+      }
+      throw new Error(`Spotify could not read “${playlist.name}”${error?.statusCode ? ` (${error.statusCode})` : ''}. ${error.message}`);
     }
-
-    if (!response.ok) {
-      const detail = await safeResponseText(response);
-      throw new Error(`Playlist Sync could not read “${playlist.name}” (${response.status}).${detail ? ` ${detail}` : ''}`);
-    }
-
-    const body = await response.json();
-    evidence.push({ playlist, artists: Array.isArray(body.artists) ? body.artists : [] });
-    warnings.push(...(Array.isArray(body.warnings) ? body.warnings.map((warning) => `${playlist.name}: ${warning}`) : []));
+    evidence.push({ playlist, artists: Array.isArray(artists) ? artists : [] });
   }
 
-  return { evidence, warnings };
-}
+  // One tag pass for every playlist, most-played artists first so a limited
+  // lookup budget is spent where it matters.
+  const trackCounts = new Map();
+  for (const { artists } of evidence) {
+    for (const artist of artists) {
+      const name = String(artist?.name ?? '').trim();
+      if (name) trackCounts.set(name, (trackCounts.get(name) ?? 0) + (Number(artist.trackCount) || 0));
+    }
+  }
+  const names = [...trackCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
 
-export async function fetchSpotifyTopArtistEvidence({ playlistSyncBaseUrl, limit = 50 }, fetchImpl = fetch) {
-  // Preflight the scope before spending time on three Top Artists calls. This
-  // keeps scheduled refreshes non-interactive when the existing token predates
-  // user-top-read; the playlist lane remains usable immediately.
+  let tags = new Map();
+  let tagProvider = lastFmApiKey ? 'lastfm' : 'musicbrainz';
+  let tagLookups = 0;
   try {
-    const statusUrl = new URL('/api/status', `${playlistSyncBaseUrl}/`);
-    const statusResponse = await fetchImpl(statusUrl);
-    if (statusResponse.ok) {
-      const status = await statusResponse.json().catch(() => ({}));
-      const missingScopes = status.spotifyAuth?.missingScopes ?? [];
-      if (missingScopes.includes('user-top-read')) {
-        return unavailableTopArtists('Spotify Top Artists scope is missing. Reconnect Spotify in Playlist Sync; continuing with playlist-only evidence.');
+    const result = await resolveTags(names, { lastFmApiKey, cache: readCache(tagCachePath), now, maxLookups: maxTagLookups });
+    tags = result.tags;
+    tagProvider = result.provider;
+    tagLookups = result.lookups;
+    warnings.push(...result.warnings.map((warning) => `Artist tags: ${warning}`));
+    if (result.lookups > 0) {
+      try {
+        writeCache(tagCachePath, result.cache);
+      } catch (error) {
+        warnings.push(`Artist tags: the tag cache could not be saved (${error.code ?? error.message}).`);
       }
     }
-  } catch {
-    // A status preflight failure is not itself a reason to discard the lane;
-    // the endpoint below still provides the authoritative source response.
+  } catch (error) {
+    warnings.push(`Artist tags: external artist tags unavailable: ${error.message}`);
   }
 
-  const url = new URL('/api/spotify/top-artists', `${playlistSyncBaseUrl}/`);
-  url.searchParams.set('limit', String(Math.min(50, Math.max(1, Number(limit) || 50))));
+  for (const item of evidence) {
+    item.artists = item.artists.map((artist) => {
+      const providerGenres = tags.get(artistTagKey(artist?.name)) ?? [];
+      return {
+        ...artist,
+        providerGenres,
+        genres: [...new Set([...(artist.genres ?? []), ...providerGenres])]
+      };
+    });
+  }
+
+  return { evidence, warnings, tagProvider, tagLookups };
+}
+
+export async function fetchSpotifyTopArtistEvidence(config = {}, deps = {}) {
+  const {
+    getAuthStatus = getSpotifyAuthStatus,
+    refresh = refreshTopArtists,
+    removeCache = removeTopArtistsCache
+  } = deps;
+  const limit = Math.min(50, Math.max(1, Number(config?.limit) || 50));
+
+  // Preflight the scope before spending time on three Top Artists calls. A
+  // token that predates user-top-read must not keep serving stale affinity
+  // data, and must never block the playlist lane.
   try {
-    const response = await fetchImpl(url);
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      return unavailableTopArtists(body.error || `Playlist Sync Top Artists request failed (${response.status}).`, body.details?.windows ?? body.windows);
+    const auth = getAuthStatus();
+    if (!auth.connected) {
+      return unavailableTopArtists('Spotify is not connected. Run `npm run spotify:connect`; continuing without Top Artists.');
+    }
+    if (auth.missingScopes.includes('user-top-read')) {
+      try { removeCache(); } catch { /* replaceable cache */ }
+      return unavailableTopArtists('Spotify Top Artists scope (user-top-read) is missing. Reconnect Spotify with `npm run spotify:connect`; continuing with playlist-only evidence.');
+    }
+  } catch {
+    // An unreadable status is not itself a reason to discard the lane; the
+    // refresh below reports the authoritative result.
+  }
+
+  try {
+    const result = await refresh({ limit });
+    if (result.status === 'unavailable') {
+      return unavailableTopArtists(result.warnings?.[0] || 'Spotify Top Artists are unavailable.', result.windows);
     }
     return {
-      status: body.status ?? 'unavailable',
-      generatedAt: body.generatedAt ?? new Date().toISOString(),
-      windows: body.windows ?? emptyTopWindows(),
-      artists: Array.isArray(body.artists) ? body.artists : [],
-      warnings: Array.isArray(body.warnings) ? body.warnings : []
+      status: result.status ?? 'unavailable',
+      generatedAt: result.generatedAt ?? new Date().toISOString(),
+      windows: result.windows ?? emptyTopWindows(),
+      artists: Array.isArray(result.artists) ? result.artists : [],
+      warnings: Array.isArray(result.warnings) ? result.warnings : []
     };
   } catch (error) {
-    return unavailableTopArtists(`Could not reach Playlist Sync Top Artists endpoint. ${error.message}`);
+    return unavailableTopArtists(`Spotify Top Artists could not be refreshed. ${error.message}`);
   }
 }
 
@@ -170,7 +227,7 @@ export function buildArtistSnapshot({ evidence, warnings = [], topArtists = null
   return {
     version: 2,
     generatedAt: new Date(generatedAt).toISOString(),
-    source: 'playlist-sync',
+    source: 'spotify',
     playlistCount: evidence.length,
     sourceArtistCount: normalizedArtists.filter((artist) => artist.evidence.length > 0).length,
     topArtistCount: normalizedArtists.filter((artist) => artist.topEvidence).length,
@@ -179,15 +236,6 @@ export function buildArtistSnapshot({ evidence, warnings = [], topArtists = null
     topItems,
     artists: normalizedArtists
   };
-}
-
-async function safeResponseText(response) {
-  try {
-    const text = await response.text();
-    return text.slice(0, 500);
-  } catch {
-    return '';
-  }
 }
 
 function nonNegativeNumber(value) {

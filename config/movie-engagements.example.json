@@ -1,0 +1,29 @@
+{
+  "_readme": [
+    "Copy to config/movie-engagements.json (private, gitignored). A missing file means no confirmations, not an error.",
+    "Each entry is a reviewed confirmation of a real screening, typed in from the page at sourceUrl. Nothing here is inferred.",
+    "Required: title, theater, format, startDate (YYYY-MM-DD), sourceUrl (https), confirmedAt (YYYY-MM-DD or ISO timestamp with zone).",
+    "Optional: tmdbId (preferred join key; otherwise the exact title, plus year when given), year, endDate, showtimes, expiresAt, note, allowOtherTheater.",
+    "format is one of: IMAX, IMAX 70mm, 70mm, 35mm, Dolby Cinema, Standard.",
+    "theater must exactly match a priorityTheaters name in config/movies.json unless allowOtherTheater is true.",
+    "showtimes are local date-times with no zone suffix (2031-03-14T19:00). List only showtimes published at sourceUrl; leave the field out when none are published.",
+    "Expiry: expiresAt when given, else endDate, else confirmedAt + 21 days. Expired entries drop back to the watchlist and are reported in source health.",
+    "Unknown fields are rejected so a typo cannot silently change a run. The entry below is fictional."
+  ],
+  "engagements": [
+    {
+      "tmdbId": 999999999,
+      "title": "The Example Film That Does Not Exist",
+      "year": 2031,
+      "theater": "TCL Chinese Theatre IMAX",
+      "format": "IMAX",
+      "startDate": "2031-03-14",
+      "endDate": "2031-03-20",
+      "showtimes": ["2031-03-14T19:00", "2031-03-15T15:30"],
+      "sourceUrl": "https://example.com/showtimes/the-example-film",
+      "confirmedAt": "2031-03-01",
+      "expiresAt": "2031-03-20",
+      "note": "Fictional example. One-week IMAX run; opening night is reserved seating."
+    }
+  ]
+}

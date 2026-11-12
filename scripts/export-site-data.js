@@ -10,7 +10,13 @@ import { fetchFrameworkArtists, fetchFrameworkEvents, normalizeFrameworkEvent } 
 import { fetchInsomniacEvents, INSOMNIAC_ADAPTER_VERIFIED, normalizeInsomniacEvent } from '../src/insomniac.js';
 import { applyPitcherStats, fetchDodgersHomeGames, fetchMlbPitcherStats, fetchMlbStandings } from '../src/mlb.js';
 import { selectMovieCandidates } from '../src/movieSelection.js';
-import { normalizeArtistName, rankCandidates } from '../src/ranking.js';
+import { normalizeArtistName, rankCandidates, selectPublishedConcerts } from '../src/ranking.js';
+import { addPromoterEvidence, applyArtistTags, knownArtistNames } from '../src/discovery.js';
+import { artistTagKey, resolveArtistTags } from '../src/artistTags.js';
+import { readTagCache, writeTagCache } from '../src/artistTagsCache.js';
+import { withDeadline } from '../src/deadline.js';
+import { applyEngagements, engagementSourceHealth } from '../src/movieEngagements.js';
+import { fetchDestinationEvents } from '../src/destinationEvents.js';
 import { buildOverviewBuckets } from '../src/overview.js';
 import {
   enrichSportsGames,
@@ -18,8 +24,10 @@ import {
   fetchTicketmasterSportsEvents,
   joinSportsTickets,
   normalizeSeatGeekSportsEvent,
-  normalizeTicketmasterSportsEvent
+  normalizeTicketmasterSportsEvent,
+  sportsLeagueConfig
 } from '../src/sports.js';
+import { applyNflStandings, fetchNflStandings, fetchRamsHomeGames, nflSeasonsForWindow } from '../src/nfl.js';
 import {
   eventWithinRadius,
   fetchSeatGeekEvents,
@@ -47,14 +55,9 @@ import { buildFeedbackSnapshot, mergeSnapshotIndex } from '../src/feedbackSnapsh
 import { buildTasteProfile } from '../src/tasteProfile.js';
 import { DEFAULT_CHANGES_TOP_N, buildChangesSinceRefresh } from '../src/projectionChanges.js';
 import { updateProjectionHistory } from '../src/recommendationHistory.js';
-import {
-  applyFeedbackAdjustmentsToCandidates,
-  buildFeedbackReport,
-  deriveFeedbackState,
-  loadFeedbackConfig,
-  readFeedbackJournal,
-  simulateFeedback
-} from '../src/feedback.js';
+import { FEEDBACK_POLICY } from '../src/feedbackPolicy.js';
+import { deriveFeedbackState, loadFeedbackConfig, readFeedbackJournal } from '../src/feedback.js';
+import { buildFeedbackReview } from '../src/feedbackReview.js';
 
 loadEnv();
 
@@ -145,12 +148,31 @@ const ticketmaster = await optionalSource('ticketmaster', Boolean(process.env.TI
 });
 const framework = await optionalSource('framework', true, async () => {
   const raw = await fetchFrameworkEvents({ startDate, endDate });
-  return { items: raw.map((event) => normalizeFrameworkEvent(event, generatedAt)), warnings: [] };
+  const known = knownArtistNames(artistSnapshot, frameworkArtists.items);
+  return { items: raw.map((event) => normalizeFrameworkEvent(event, generatedAt, { knownArtistNames: known })), warnings: [] };
 });
 const insomniac = await optionalSource('insomniac', true, async () => {
   if (!INSOMNIAC_ADAPTER_VERIFIED) throw new Error('Insomniac parser is unverified.');
-  const raw = await fetchInsomniacEvents({ startDate, endDate });
-  return { items: raw.map((event) => normalizeInsomniacEvent(event, generatedAt)), warnings: [] };
+  const insomniacDiagnostics = { warnings: [] };
+  const raw = await fetchInsomniacEvents({ startDate, endDate, diagnostics: insomniacDiagnostics });
+  const known = knownArtistNames(artistSnapshot, frameworkArtists.items);
+  return { items: raw.map((event) => normalizeInsomniacEvent(event, generatedAt, { knownArtistNames: known })), warnings: insomniacDiagnostics.warnings ?? [] };
+});
+// Named festivals worth travelling for (CRSSD, Proper NYE), found by exact
+// name through the ticketing APIs regardless of the home radius.
+const destination = await optionalSource('destination-events', Boolean(process.env.TICKETMASTER_API_KEY || process.env.SEATGEEK_CLIENT_ID), async () => {
+  const result = await fetchDestinationEvents({
+    config,
+    startDate,
+    endDate,
+    ticketmasterApiKey: process.env.TICKETMASTER_API_KEY ?? null,
+    seatGeekClientId: process.env.SEATGEEK_CLIENT_ID ?? null,
+    edmtrainClientKey: config.edmtrain.enabled ? process.env.EDMTRAIN_CLIENT_KEY ?? null : null,
+    artistSnapshot,
+    retrievedAt: generatedAt
+  });
+  await writePrivateJson(resolve('data/taste/destination-events.json'), { generatedAt: generatedAt.toISOString(), pending: result.pending, audit: result.audit, sources: result.sources });
+  return { items: result.events, warnings: result.warnings };
 });
 const edmtrain = await optionalSource('edmtrain', config.edmtrain.enabled && Boolean(process.env.EDMTRAIN_CLIENT_KEY), async () => {
   const items = await fetchEdmtrainEvents({
@@ -197,28 +219,39 @@ const mlb = await optionalSource('mlb', sportsConfig.enabled !== false, async ()
   }
   return { items: enrichSportsGames(games, standings, sportsSourceConfig, { now: generatedAt }), warnings };
 });
+// Rams home games from ESPN's public schedule. Ticket sources stay
+// observations only; an unticketed game is still a valid candidate.
+const nflEnabled = sportsConfig.enabled !== false && sportsLeagueConfig(sportsSourceConfig, 'nfl').enabled !== false;
+const nfl = await optionalSource('nfl', nflEnabled, async () => {
+  const warnings = [];
+  let games = await fetchRamsHomeGames({ startDate, endDate, timezone: config.timezone, warnings });
+  let standings = new Map();
+  try {
+    standings = await fetchNflStandings({ season: nflSeasonsForWindow(startDate, endDate)[0] });
+    games = applyNflStandings(games, standings);
+  } catch (error) {
+    warnings.push(`NFL standings unavailable: ${error.message}`);
+  }
+  return { items: enrichSportsGames(games, standings, sportsSourceConfig, { now: generatedAt }), warnings };
+});
 const sportsSeatGeek = await optionalSource('sports-seatgeek', Boolean(process.env.SEATGEEK_CLIENT_ID), async () => {
-  const raw = await fetchSeatGeekSportsEvents({
-    clientId: process.env.SEATGEEK_CLIENT_ID,
-    startDate,
-    endDate,
-    config: sportsSourceConfig,
-    maxPages: sportsConfig.maxTicketPages
-  });
+  const request = { clientId: process.env.SEATGEEK_CLIENT_ID, startDate, endDate, config: sportsSourceConfig, maxPages: sportsConfig.maxTicketPages };
+  const raw = [
+    ...await fetchSeatGeekSportsEvents(request),
+    ...(nflEnabled ? await fetchSeatGeekSportsEvents({ ...request, league: 'nfl' }) : [])
+  ];
   return { items: raw.map((event) => normalizeSeatGeekSportsEvent(event, generatedAt)), warnings: [] };
 });
 const sportsTicketmaster = await optionalSource('sports-ticketmaster', Boolean(process.env.TICKETMASTER_API_KEY), async () => {
-  const raw = await fetchTicketmasterSportsEvents({
-    apiKey: process.env.TICKETMASTER_API_KEY,
-    startDate,
-    endDate,
-    config: sportsSourceConfig,
-    maxPages: sportsConfig.maxTicketPages
-  });
+  const request = { apiKey: process.env.TICKETMASTER_API_KEY, startDate, endDate, config: sportsSourceConfig, maxPages: sportsConfig.maxTicketPages };
+  const raw = [
+    ...await fetchTicketmasterSportsEvents(request),
+    ...(nflEnabled ? await fetchTicketmasterSportsEvents({ ...request, league: 'nfl' }) : [])
+  ];
   return { items: raw.map((event) => normalizeTicketmasterSportsEvent(event, generatedAt)), warnings: [] };
 });
 let sports = joinSportsTickets(
-  mlb.items,
+  [...mlb.items, ...nfl.items],
   [...sportsSeatGeek.items, ...sportsTicketmaster.items],
   sportsSourceConfig,
   generatedAt
@@ -247,12 +280,41 @@ const tmdb = await optionalSource('tmdb', Boolean(process.env.TMDB_ACCESS_TOKEN 
   });
   return { items: selected, warnings: [] };
 });
+// Reviewed screening confirmations turn a film from "format not yet
+// confirmed" into something attendable. A missing file means none yet.
+let engagementInput;
+try {
+  engagementInput = await readJsonIfPresent(resolve('config/movie-engagements.json'));
+} catch {
+  engagementInput = 'invalid';
+}
+const movieEngagements = applyEngagements(tmdb.items, engagementInput, { priorityTheaters: movieConfig.priorityTheaters, now: generatedAt });
+sourceHealth.push(engagementSourceHealth(movieEngagements));
 printTiming('MLB/TMDB', Date.now() - mlbTmdbStartedAt);
 
 const normalizationStartedAt = Date.now();
 const deduplication = {};
-const canonicalConcerts = deduplicateCandidates([...seatGeek.items, ...ticketmaster.items, ...framework.items, ...insomniac.items], deduplication);
-const rankedSnapshot = addPromoterEvidence(artistSnapshot, [...framework.items, ...insomniac.items], frameworkArtists.items);
+const canonicalConcerts = deduplicateCandidates([...seatGeek.items, ...ticketmaster.items, ...framework.items, ...insomniac.items, ...destination.items], deduplication);
+const discoveredSnapshot = addPromoterEvidence(artistSnapshot, [...framework.items, ...insomniac.items], frameworkArtists.items);
+// Genre tags for artists the profile has never heard, from Last.fm when a key
+// is configured and MusicBrainz otherwise. Cached, and capped per run.
+const artistTags = await optionalSource('artist-tags', true, async () => {
+  // The default path resolves to the canonical data directory even when
+  // this runs from a preview copy, so lookups are never repeated.
+  const tagCachePath = undefined;
+  const names = discoveredSnapshot.artists.filter((artist) => artist.origin === 'promoter').map((artist) => artist.name);
+  const result = await resolveArtistTags(names, {
+    lastFmApiKey: process.env.LASTFM_API_KEY ?? null,
+    cache: await readTagCache(tagCachePath),
+    now: generatedAt,
+    maxLookups: config.artistTagLookupsPerRun
+  });
+  await writeTagCache(tagCachePath, result.cache);
+  const tagged = [...result.tags.values()].filter((tags) => tags.length).length;
+  return { items: Array.from({ length: tagged }), warnings: result.warnings, value: result };
+// Keyless lookups run at one request a second, so this source gets more room.
+}, { deadlineMs: 300_000 });
+const rankedSnapshot = applyArtistTags(discoveredSnapshot, artistTags.value?.tags ?? new Map(), artistTagKey);
 const edmtrainEnrichment = enrichEventsWithEdmtrain(canonicalConcerts, edmtrain.items, rankedSnapshot);
 const allConcerts = edmtrainEnrichment.events;
 await writePrivateJson(resolve('data/taste/edmtrain-audit.json'), {
@@ -273,26 +335,18 @@ if (edmtrainHealth) {
     unmatchedAuditOnly: edmtrainEnrichment.unmatchedCount
   };
 }
-const rankedAll = rankCandidates(allConcerts, rankedSnapshot, config, generatedAt);
 const feedbackConfig = await loadFeedbackConfig(resolve('config/feedback.json'));
 const feedbackJournal = await readFeedbackJournal(resolve(feedbackConfig.journalPath));
-const feedbackState = deriveFeedbackState(feedbackJournal.records, { journalIssues: feedbackJournal.issues, config: feedbackConfig, now: generatedAt });
-const feedbackSimulation = simulateFeedback({
-  projection: { generatedAt: generatedAt.toISOString(), horizon: { days: config.upcomingHorizonDays }, events: rankedAll, sports, movies: [] },
-  state: feedbackState,
-  config: feedbackConfig,
-  now: generatedAt,
-  planAheadMinScore: config.overviewPlanAheadMinScore
-});
-const feedbackRankedAll = applyFeedbackAdjustmentsToCandidates(rankedAll, feedbackSimulation, feedbackConfig);
-sports = applyFeedbackAdjustmentsToCandidates(sports, feedbackSimulation, feedbackConfig);
-const ranked = feedbackRankedAll
-  .filter((candidate) => !candidate.ranking.excluded && candidate.matchedArtists.length > 0)
-  .slice(0, 120);
+const feedbackState = deriveFeedbackState(feedbackJournal.records, { journalIssues: feedbackJournal.issues });
+// Feedback never changes what is published. The projection carries canonical
+// scores; the site lays each person's feedback over them at read time (see
+// src/feedbackPolicy.js).
+const rankedAll = rankCandidates(allConcerts, rankedSnapshot, config, generatedAt);
+const ranked = selectPublishedConcerts(rankedAll);
 const deterministicOverviewBuckets = buildOverviewBuckets(
   ranked.map((candidate) => toDisplayEvent(candidate)),
   sports.map((game) => toDisplaySportsGame(game)),
-  { now: generatedAt, currentDays: 14, planAheadMinScore: config.overviewPlanAheadMinScore, horizonDays: config.upcomingHorizonDays }
+  { now: generatedAt, currentDays: 14, currentMinScore: config.minimumUtility, planAheadMinScore: config.overviewPlanAheadMinScore, horizonDays: config.upcomingHorizonDays }
 );
 const deterministicOverview = [...deterministicOverviewBuckets.current, ...deterministicOverviewBuckets.planAhead];
 const overviewMusicIds = deterministicOverview.filter((item) => item.vertical === 'music').map((item) => item.id);
@@ -462,8 +516,8 @@ const exportData = {
     semanticInsight: semanticEnrichment.byId.get(String(candidate.id)) ?? null
   }, enhancementFor(eventEnhancement.byId.get(candidate.id)))),
   sports: sports.map((game) => toDisplaySportsGame(game, enhancementFor(sportsEnhancement.byId.get(game.id)))),
-  movies: tmdb.items,
-  editorialCandidates: buildEditorialCandidates({ events: ranked, sports, movies: tmdb.items })
+  movies: movieEngagements.movies,
+  editorialCandidates: buildEditorialCandidates({ events: ranked, sports, movies: movieEngagements.movies })
 };
 // Public feedback snapshots carry event identity plus an opaque id; the
 // provider-native evidence entities stay in the private snapshot index and
@@ -483,6 +537,7 @@ for (const [displayItems, vertical, sourceItems] of [[exportData.events, 'music'
 const overviewBuckets = buildOverviewBuckets(exportData.events, exportData.sports, {
   now: generatedAt,
   currentDays: 14,
+  currentMinScore: config.minimumUtility,
   planAheadMinScore: config.overviewPlanAheadMinScore,
   horizonDays: config.upcomingHorizonDays
 });
@@ -493,14 +548,20 @@ exportData.overviewAdvisory = overviewAdvisory;
 exportData.tasteProfile = buildTasteProfile(artistSnapshot, {
   feedbackState
 });
-exportData.feedbackLearning = {
-  applied: feedbackConfig.enabled && feedbackConfig.applyToPublishedRanking,
-  policyVersion: feedbackConfig.policyVersion,
-  eligibleSignalCount: feedbackState.signalSummary.eligibleCount,
-  capUsage: feedbackSimulation.capUsage,
-  adjustedCandidateCount: feedbackSimulation.evaluations.filter((evaluation) => evaluation.thresholdMet && evaluation.proposedAdjustment !== 0 && !evaluation.blockedByHardExclusion).length
-};
-await writePrivateJson(resolve(feedbackConfig.reportPath), buildFeedbackReport({ state: feedbackState, simulation: feedbackSimulation, config: feedbackConfig }));
+// What the site needs to re-run the shortlist over feedback-adjusted scores.
+exportData.rankingConfig = { currentMinScore: config.minimumUtility, planAheadMinScore: config.overviewPlanAheadMinScore, currentDays: 14 };
+exportData.feedbackLearning = { applied: false, mode: 'read-time-overlay', policyVersion: FEEDBACK_POLICY.version };
+// Private report: what the local journal's feedback would move on this
+// projection. The site computes the same thing live from its own records.
+await writePrivateJson(resolve(feedbackConfig.reportPath), {
+  ...buildFeedbackReview({
+    projection: exportData,
+    records: feedbackConfig.enabled ? feedbackState.activeRecords : [],
+    now: generatedAt,
+    currentMinScore: config.minimumUtility,
+    planAheadMinScore: config.overviewPlanAheadMinScore
+  })
+});
 
 const acceptedProjectionPath = valueAfterFlag('--accepted-projection') ?? process.env.ACCEPTED_PROJECTION_PATH ?? null;
 if (acceptedProjectionPath) {
@@ -687,7 +748,7 @@ function uniqueArtistWatchlist(artists) {
   return result;
 }
 
-async function optionalSource(source, configured, callback) {
+async function optionalSource(source, configured, callback, { deadlineMs = Number(process.env.TASTE_SOURCE_DEADLINE_MS) || 120_000 } = {}) {
   const startedAt = Date.now();
   const reportsEventEvidence = ['ticketmaster', 'framework', 'insomniac'].includes(source);
   if (!configured) {
@@ -712,7 +773,7 @@ async function optionalSource(source, configured, callback) {
     return { items: [], warnings: [] };
   }
   try {
-    const result = await callback();
+    const result = await withDeadline(callback(), deadlineMs, source);
     const health = {
       source,
       status: result.warnings.length ? 'partial' : 'active',
@@ -753,46 +814,6 @@ async function optionalSource(source, configured, callback) {
     });
     return { items: [], warnings: [error.message] };
   }
-}
-
-function addPromoterEvidence(snapshot, promoterEvents, rosterArtists = []) {
-  const artists = (snapshot.artists ?? []).map((artist) => ({ ...artist }));
-  const names = new Set(artists.map((artist) => normalizeArtistName(artist.name)));
-  const maximumSeed = Math.max(1, ...artists.map((artist) => artist.seedStrength ?? 0));
-  for (const artist of rosterArtists) {
-    addPromoterArtist(artists, names, maximumSeed, artist.name, 'Framework', artist.sourceUrl, 'framework-roster');
-  }
-  for (const event of promoterEvents) {
-    const promoter = event.source === 'insomniac' ? 'Insomniac' : 'Framework';
-    for (const performer of event.performers) {
-      addPromoterArtist(artists, names, maximumSeed, performer.name, promoter, event.sourceUrl, 'promoter-event');
-    }
-  }
-  return { ...snapshot, artists, artistCount: artists.length };
-}
-
-function addPromoterArtist(artists, names, maximumSeed, name, promoter, sourceUrl = null, evidenceType = 'promoter-event') {
-  const key = normalizeArtistName(name);
-  if (!key) return;
-  if (names.has(key)) {
-    const existing = artists.find((artist) => normalizeArtistName(artist.name) === key);
-    if (existing?.origin === 'promoter') {
-      existing.discoveryEvidence ??= [];
-      if (!existing.discoveryEvidence.some((evidence) => evidence.type === evidenceType && evidence.promoter === promoter)) {
-        existing.discoveryEvidence.push({ type: evidenceType, promoter, sourceUrl });
-      }
-    }
-    return;
-  }
-  names.add(key);
-  artists.push({
-    spotifyArtistId: null,
-    name: String(name).trim(),
-    seedStrength: maximumSeed * 0.32,
-    evidence: [],
-    origin: 'promoter',
-    discoveryEvidence: [{ type: evidenceType, promoter, sourceUrl }]
-  });
 }
 
 function localIsoDate(date, timezone) {

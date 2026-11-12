@@ -45,9 +45,11 @@ const MUSIC_PASSES = {
   },
 } as const;
 
+const SPORTS_LEAGUE_NOTE = " `league` is mlb for a Dodgers home game and nfl for a Rams home game; pitchingScore applies only to mlb, so never mention pitching for an nfl game.";
+
 const SPORTS_PASSES = {
-  personalFit: MUSIC_PASSES.personalFit,
-  recommendation: MUSIC_PASSES.recommendation,
+  personalFit: { ...MUSIC_PASSES.personalFit, instruction: MUSIC_PASSES.personalFit.instruction + SPORTS_LEAGUE_NOTE },
+  recommendation: { ...MUSIC_PASSES.recommendation, instruction: MUSIC_PASSES.recommendation.instruction + SPORTS_LEAGUE_NOTE },
   urgency: MUSIC_PASSES.urgency,
   hassle: MUSIC_PASSES.hassle,
 } as const;
@@ -57,7 +59,8 @@ export async function enhanceHostedMusic(
   personalContext: Record<string, unknown>,
   requiredIds: string[],
 ): Promise<AdvisoryResult> {
-  const selected = prioritized(events, requiredIds, positive(personalContext.maxEnhancedEvents, 16));
+  // A candidate known only from an EDMTrain announcement is never model input.
+  const selected = prioritized(events.filter((event) => !announcementOnly(event)), requiredIds, positive(personalContext.maxEnhancedEvents, 16));
   const vectors = selected.map((event, index) => buildHostedMusicVector(event, index));
   return runPasses({
     selected,
@@ -159,7 +162,7 @@ async function runPasses({
 }: {
   selected: AdvisoryItem[];
   vectors: Array<Record<string, unknown> & { ref: string }>;
-  definitions: typeof MUSIC_PASSES;
+  definitions: { [Pass in keyof typeof MUSIC_PASSES]: { instruction: string; fields: (typeof MUSIC_PASSES)[Pass]["fields"] } };
   personalContext: Record<string, unknown>;
   role: string;
   eligible: (pass: string, vector: Record<string, unknown>) => boolean;
@@ -271,11 +274,13 @@ export function buildHostedMusicVector(event: AdvisoryItem, index: number): Reco
   };
 }
 
-function sportsVector(game: AdvisoryItem, index: number): Record<string, unknown> & { ref: string } {
+export function sportsVector(game: AdvisoryItem, index: number): Record<string, unknown> & { ref: string } {
   const ranking = record(game.ranking);
   const context = record(game.sportsContext);
   return {
     ref: `sports-${index + 1}`,
+    // Schedule-derived only: MLB Stats API for mlb, ESPN's schedule for nfl.
+    league: sportsLeague(game),
     daysUntil: daysUntil(game.startLocal),
     opponentQuality: ranking.opponentQuality ?? 0,
     rivalryTier: context.rivalryTier ?? "none",
@@ -290,7 +295,7 @@ function sportsVector(game: AdvisoryItem, index: number): Record<string, unknown
 }
 
 function fieldsForPass(name: string, candidate: Record<string, unknown>): Record<string, unknown> {
-  const common = ["ref", "daysUntil"];
+  const common = ["ref", "league", "daysUntil"];
   const keys = name === "personalFit"
     ? [...common, "eventType", "dayOfWeek", "startPeriod", "providerContext", "eventTitle", "venueName", "city", "namedPerformerCount", "adjacentEvidence", "pinned", "deterministicFit", "opponentQuality", "rivalryTier", "pitchingScore", "leverageScore", "confidence"]
     : name === "recommendation"
@@ -392,7 +397,7 @@ function editorialCandidates(projection: Record<string, unknown>) {
   const sports = array(projection.sports).map(record).slice(0, 8).map((game) => ({
     ref: game.id,
     vertical: "sports",
-    provenance: "mlb",
+    provenance: game.source === "espn" ? "espn" : "mlb",
     title: `${record(game.awayTeam).name ?? "Away"} at ${record(game.homeTeam).name ?? "Home"}`,
     startLocal: game.startLocal,
     venue: record(game.venue).name ?? null,
@@ -415,6 +420,7 @@ function editorialCandidates(projection: Record<string, unknown>) {
 function deterministicEditorial(projection: Record<string, unknown>): Record<string, unknown> {
   const events = array(projection.events);
   const sports = array(projection.sports);
+  const teams = [...new Set(sports.map((game) => sportsLeague(record(game) as AdvisoryItem) === "nfl" ? "Rams" : "Dodgers"))].sort().join(" and ") || "Dodgers";
   const direct = events.filter((event) => array(record(event).matchedArtists)
     .some((artist) => ["source", "top-items"].includes(String(record(artist).origin)))).length;
   const verdict = direct >= 5 || sports.length >= 3 ? "go out" : direct + events.length >= 3 ? "maybe" : "do not waste your time";
@@ -427,17 +433,30 @@ function deterministicEditorial(projection: Record<string, unknown>): Record<str
     headline: verdict === "go out" ? "A few dates deserve your attention." : verdict === "maybe" ? "A watchlist, not a mandate." : "Nothing earns the trip yet.",
     verdict,
     lead: events.length || sports.length
-      ? `The current horizon has ${events.length} ranked music dates and ${sports.length} Dodgers home games; the deterministic ranking remains the decision authority.`
+      ? `The current horizon has ${events.length} ranked music dates and ${sports.length} ${teams} home games; the deterministic ranking remains the decision authority.`
       : "The current horizon is quiet enough that staying home remains a reasonable call.",
     decisionNotes: [
       `${events.length} music candidates cleared the deterministic publication filter.`,
-      `${sports.length} Dodgers home games remain in a separate sports lane.`,
+      `${sports.length} ${teams} home games remain in a separate sports lane.`,
       `${array(projection.movies).length} movie candidates await independent format confirmation.`,
     ],
     skipCall: verdict === "do not waste your time" ? "Do not force a plan; the current evidence does not clear the personal-value bar." : "Skip anything that requires a weaker fit or unnecessary coordination.",
     caution: "Candidate identity, ordering, scores, and source health come only from the deterministic pipeline.",
     mentions: [],
   };
+}
+
+function sportsLeague(game: Record<string, unknown>): "mlb" | "nfl" {
+  const league = String(game.league ?? record(game.sportsContext).league ?? "").toLowerCase();
+  return league === "nfl" || String(game.id ?? "").startsWith("nfl:") ? "nfl" : "mlb";
+}
+
+function announcementOnly(event: AdvisoryItem): boolean {
+  const sources = [
+    ...array(event.sourceOccurrences).map((occurrence) => String(record(occurrence).source ?? "")),
+    ...array(event.sources).map(String),
+  ].filter(Boolean);
+  return sources.length > 0 && sources.every((source) => source === "edmtrain");
 }
 
 function prioritized(items: AdvisoryItem[], requiredIds: string[], limit: number): AdvisoryItem[] {

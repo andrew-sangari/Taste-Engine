@@ -1,4 +1,44 @@
-import { localDateDifference, localWeekdayIndex, weekdayForLocalDate } from './localDate.js';
+import { formatLocalDate, localDateDifference, localWeekdayIndex, weekdayForLocalDate } from './localDate.js';
+import { RAMS_TEAM_ID, SOFI_STADIUM } from './nfl.js';
+
+// League-specific settings that are not MLB's. MLB keeps reading the top-level
+// sports config unchanged; another league reads `config.<league>` over these
+// defaults and inherits the shared location and budget keys.
+const LEAGUE_DEFAULTS = {
+  nfl: {
+    enabled: true,
+    teamId: RAMS_TEAM_ID,
+    teamName: 'Los Angeles Rams',
+    homeVenueNames: [SOFI_STADIUM.name],
+    homeVenue: { lat: SOFI_STADIUM.lat, lon: SOFI_STADIUM.lon },
+    seatGeekTaxonomy: 'football',
+    // Eight or nine regular-season home dates a year against MLB's 81: each
+    // one starts from a higher floor, and a 70,000-seat building starts from
+    // a higher hassle floor.
+    baseInterest: 42,
+    baseHassle: 3,
+    rivalries: {
+      '25': { tier: 'high', label: '49ers rivalry', division: true },
+      '26': { tier: 'medium', label: 'Seahawks rivalry', division: true },
+      '22': { tier: 'medium', label: 'Cardinals rivalry', division: true }
+    }
+  }
+};
+const SHARED_CONFIG_KEYS = ['home', 'searchRadiusMiles', 'maxTicketPriceUsd', 'maxTicketPages', 'featuredInterestThreshold'];
+
+export function sportsLeagueOf(game = {}) {
+  const league = String(game?.league ?? game?.sportsContext?.league ?? '').toLowerCase();
+  if (league === 'nfl' || String(game?.id ?? '').startsWith('nfl:')) return 'nfl';
+  return 'mlb';
+}
+
+export function sportsLeagueConfig(config = {}, league = 'mlb') {
+  const defaults = LEAGUE_DEFAULTS[league];
+  if (!defaults) return config ?? {};
+  if (config?.league === league) return config;
+  const shared = Object.fromEntries(SHARED_CONFIG_KEYS.filter((key) => config?.[key] !== undefined).map((key) => [key, config[key]]));
+  return { ...defaults, ...shared, ...(config?.[league] ?? {}), league };
+}
 
 const SEATGEEK_EVENTS_URL = 'https://api.seatgeek.com/2/events';
 const TICKETMASTER_EVENTS_URL = 'https://app.ticketmaster.com/discovery/v2/events.json';
@@ -8,16 +48,18 @@ export async function fetchSeatGeekSportsEvents({
   startDate,
   endDate,
   config,
+  league = null,
   maxPages = 3,
   fetchImpl = fetch
 } = {}) {
   if (!clientId) throw new Error('SEATGEEK_CLIENT_ID is not configured.');
+  config = sportsLeagueConfig(config, league ?? config?.league);
   const events = [];
   for (let page = 1; page <= maxPages; page += 1) {
     const url = new URL(SEATGEEK_EVENTS_URL);
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('q', config.teamName ?? 'Los Angeles Dodgers');
-    url.searchParams.set('taxonomies.name', 'baseball');
+    url.searchParams.set('taxonomies.name', config.seatGeekTaxonomy ?? 'baseball');
     url.searchParams.set('lat', String(config.home?.lat ?? 34.0522));
     url.searchParams.set('lon', String(config.home?.lon ?? -118.2437));
     url.searchParams.set('range', `${config.searchRadiusMiles ?? 60}mi`);
@@ -39,10 +81,12 @@ export async function fetchTicketmasterSportsEvents({
   startDate,
   endDate,
   config,
+  league = null,
   maxPages = 3,
   fetchImpl = fetch
 } = {}) {
   if (!apiKey) throw new Error('TICKETMASTER_API_KEY is not configured.');
+  config = sportsLeagueConfig(config, league ?? config?.league);
   const events = [];
   for (let page = 0; page < maxPages; page += 1) {
     const url = new URL(TICKETMASTER_EVENTS_URL);
@@ -123,6 +167,7 @@ export function enrichSportsGames(games, standings, config, {
   pitcherStats = new Map()
 } = {}) {
   return games.map((game) => {
+    if (sportsLeagueOf(game) === 'nfl') return enrichNflGame(game, standings, sportsLeagueConfig(config, 'nfl'), now);
     const opponent = standings.get(String(game.awayTeam?.id));
     const rivalry = config.rivalries?.[String(game.awayTeam?.id)] ?? { tier: 'none', label: null };
     const probablePitchers = {
@@ -184,6 +229,7 @@ export function enrichSportsGames(games, standings, config, {
 }
 
 export function scoreSportsGame(game, config, now = new Date()) {
+  if (sportsLeagueOf(game) === 'nfl') return scoreNflGame(game, sportsLeagueConfig(config, 'nfl'), now);
   const opponentQuality = opponentQualityScore(game.sportsContext);
   const opponentStakesScore = opponentStakesScoreFor(game.sportsContext);
   const rivalryScore = ({ high: 15, medium: 8, low: 3, none: 0 }[game.sportsContext?.rivalryTier] ?? 0);
@@ -269,6 +315,7 @@ export function sportsTicketUrgency(observations, startLocal, now = new Date()) 
 }
 
 export function ticketMatchesGame(ticket, game) {
+  if (sportsLeagueOf(game) === 'nfl') return nflTicketMatchesGame(ticket, game);
   if (!ticket.startLocal || !game.startLocal || ticket.startLocal.slice(0, 10) !== game.startLocal.slice(0, 10)) return false;
   if (!venueMatches(ticket.venue, game.venue)) return false;
   const haystack = normalizeTeamText([ticket.title, ...(ticket.teamNames ?? [])].join(' '));
@@ -276,6 +323,305 @@ export function ticketMatchesGame(ticket, game) {
   const opponentKnown = teamMatches(haystack, game.awayTeam);
   const anyOpponentMentioned = game.awayTeam?.name && normalizeTeamText(haystack).includes(normalizeTeamText(game.awayTeam.name).split(' ')[0]);
   return opponentKnown || !anyOpponentMentioned;
+}
+
+// ── NFL ────────────────────────────────────────────────────────────────────
+// Same contract as MLB (interest, hassle, urgency, and confidence stay
+// separate; an unticketed game keeps unknown urgency) with football inputs:
+// opponent record, division rivalry, national kickoff window, and playoff-race
+// leverage. Records from the first weeks of a season are too small a sample
+// to rank on, so they are carried as context and scored only once established.
+const NFL_ESTABLISHED_GAMES = 4;
+const NFL_PRIMETIME_SCORES = { SNF: 8, MNF: 7, TNF: 6 };
+const NON_GAME_LISTING = /\b(parking|tailgate|tailgating|shuttle|bus|tour|deposit|package|pass|passes|voucher|hospitality|experience)\b/;
+
+function enrichNflGame(game, standings, config, now) {
+  const opponent = standings?.get?.(String(game.awayTeam?.id)) ?? null;
+  const home = standings?.get?.(String(game.homeTeam?.id)) ?? null;
+  const configured = config.rivalries?.[String(game.awayTeam?.id)] ?? null;
+  const homeDivision = home?.division ?? game.homeTeam?.division ?? null;
+  const opponentDivision = opponent?.division ?? game.awayTeam?.division ?? null;
+  const sameDivision = Boolean(homeDivision?.name && opponentDivision?.name && homeDivision.name === opponentDivision.name);
+  const divisionGame = sameDivision || configured?.division === true;
+  const rivalry = configured ?? (sameDivision ? { tier: 'medium', label: null } : { tier: 'none', label: null });
+  const divisionName = sameDivision ? compactDivision(homeDivision.name) : null;
+  const schedule = game.scheduleStatus ?? {
+    detailedState: game.status ?? 'Scheduled',
+    changed: false,
+    delayed: false,
+    postponed: false,
+    rescheduled: false
+  };
+  const kickoffWindow = game.kickoff ?? null;
+  const weekLabel = game.season?.weekLabel ?? null;
+  const opponentTags = nflOpponentTags(opponent);
+  const sportsContext = {
+    league: 'nfl',
+    opponentWinPct: opponent?.winPct ?? null,
+    opponentRecord: opponent?.record ?? null,
+    opponentGamesPlayed: opponent?.gamesPlayed ?? null,
+    opponentLeagueRank: opponent?.leagueRank ?? null,
+    opponentDivisionRank: opponent?.divisionRank ?? null,
+    opponentLast10: null,
+    opponentLastTenRecord: null,
+    opponentStreak: opponent?.streak ?? null,
+    opponentWildCardGamesBack: null,
+    opponentPlayoffGamesBack: opponent?.playoffGamesBack ?? null,
+    opponentRunDifferential: null,
+    opponentPointDifferential: opponent?.pointDifferential ?? null,
+    opponentHomeRecord: opponent?.homeRecord ?? null,
+    opponentAwayRecord: opponent?.awayRecord ?? null,
+    opponentAbove500Record: null,
+    opponentLeagueName: opponent?.league?.name ?? null,
+    opponentDivisionName: opponentDivision?.name ?? null,
+    homeRecord: home?.record ?? null,
+    homeLeagueRank: home?.leagueRank ?? null,
+    homePlayoffGamesBack: home?.playoffGamesBack ?? null,
+    rivalryTier: rivalry.tier ?? 'none',
+    divisionGame,
+    divisionName,
+    // No football analogue. The fields stay so MLB-shaped consumers can read
+    // them without branching, and they never score.
+    probablePitchers: { home: null, away: null, confirmed: false },
+    pitcherMatchupTier: 'unknown',
+    seriesPosition: { label: weekLabel, gameNumber: null, gameCount: null },
+    kickoffWindow,
+    broadcasts: game.broadcasts ?? [],
+    seasonType: game.season?.type ?? null,
+    week: game.season?.week ?? null,
+    opponentTags,
+    schedule,
+    playoffLeverage: nflPlayoffLeverage(game, opponent, home, divisionGame),
+    gameContext: {
+      opponent: {
+        tags: opponentTags,
+        record: opponent?.record ?? null,
+        leagueRank: opponent?.leagueRank ?? null,
+        divisionRank: opponent?.divisionRank ?? null,
+        pointDifferential: opponent?.pointDifferential ?? null,
+        streak: opponent?.streak ?? null
+      },
+      kickoff: kickoffWindow,
+      schedule
+    }
+  };
+  const tags = nflTags(game, rivalry, sportsContext);
+  const ranking = scoreNflGame({ ...game, sportsContext, tags }, config, now);
+  return { ...game, sportsContext, tags, ranking };
+}
+
+function scoreNflGame(game, config, now = new Date()) {
+  const context = game.sportsContext ?? {};
+  const established = nflRecordEstablished(context.opponentGamesPlayed);
+  const opponentQuality = established && Number.isFinite(context.opponentWinPct)
+    ? Math.max(0, Math.min(20, Math.round((context.opponentWinPct - 0.3) * 40)))
+    : 0;
+  const opponentStakesScore = established ? nflOpponentStakesScore(context) : 0;
+  const rivalryScore = ({ high: 15, medium: 8, low: 3, none: 0 }[context.rivalryTier] ?? 0);
+  const primetimeScore = context.seasonType === 'postseason'
+    ? 0
+    : NFL_PRIMETIME_SCORES[context.kickoffWindow?.code] ?? (context.kickoffWindow?.primetime ? 5 : 0);
+  const leverageScore = ({ high: 10, medium: 6, low: 2, unknown: 0 }[context.playoffLeverage] ?? 0);
+  const convenienceScore = dateConvenience(game.startLocal);
+  const hassle = nflHassle(game, config);
+  const hassleScore = hassle.score;
+  const baseInterest = Number.isFinite(config.baseInterest) ? config.baseInterest : LEAGUE_DEFAULTS.nfl.baseInterest;
+  const interestScore = Math.min(100, baseInterest + opponentQuality + opponentStakesScore + rivalryScore + primetimeScore + leverageScore + convenienceScore);
+  const urgency = sportsTicketUrgency(game.ticketObservations ?? [], game.startLocal, now);
+  // High confidence needs an established opponent record and a settled kickoff.
+  const confidence = established && Number.isFinite(context.opponentWinPct) && !game.timeTbd && !game.dateTbd && !context.schedule?.changed ? 'high' : 'medium';
+  const whyYou = nflWhyYou(game, { opponentQuality, rivalryScore, primetimeScore, leverageScore, convenienceScore, hassleScore });
+  return {
+    excluded: false,
+    league: 'nfl',
+    interestScore,
+    utility: interestScore - hassleScore * 2,
+    opponentQuality,
+    opponentStakesScore,
+    rivalryScore,
+    pitchingScore: 0,
+    primetimeScore,
+    leverageScore,
+    leagueRelevanceScore: 0,
+    convenienceScore,
+    hassleScore,
+    hassleBreakdown: hassle,
+    hassleReasons: hassle.reasons,
+    urgency,
+    confidence,
+    whyYou
+  };
+}
+
+function nflRecordEstablished(gamesPlayed) {
+  return Number.isFinite(gamesPlayed) && gamesPlayed >= NFL_ESTABLISHED_GAMES;
+}
+
+function nflOpponentStakesScore(context = {}) {
+  let score = 0;
+  if (context.opponentDivisionRank === 1) score += 3;
+  else if (Number.isFinite(context.opponentLeagueRank) && context.opponentLeagueRank <= 7) score += 2;
+  if (Number.isFinite(context.opponentLeagueRank) && context.opponentLeagueRank <= 2) score += 2;
+  if (Number.isFinite(context.opponentPointDifferential)) {
+    if (context.opponentPointDifferential >= 75) score += 3;
+    else if (context.opponentPointDifferential >= 40) score += 2;
+    else if (context.opponentPointDifferential >= 15) score += 1;
+  }
+  if (/^W([4-9]|\d{2,})/i.test(String(context.opponentStreak ?? ''))) score += 1;
+  return Math.min(10, score);
+}
+
+function nflOpponentTags(opponent) {
+  if (!opponent || !nflRecordEstablished(opponent.gamesPlayed)) return [];
+  const tags = [];
+  if (opponent.record) tags.push(`${opponent.record} record`);
+  const conference = String(opponent.league?.name ?? '').match(/\b(American|National)\b/i)?.[1];
+  const conferenceLabel = conference ? `${conference[0].toUpperCase()}FC` : null;
+  if (opponent.divisionRank === 1) tags.push(`${compactDivision(opponent.division?.name) || 'Division'} leader`);
+  else if (Number.isFinite(opponent.leagueRank) && opponent.leagueRank <= 7) tags.push(`${conferenceLabel ? `${conferenceLabel} ` : ''}No. ${opponent.leagueRank} seed today`);
+  if (Number.isFinite(opponent.pointDifferential) && opponent.pointDifferential >= 40) tags.push(`+${Math.round(opponent.pointDifferential)} point differential`);
+  else if (/^W([4-9]|\d{2,})/i.test(String(opponent.streak ?? ''))) tags.push(`Won ${String(opponent.streak).slice(1)} straight`);
+  return tags.slice(0, 3);
+}
+
+// Leverage is read from today's standings and is recomputed on every refresh.
+// A team is "in the race" when it holds a playoff seed or sits within a game
+// and a half of the last one.
+function nflPlayoffLeverage(game, opponent, home, divisionGame) {
+  if (game.season?.type === 'postseason') return 'high';
+  const inRace = (team) => Boolean(team && nflRecordEstablished(team.gamesPlayed)
+    && ((Number.isFinite(team.playoffSeed) && team.playoffSeed <= 7) || (Number.isFinite(team.playoffGamesBack) && team.playoffGamesBack <= 1.5)));
+  const known = [opponent, home].some((team) => team && nflRecordEstablished(team.gamesPlayed));
+  if (!known) return 'unknown';
+  const week = Number(game.season?.week);
+  const month = Number(String(game.startLocal ?? '').slice(5, 7));
+  const late = Number.isFinite(week) && week > 0 ? week >= 14 : month === 12 || month === 1;
+  const middle = Number.isFinite(week) && week > 0 ? week >= 10 : month === 11;
+  const homeAlive = inRace(home);
+  const opponentAlive = inRace(opponent);
+  if (late && homeAlive && (opponentAlive || divisionGame)) return 'high';
+  if (late && (homeAlive || opponentAlive)) return 'medium';
+  if (middle && homeAlive && opponentAlive) return 'medium';
+  return 'low';
+}
+
+function nflTags(game, rivalry, context) {
+  const tags = [];
+  if (context.schedule?.changed) tags.push('Schedule update');
+  if (context.seasonType === 'postseason') tags.push('Playoff game');
+  if (rivalry.tier === 'high' && rivalry.label) tags.push(rivalry.label);
+  if (context.divisionGame) tags.push(context.divisionName ? `${context.divisionName} rival` : 'Division rival');
+  if (context.kickoffWindow?.primetime && context.kickoffWindow.label) tags.push(context.kickoffWindow.label);
+  if (context.seasonType !== 'postseason' && context.playoffLeverage === 'high') tags.push('Late-season leverage');
+  tags.push(...(context.opponentTags ?? []));
+  if (context.schedule?.dateTentative) tags.push('Date and kickoff TBD');
+  else if (game.timeTbd || game.dateTbd) tags.push('Kickoff TBD');
+  if (context.seriesPosition?.label) tags.push(context.seriesPosition.label);
+  if (!context.schedule?.dateTentative && [0, 6].includes(localWeekdayIndex(game.startLocal))) tags.push('Weekend game');
+  return [...new Set(tags)].slice(0, 7);
+}
+
+function nflHassle(game, config) {
+  const venueName = String(game.venue?.name ?? '').trim();
+  const logisticalReasons = [`${venueName || 'Stadium'} logistics`];
+  const commercialReasons = [];
+  let logistical = Number.isFinite(config.baseHassle) ? config.baseHassle : LEAGUE_DEFAULTS.nfl.baseHassle;
+  let commercial = 0;
+  const weekday = localWeekdayIndex(game.startLocal);
+  const hour = Number(String(game.startLocal ?? '').match(/T(\d{2}):/)?.[1]);
+  if (game.timeTbd || game.dateTbd) {
+    logistical += 2;
+    logisticalReasons.push(game.scheduleStatus?.dateTentative ? 'date and kickoff time are TBD' : 'kickoff time is TBD');
+  } else if (weekday >= 1 && weekday <= 5 && Number.isFinite(hour) && hour >= 15 && hour < 19) {
+    logistical += 1;
+    logisticalReasons.push('weeknight rush-hour kickoff');
+  }
+  if (config.homeVenueNames?.length && !config.homeVenueNames.some((name) => normalizeTeamText(venueName).includes(normalizeTeamText(name)))) {
+    logistical += 1;
+    logisticalReasons.push('venue confirmation pending');
+  }
+  const lowest = (game.ticketObservations ?? []).map((item) => Number(item.lowestPriceUsd)).filter(Number.isFinite).sort((a, b) => a - b)[0];
+  if (lowest != null) {
+    commercialReasons.push(`from $${lowest}`);
+    if (Number.isFinite(config.maxTicketPriceUsd) && lowest > config.maxTicketPriceUsd) {
+      commercial += 2;
+      commercialReasons.push('above ticket budget');
+    }
+  }
+  const personalContext = Math.max(-2, Math.min(2, Number(game.personalContextFriction ?? 0) || 0));
+  return {
+    score: Math.max(0, Math.min(10, logistical + commercial + personalContext)),
+    logistical,
+    commercial,
+    personalContext,
+    commercialUncertain: lowest == null,
+    reasons: [...logisticalReasons, ...commercialReasons]
+  };
+}
+
+// Every clause is backed by a field on the game: the opponent's current
+// record, the division, the kickoff window, or today's standings.
+function nflWhyYou(game, { opponentQuality, rivalryScore, primetimeScore, leverageScore, convenienceScore, hassleScore }) {
+  const context = game.sportsContext ?? {};
+  const tentative = context.schedule?.dateTentative === true;
+  // A flex game can still move a day, so its listed weekday is not asserted.
+  const day = tentative ? null : weekdayForLocalDate(game.startLocal);
+  const friction = hassleScore <= 3 ? '' : hassleScore <= 5 ? 'Manageable' : 'Higher-hassle';
+  const opponentName = game.awayTeam?.shortName || game.awayTeam?.name || 'visiting team';
+  const homeName = game.homeTeam?.shortName || game.homeTeam?.name || 'home';
+  const record = nflRecordEstablished(context.opponentGamesPlayed) && context.opponentRecord ? ` (${context.opponentRecord})` : '';
+  const reasons = [];
+  if (context.seasonType === 'postseason') reasons.push('a home playoff game');
+  if (rivalryScore >= 15) reasons.push(context.divisionGame ? 'a marquee division rivalry' : 'a marquee rivalry');
+  else if (context.divisionGame) reasons.push(context.divisionName ? `an ${context.divisionName} division matchup` : 'a division matchup');
+  if (opponentQuality >= 15) reasons.push('a top-tier opponent');
+  else if (opponentQuality >= 9) reasons.push('a winning opponent');
+  if (primetimeScore > 0 && context.kickoffWindow?.label) {
+    reasons.push(NFL_PRIMETIME_SCORES[context.kickoffWindow.code] ? `a prime-time ${context.kickoffWindow.label} window` : `a ${context.kickoffWindow.label}`);
+  }
+  if (context.seasonType !== 'postseason' && leverageScore >= 10) reasons.push('late-season playoff leverage');
+  if (!reasons.length && convenienceScore >= 8 && !tentative) reasons.push('a weekend kickoff');
+  if (!reasons.length) reasons.push(`one of the few ${homeName} home dates this season`);
+  const opening = [friction, day, 'home game'].filter(Boolean).join(' ');
+  const week = context.seriesPosition?.label;
+  const flexDays = (context.schedule?.flexDates ?? []).map((date) => formatLocalDate(date, { weekday: 'long', month: 'long', day: 'numeric' })).filter(Boolean);
+  const tbdNote = tentative
+    ? ` Date and kickoff time are not final under NFL flexible scheduling${flexDays.length >= 2 ? ` (${flexDays.join(' or ')})` : ''}.`
+    : game.timeTbd || game.dateTbd ? ' Kickoff time is still TBD.' : '';
+  const statusNote = context.schedule?.changed ? ` ${context.schedule.detailedState || 'Schedule update'} — check the NFL schedule before leaving.` : '';
+  return `${opening[0].toUpperCase()}${opening.slice(1)} against the ${opponentName}${record}: ${joinReasons(reasons)}.${week ? ` ${week}.` : ''}${tbdNote}${statusNote}`;
+}
+
+// A clean NFL join needs the same local date, the home building by name (the
+// stadium shares a campus with other venues, so proximity alone is not
+// enough), and both teams named as whole words. Parking, tailgate, and
+// package listings share the game's title but are not game tickets.
+function nflTicketMatchesGame(ticket, game) {
+  if (!ticket?.startLocal || !game?.startLocal) return false;
+  // A flex game may be listed on either candidate date until the NFL sets it.
+  const dates = new Set([game.startLocal.slice(0, 10), ...(game.scheduleStatus?.dateTentative ? game.scheduleStatus.flexDates ?? [] : [])]);
+  if (!dates.has(ticket.startLocal.slice(0, 10))) return false;
+  if (!nflVenueMatches(ticket.venue, game.venue)) return false;
+  const haystack = ` ${normalizeTeamText([ticket.title, ...(ticket.teamNames ?? [])].join(' '))} `;
+  if (NON_GAME_LISTING.test(haystack)) return false;
+  return teamNamedAsWords(haystack, game.homeTeam) && teamNamedAsWords(haystack, game.awayTeam);
+}
+
+function nflVenueMatches(left = {}, right = {}) {
+  const leftName = normalizeTeamText(left.name);
+  const rightName = normalizeTeamText(right.name);
+  if (leftName && rightName) return leftName.includes(rightName) || rightName.includes(leftName);
+  if (Number.isFinite(left.lat) && Number.isFinite(left.lon) && Number.isFinite(right.lat) && Number.isFinite(right.lon)) {
+    return distanceMiles(left.lat, left.lon, right.lat, right.lon) <= 0.5;
+  }
+  return false;
+}
+
+function teamNamedAsWords(haystack, team = {}) {
+  return [team.name, team.shortName]
+    .map(normalizeTeamText)
+    .filter((alias) => alias.length >= 4)
+    .some((alias) => haystack.includes(` ${alias} `));
 }
 
 function sportsTags(game, opponent, rivalry, context) {

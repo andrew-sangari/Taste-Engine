@@ -1,21 +1,21 @@
-import { getD1 } from "../db";
+import { getDatabase } from "../db/index.ts";
 import {
   buildHostedArtistSeed,
   mergeHostedTopArtists,
   seedStrength,
   type DirectArtist,
   type HostedPlaylistEvidence,
-} from "./hosted-refresh-contract";
-import { buildHostedProjection } from "./hosted-projection";
-import { readActiveProjection, readFeedbackRecords } from "./persistence";
+} from "./hosted-refresh-contract.ts";
+import { buildHostedProjection } from "./hosted-projection.ts";
+import { readActiveProjection, readFeedbackRecords } from "./persistence.ts";
 import type { ProfileScope } from "./profiles";
-import { releaseMetadata } from "./release";
+import { releaseMetadata } from "./release.ts";
 import {
   getSpotifyPlaylistArtists,
   readPlaylistSelections,
   refreshSpotifyTopArtists,
   SpotifyHttpError,
-} from "./spotify";
+} from "./spotify.ts";
 
 const LOCK_TTL_MS = 45 * 60 * 1000;
 
@@ -47,7 +47,7 @@ export async function runHostedRefresh(profile: ProfileScope): Promise<HostedRef
   await acquireRefreshLock(profile.id, runId);
 
   try {
-    await getD1().prepare(`
+    await getDatabase().prepare(`
       INSERT INTO source_runs (run_id, profile_id, code_version, status, started_at)
       VALUES (?1, ?2, ?3, 'running', ?4)
     `).bind(runId, profile.id, releaseMetadata().release, startedAt).run();
@@ -102,6 +102,23 @@ export async function runHostedRefresh(profile: ProfileScope): Promise<HostedRef
     } catch (error) {
       sourceHealth.push(health("spotify-top-artists", "unavailable", 0, 1));
       warnings.push(safeWarning("Spotify Top Artists", error));
+      // Authorization expired mid-run: publishing now would rebuild
+      // Spotify-derived state from an authorization that no longer exists.
+      // Stop, keep the previous projection, and say what to do.
+      if (error instanceof SpotifyHttpError && error.status === 401) {
+        return finishRun({
+          profileId: profile.id,
+          runId,
+          startedAt,
+          status: "blocked",
+          tasteSnapshotId: null,
+          sourceHealth,
+          directArtistCount,
+          expandedArtistCount: 0,
+          projectionPublished: false,
+          publicationBlockers: ["Spotify authorization expired. Reconnect Spotify from the Taste tab; the previous projection was preserved."],
+        });
+      }
     }
 
     if (!directArtists.length) {
@@ -194,7 +211,7 @@ export async function runHostedRefresh(profile: ProfileScope): Promise<HostedRef
     });
   } catch (error) {
     const completedAt = new Date().toISOString();
-    await getD1().prepare(`
+    await getDatabase().prepare(`
       UPDATE source_runs
       SET status = 'failed', completed_at = ?2, error_summary = ?3
       WHERE run_id = ?1
@@ -233,6 +250,9 @@ async function buildDirectArtistSeed(
   return buildHostedArtistSeed(evidence);
 }
 
+const SNAPSHOT_RETENTION = 5;
+const RUN_RETENTION = 60;
+
 async function publishHostedState({
   profile,
   ownerRef,
@@ -262,7 +282,7 @@ async function publishHostedState({
   const createdAt = new Date().toISOString();
   const status = sourceHealth.some((source) => source.status !== "active") ? "partial" : "active";
   const codeVersion = releaseMetadata().release;
-  const db = getD1();
+  const db = getDatabase();
   await db.batch([
     db.prepare("UPDATE hosted_taste_snapshots SET active = 0 WHERE profile_id = ?1 AND active = 1").bind(profile.id),
     db.prepare(`
@@ -298,6 +318,26 @@ async function publishHostedState({
       Number(projection.schemaVersion ?? 5),
       createdAt,
     ),
+    // Keep the active snapshot and a short tail for rollback; without this
+    // every refresh adds up to two megabytes that nothing ever removes.
+    db.prepare(`
+      DELETE FROM recommendation_snapshots
+      WHERE profile_id = ?1 AND active = 0 AND snapshot_id NOT IN (
+        SELECT snapshot_id FROM recommendation_snapshots WHERE profile_id = ?1 ORDER BY created_at DESC LIMIT ?2
+      )
+    `).bind(profile.id, SNAPSHOT_RETENTION),
+    db.prepare(`
+      DELETE FROM hosted_taste_snapshots
+      WHERE profile_id = ?1 AND active = 0 AND snapshot_id NOT IN (
+        SELECT snapshot_id FROM hosted_taste_snapshots WHERE profile_id = ?1 ORDER BY generated_at DESC LIMIT ?2
+      )
+    `).bind(profile.id, SNAPSHOT_RETENTION),
+    db.prepare(`
+      DELETE FROM source_runs
+      WHERE profile_id = ?1 AND run_id NOT IN (
+        SELECT run_id FROM source_runs WHERE profile_id = ?1 ORDER BY started_at DESC LIMIT ?2
+      )
+    `).bind(profile.id, RUN_RETENTION),
   ]);
   return { tasteSnapshotId, projectionSnapshotId };
 }
@@ -307,7 +347,7 @@ async function finishRun(
 ): Promise<HostedRefreshSummary> {
   const completedAt = new Date().toISOString();
   const summary = { ...input, completedAt };
-  await getD1().prepare(`
+  await getDatabase().prepare(`
     UPDATE source_runs
     SET status = ?2, completed_at = ?3, source_health_json = ?4, error_summary = ?5
     WHERE run_id = ?1
@@ -323,7 +363,7 @@ async function finishRun(
 
 async function acquireRefreshLock(profileId: string, runId: string): Promise<void> {
   const now = Date.now();
-  const result = await getD1().prepare(`
+  const result = await getDatabase().prepare(`
     INSERT INTO refresh_locks (lock_name, run_id, expires_at)
     VALUES (?1, ?2, ?3)
     ON CONFLICT(lock_name) DO UPDATE SET
@@ -335,7 +375,7 @@ async function acquireRefreshLock(profileId: string, runId: string): Promise<voi
 }
 
 async function releaseRefreshLock(profileId: string, runId: string): Promise<void> {
-  await getD1().prepare("DELETE FROM refresh_locks WHERE lock_name = ?1 AND run_id = ?2")
+  await getDatabase().prepare("DELETE FROM refresh_locks WHERE lock_name = ?1 AND run_id = ?2")
     .bind(`hosted-refresh:${profileId}`, runId)
     .run();
 }

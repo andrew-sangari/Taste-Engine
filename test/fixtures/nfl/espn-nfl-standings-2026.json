@@ -1,0 +1,515 @@
+{
+ "id": "9",
+ "name": "National Football League",
+ "abbreviation": "NFL",
+ "season": {
+  "year": 2026,
+  "displayName": "2026"
+ },
+ "children": [
+  {
+   "id": "8",
+   "name": "American Football Conference",
+   "abbreviation": "AFC",
+   "isConference": true,
+   "children": [
+    {
+     "id": "6",
+     "name": "AFC West",
+     "abbreviation": "WEST",
+     "isConference": false,
+     "standings": {
+      "id": "0",
+      "name": "overall",
+      "season": 2026,
+      "seasonType": 2,
+      "entries": [
+       {
+        "team": {
+         "id": "7",
+         "location": "Denver",
+         "name": "Broncos",
+         "abbreviation": "DEN",
+         "displayName": "Denver Broncos",
+         "shortDisplayName": "Broncos"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":0,"displayValue":"-"},
+         {"name":"losses","type":"losses","value":2,"displayValue":"2"},
+         {"name":"playoffSeed","type":"playoffseed","value":2,"displayValue":"2"},
+         {"name":"pointDifferential","type":"pointdifferential","value":12,"displayValue":"+12"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":186,"displayValue":"186"},
+         {"name":"pointsFor","type":"pointsfor","value":198,"displayValue":"198"},
+         {"name":"streak","type":"streak","value":5,"displayValue":"W5"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.7777778,"displayValue":".778"},
+         {"name":"wins","type":"wins","value":7,"displayValue":"7"},
+         {"name":"overall","type":"total","displayValue":"7-2"},
+         {"name":"Home","type":"home","displayValue":"4-0"},
+         {"name":"Road","type":"road","displayValue":"3-2"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"2-1"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"3-1"}
+        ]
+       },
+       {
+        "team": {
+         "id": "12",
+         "location": "Kansas City",
+         "name": "Chiefs",
+         "abbreviation": "KC",
+         "displayName": "Kansas City Chiefs",
+         "shortDisplayName": "Chiefs"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":0.5,"displayValue":"0.5"},
+         {"name":"losses","type":"losses","value":2,"displayValue":"2"},
+         {"name":"playoffSeed","type":"playoffseed","value":5,"displayValue":"5"},
+         {"name":"pointDifferential","type":"pointdifferential","value":59,"displayValue":"+59"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":143,"displayValue":"143"},
+         {"name":"pointsFor","type":"pointsfor","value":202,"displayValue":"202"},
+         {"name":"streak","type":"streak","value":1,"displayValue":"W1"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.75,"displayValue":".750"},
+         {"name":"wins","type":"wins","value":6,"displayValue":"6"},
+         {"name":"overall","type":"total","displayValue":"6-2"},
+         {"name":"Home","type":"home","displayValue":"4-0"},
+         {"name":"Road","type":"road","displayValue":"2-2"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"3-1"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"6-1"}
+        ]
+       },
+       {
+        "team": {
+         "id": "13",
+         "location": "Las Vegas",
+         "name": "Raiders",
+         "abbreviation": "LV",
+         "displayName": "Las Vegas Raiders",
+         "shortDisplayName": "Raiders"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":3,"displayValue":"3"},
+         {"name":"losses","type":"losses","value":5,"displayValue":"5"},
+         {"name":"playoffSeed","type":"playoffseed","value":9,"displayValue":"9"},
+         {"name":"pointDifferential","type":"pointdifferential","value":-30,"displayValue":"-30"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":268,"displayValue":"268"},
+         {"name":"pointsFor","type":"pointsfor","value":238,"displayValue":"238"},
+         {"name":"streak","type":"streak","value":-1,"displayValue":"L1"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.44444445,"displayValue":".444"},
+         {"name":"wins","type":"wins","value":4,"displayValue":"4"},
+         {"name":"overall","type":"total","displayValue":"4-5"},
+         {"name":"Home","type":"home","displayValue":"1-3"},
+         {"name":"Road","type":"road","displayValue":"3-2"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"1-1"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"3-3"}
+        ]
+       },
+       {
+        "team": {
+         "id": "24",
+         "location": "Los Angeles",
+         "name": "Chargers",
+         "abbreviation": "LAC",
+         "displayName": "Los Angeles Chargers",
+         "shortDisplayName": "Chargers"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":6.5,"displayValue":"6.5"},
+         {"name":"losses","type":"losses","value":8,"displayValue":"8"},
+         {"name":"playoffSeed","type":"playoffseed","value":16,"displayValue":"16"},
+         {"name":"pointDifferential","type":"pointdifferential","value":-98,"displayValue":"-98"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":219,"displayValue":"219"},
+         {"name":"pointsFor","type":"pointsfor","value":121,"displayValue":"121"},
+         {"name":"streak","type":"streak","value":-8,"displayValue":"L8"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0,"displayValue":".000"},
+         {"name":"wins","type":"wins","value":0,"displayValue":"0"},
+         {"name":"overall","type":"total","displayValue":"0-8"},
+         {"name":"Home","type":"home","displayValue":"0-4"},
+         {"name":"Road","type":"road","displayValue":"0-4"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"0-3"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"0-5"}
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "7",
+   "name": "National Football Conference",
+   "abbreviation": "NFC",
+   "isConference": true,
+   "children": [
+    {
+     "id": "1",
+     "name": "NFC East",
+     "abbreviation": "EAST",
+     "isConference": false,
+     "standings": {
+      "id": "0",
+      "name": "overall",
+      "season": 2026,
+      "seasonType": 2,
+      "entries": [
+       {
+        "team": {
+         "id": "19",
+         "location": "New York",
+         "name": "Giants",
+         "abbreviation": "NYG",
+         "displayName": "New York Giants",
+         "shortDisplayName": "Giants"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":0,"displayValue":"-"},
+         {"name":"losses","type":"losses","value":2,"displayValue":"2"},
+         {"name":"playoffSeed","type":"playoffseed","value":3,"displayValue":"3"},
+         {"name":"pointDifferential","type":"pointdifferential","value":10,"displayValue":"+10"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":172,"displayValue":"172"},
+         {"name":"pointsFor","type":"pointsfor","value":182,"displayValue":"182"},
+         {"name":"streak","type":"streak","value":2,"displayValue":"W2"},
+         {"name":"ties","type":"ties","value":1,"displayValue":"1"},
+         {"name":"winPercent","type":"winpercent","value":0.6875,"displayValue":".688"},
+         {"name":"wins","type":"wins","value":5,"displayValue":"5"},
+         {"name":"overall","type":"total","displayValue":"5-2-1"},
+         {"name":"Home","type":"home","displayValue":"3-1"},
+         {"name":"Road","type":"road","displayValue":"2-1-1"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"2-0-1"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"3-2-1"}
+        ]
+       },
+       {
+        "team": {
+         "id": "6",
+         "location": "Dallas",
+         "name": "Cowboys",
+         "abbreviation": "DAL",
+         "displayName": "Dallas Cowboys",
+         "shortDisplayName": "Cowboys"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":2,"displayValue":"2"},
+         {"name":"losses","type":"losses","value":5,"displayValue":"5"},
+         {"name":"playoffSeed","type":"playoffseed","value":10,"displayValue":"10"},
+         {"name":"pointDifferential","type":"pointdifferential","value":10,"displayValue":"+10"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":236,"displayValue":"236"},
+         {"name":"pointsFor","type":"pointsfor","value":246,"displayValue":"246"},
+         {"name":"streak","type":"streak","value":1,"displayValue":"W1"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.44444445,"displayValue":".444"},
+         {"name":"wins","type":"wins","value":4,"displayValue":"4"},
+         {"name":"overall","type":"total","displayValue":"4-5"},
+         {"name":"Home","type":"home","displayValue":"1-3"},
+         {"name":"Road","type":"road","displayValue":"3-2"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"2-1"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"2-4"}
+        ]
+       },
+       {
+        "team": {
+         "id": "28",
+         "location": "Washington",
+         "name": "Commanders",
+         "abbreviation": "WSH",
+         "displayName": "Washington Commanders",
+         "shortDisplayName": "Commanders"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":3,"displayValue":"3"},
+         {"name":"losses","type":"losses","value":5,"displayValue":"5"},
+         {"name":"playoffSeed","type":"playoffseed","value":15,"displayValue":"15"},
+         {"name":"pointDifferential","type":"pointdifferential","value":-30,"displayValue":"-30"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":202,"displayValue":"202"},
+         {"name":"pointsFor","type":"pointsfor","value":172,"displayValue":"172"},
+         {"name":"streak","type":"streak","value":-1,"displayValue":"L1"},
+         {"name":"ties","type":"ties","value":1,"displayValue":"1"},
+         {"name":"winPercent","type":"winpercent","value":0.3125,"displayValue":".313"},
+         {"name":"wins","type":"wins","value":2,"displayValue":"2"},
+         {"name":"overall","type":"total","displayValue":"2-5-1"},
+         {"name":"Home","type":"home","displayValue":"2-2-1"},
+         {"name":"Road","type":"road","displayValue":"0-3"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"1-2-1"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"2-4-1"}
+        ]
+       },
+       {
+        "team": {
+         "id": "21",
+         "location": "Philadelphia",
+         "name": "Eagles",
+         "abbreviation": "PHI",
+         "displayName": "Philadelphia Eagles",
+         "shortDisplayName": "Eagles"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":4,"displayValue":"4"},
+         {"name":"losses","type":"losses","value":7,"displayValue":"7"},
+         {"name":"playoffSeed","type":"playoffseed","value":16,"displayValue":"16"},
+         {"name":"pointDifferential","type":"pointdifferential","value":-73,"displayValue":"-73"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":221,"displayValue":"221"},
+         {"name":"pointsFor","type":"pointsfor","value":148,"displayValue":"148"},
+         {"name":"streak","type":"streak","value":-7,"displayValue":"L7"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.22222222,"displayValue":".222"},
+         {"name":"wins","type":"wins","value":2,"displayValue":"2"},
+         {"name":"overall","type":"total","displayValue":"2-7"},
+         {"name":"Home","type":"home","displayValue":"1-4"},
+         {"name":"Road","type":"road","displayValue":"1-3"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"1-3"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"1-6"}
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "id": "10",
+     "name": "NFC North",
+     "abbreviation": "NORTH",
+     "isConference": false,
+     "standings": {
+      "id": "0",
+      "name": "overall",
+      "season": 2026,
+      "seasonType": 2,
+      "entries": [
+       {
+        "team": {
+         "id": "3",
+         "location": "Chicago",
+         "name": "Bears",
+         "abbreviation": "CHI",
+         "displayName": "Chicago Bears",
+         "shortDisplayName": "Bears"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":0,"displayValue":"-"},
+         {"name":"losses","type":"losses","value":2,"displayValue":"2"},
+         {"name":"playoffSeed","type":"playoffseed","value":2,"displayValue":"2"},
+         {"name":"pointDifferential","type":"pointdifferential","value":57,"displayValue":"+57"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":184,"displayValue":"184"},
+         {"name":"pointsFor","type":"pointsfor","value":241,"displayValue":"241"},
+         {"name":"streak","type":"streak","value":4,"displayValue":"W4"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.7777778,"displayValue":".778"},
+         {"name":"wins","type":"wins","value":7,"displayValue":"7"},
+         {"name":"overall","type":"total","displayValue":"7-2"},
+         {"name":"Home","type":"home","displayValue":"4-1"},
+         {"name":"Road","type":"road","displayValue":"3-1"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"0-2"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"5-2"}
+        ]
+       },
+       {
+        "team": {
+         "id": "8",
+         "location": "Detroit",
+         "name": "Lions",
+         "abbreviation": "DET",
+         "displayName": "Detroit Lions",
+         "shortDisplayName": "Lions"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":0.5,"displayValue":"0.5"},
+         {"name":"losses","type":"losses","value":2,"displayValue":"2"},
+         {"name":"playoffSeed","type":"playoffseed","value":5,"displayValue":"5"},
+         {"name":"pointDifferential","type":"pointdifferential","value":33,"displayValue":"+33"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":189,"displayValue":"189"},
+         {"name":"pointsFor","type":"pointsfor","value":222,"displayValue":"222"},
+         {"name":"streak","type":"streak","value":4,"displayValue":"W4"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.75,"displayValue":".750"},
+         {"name":"wins","type":"wins","value":6,"displayValue":"6"},
+         {"name":"overall","type":"total","displayValue":"6-2"},
+         {"name":"Home","type":"home","displayValue":"4-0"},
+         {"name":"Road","type":"road","displayValue":"2-2"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"2-0"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"4-1"}
+        ]
+       },
+       {
+        "team": {
+         "id": "16",
+         "location": "Minnesota",
+         "name": "Vikings",
+         "abbreviation": "MIN",
+         "displayName": "Minnesota Vikings",
+         "shortDisplayName": "Vikings"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":0.5,"displayValue":"0.5"},
+         {"name":"losses","type":"losses","value":2,"displayValue":"2"},
+         {"name":"playoffSeed","type":"playoffseed","value":6,"displayValue":"6"},
+         {"name":"pointDifferential","type":"pointdifferential","value":30,"displayValue":"+30"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":116,"displayValue":"116"},
+         {"name":"pointsFor","type":"pointsfor","value":146,"displayValue":"146"},
+         {"name":"streak","type":"streak","value":-2,"displayValue":"L2"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.75,"displayValue":".750"},
+         {"name":"wins","type":"wins","value":6,"displayValue":"6"},
+         {"name":"overall","type":"total","displayValue":"6-2"},
+         {"name":"Home","type":"home","displayValue":"3-1"},
+         {"name":"Road","type":"road","displayValue":"3-1"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"2-1"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"4-1"}
+        ]
+       },
+       {
+        "team": {
+         "id": "9",
+         "location": "Green Bay",
+         "name": "Packers",
+         "abbreviation": "GB",
+         "displayName": "Green Bay Packers",
+         "shortDisplayName": "Packers"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":1,"displayValue":"1"},
+         {"name":"losses","type":"losses","value":3,"displayValue":"3"},
+         {"name":"playoffSeed","type":"playoffseed","value":7,"displayValue":"7"},
+         {"name":"pointDifferential","type":"pointdifferential","value":25,"displayValue":"+25"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":191,"displayValue":"191"},
+         {"name":"pointsFor","type":"pointsfor","value":216,"displayValue":"216"},
+         {"name":"streak","type":"streak","value":2,"displayValue":"W2"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.6666667,"displayValue":".667"},
+         {"name":"wins","type":"wins","value":6,"displayValue":"6"},
+         {"name":"overall","type":"total","displayValue":"6-3"},
+         {"name":"Home","type":"home","displayValue":"3-1"},
+         {"name":"Road","type":"road","displayValue":"3-2"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"1-2"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"4-3"}
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "id": "3",
+     "name": "NFC West",
+     "abbreviation": "WEST",
+     "isConference": false,
+     "standings": {
+      "id": "0",
+      "name": "overall",
+      "season": 2026,
+      "seasonType": 2,
+      "entries": [
+       {
+        "team": {
+         "id": "25",
+         "location": "San Francisco",
+         "name": "49ers",
+         "abbreviation": "SF",
+         "displayName": "San Francisco 49ers",
+         "shortDisplayName": "49ers"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":0,"displayValue":"-"},
+         {"name":"losses","type":"losses","value":1,"displayValue":"1"},
+         {"name":"playoffSeed","type":"playoffseed","value":1,"displayValue":"1"},
+         {"name":"pointDifferential","type":"pointdifferential","value":79,"displayValue":"+79"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":156,"displayValue":"156"},
+         {"name":"pointsFor","type":"pointsfor","value":235,"displayValue":"235"},
+         {"name":"streak","type":"streak","value":1,"displayValue":"W1"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.875,"displayValue":".875"},
+         {"name":"wins","type":"wins","value":7,"displayValue":"7"},
+         {"name":"overall","type":"total","displayValue":"7-1"},
+         {"name":"Home","type":"home","displayValue":"5-0"},
+         {"name":"Road","type":"road","displayValue":"2-1"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"3-0"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"4-1"}
+        ]
+       },
+       {
+        "team": {
+         "id": "26",
+         "location": "Seattle",
+         "name": "Seahawks",
+         "abbreviation": "SEA",
+         "displayName": "Seattle Seahawks",
+         "shortDisplayName": "Seahawks"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":2.5,"displayValue":"2.5"},
+         {"name":"losses","type":"losses","value":4,"displayValue":"4"},
+         {"name":"playoffSeed","type":"playoffseed","value":8,"displayValue":"8"},
+         {"name":"pointDifferential","type":"pointdifferential","value":40,"displayValue":"+40"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":162,"displayValue":"162"},
+         {"name":"pointsFor","type":"pointsfor","value":202,"displayValue":"202"},
+         {"name":"streak","type":"streak","value":1,"displayValue":"W1"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.5555556,"displayValue":".556"},
+         {"name":"wins","type":"wins","value":5,"displayValue":"5"},
+         {"name":"overall","type":"total","displayValue":"5-4"},
+         {"name":"Home","type":"home","displayValue":"4-2"},
+         {"name":"Road","type":"road","displayValue":"1-2"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"2-1"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"2-3"}
+        ]
+       },
+       {
+        "team": {
+         "id": "14",
+         "location": "Los Angeles",
+         "name": "Rams",
+         "abbreviation": "LAR",
+         "displayName": "Los Angeles Rams",
+         "shortDisplayName": "Rams"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":2.5,"displayValue":"2.5"},
+         {"name":"losses","type":"losses","value":4,"displayValue":"4"},
+         {"name":"playoffSeed","type":"playoffseed","value":9,"displayValue":"9"},
+         {"name":"pointDifferential","type":"pointdifferential","value":33,"displayValue":"+33"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":181,"displayValue":"181"},
+         {"name":"pointsFor","type":"pointsfor","value":214,"displayValue":"214"},
+         {"name":"streak","type":"streak","value":3,"displayValue":"W3"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.5555556,"displayValue":".556"},
+         {"name":"wins","type":"wins","value":5,"displayValue":"5"},
+         {"name":"overall","type":"total","displayValue":"5-4"},
+         {"name":"Home","type":"home","displayValue":"2-3"},
+         {"name":"Road","type":"road","displayValue":"3-1"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"0-2"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"3-2"}
+        ]
+       },
+       {
+        "team": {
+         "id": "22",
+         "location": "Arizona",
+         "name": "Cardinals",
+         "abbreviation": "ARI",
+         "displayName": "Arizona Cardinals",
+         "shortDisplayName": "Cardinals"
+        },
+        "stats": [
+         {"name":"gamesBehind","type":"gamesbehind","value":4.5,"displayValue":"4.5"},
+         {"name":"losses","type":"losses","value":6,"displayValue":"6"},
+         {"name":"playoffSeed","type":"playoffseed","value":14,"displayValue":"14"},
+         {"name":"pointDifferential","type":"pointdifferential","value":-77,"displayValue":"-77"},
+         {"name":"pointsAgainst","type":"pointsagainst","value":255,"displayValue":"255"},
+         {"name":"pointsFor","type":"pointsfor","value":178,"displayValue":"178"},
+         {"name":"streak","type":"streak","value":-1,"displayValue":"L1"},
+         {"name":"ties","type":"ties","value":0,"displayValue":"0"},
+         {"name":"winPercent","type":"winpercent","value":0.33333334,"displayValue":".333"},
+         {"name":"wins","type":"wins","value":3,"displayValue":"3"},
+         {"name":"overall","type":"total","displayValue":"3-6"},
+         {"name":"Home","type":"home","displayValue":"0-3"},
+         {"name":"Road","type":"road","displayValue":"3-3"},
+         {"name":"vs. Div.","type":"vsdiv","displayValue":"1-3"},
+         {"name":"vs. Conf.","type":"vsconf","displayValue":"2-5"}
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

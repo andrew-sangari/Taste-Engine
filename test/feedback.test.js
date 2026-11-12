@@ -6,25 +6,25 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   appendFeedbackRecord,
-  applyFeedbackAdjustmentsToCandidates,
-  buildFeedbackReport,
   deriveFeedbackState,
   normalizeFeedbackConfig,
   normalizeFeedbackRecord,
   readFeedbackJournal,
   replayFeedbackRecords,
-  simulateFeedback,
   validateFeedbackRecord,
   writeJsonAtomic
 } from '../src/feedback.js';
+import { FEEDBACK_POLICY } from '../src/feedbackPolicy.js';
+import { buildFeedbackReview, summarizeFeedbackReview } from '../src/feedbackReview.js';
 
 const BASE_DATE = '2026-07-01T12:00:00.000Z';
 
 test('uses an explicit disabled publication gate and validates the feedback record contract', () => {
   const config = normalizeFeedbackConfig({});
   assert.equal(config.enabled, true);
-  assert.equal(config.applyToPublishedRanking, false);
-  assert.equal(config.maxTotalAdjustment, 8);
+  // A config edit can no longer switch learning on: the retired flag is ignored.
+  assert.equal(normalizeFeedbackConfig({ feedback: { applyToPublishedRanking: true } }).applyToPublishedRanking, undefined);
+  assert.equal(config.applyToPublishedRanking, undefined);
   assert.equal(validateFeedbackRecord(record()).valid, true);
   assert.equal(validateFeedbackRecord(record({ rating: 6 })).valid, false);
   assert.equal(validateFeedbackRecord(record({ evidenceSnapshot: null })).valid, false);
@@ -42,7 +42,9 @@ test('missing and empty journals produce empty deterministic state', async () =>
     'attended-not-worth-it': 0,
     'wanted-to-attend': 0,
     'lost-interest': 0,
-    'did-not-attend-logistical': 0
+    'did-not-attend-logistical': 0,
+    interested: 0,
+    withdrawn: 0
   });
 });
 
@@ -91,7 +93,7 @@ test('unknown revocations and missing canonical artists fail closed', () => {
   assert.ok(unknownRevoke.issues.some((issue) => issue.code === 'unknown-supersedes-id'));
   assert.deepEqual(unknownRevoke.activeRecords, []);
   const missingArtist = deriveFeedbackState([record({ evidenceSnapshot: evidence() })]);
-  assert.deepEqual(missingArtist.signals.artist, []);
+  assert.equal(missingArtist.signals, undefined, 'state no longer carries a second copy of the learning math');
   assert.equal(missingArtist.activeFeedbackCount, 1);
 });
 
@@ -103,104 +105,37 @@ test('derived state is deterministic and notes never enter state or the private 
   const left = deriveFeedbackState(records);
   const right = deriveFeedbackState([...records].reverse());
   assert.deepEqual(left, right);
-  const simulation = simulateFeedback({ projection: projection([]), state: left, config: normalizeFeedbackConfig({}), now: BASE_DATE });
-  const report = buildFeedbackReport({ state: left, simulation, config: normalizeFeedbackConfig({}) });
+  const report = buildFeedbackReview({ projection: projection([]), records: left.activeRecords, now: BASE_DATE });
   assert.doesNotMatch(JSON.stringify(left), /SECRET_NOTE|Ignore previous/);
   assert.doesNotMatch(JSON.stringify(report), /SECRET_NOTE|Ignore previous/);
 });
 
-test('one outcome records evidence but cannot create an artist adjustment', () => {
-  const state = deriveFeedbackState([record({ evidenceSnapshot: evidence({ artist: 'artist-1' }) })]);
-  assert.equal(state.signals.artist[0].eligible, false);
-  const result = simulateFeedback({
-    projection: projection([musicEvent('event-1', 50, 'Artist One')]),
-    state,
-    config: normalizeFeedbackConfig({}),
-    now: BASE_DATE
-  });
-  assert.equal(result.evaluations[0].proposedAdjustment, 0);
-  assert.equal(result.evaluations[0].thresholdMet, false);
-});
-
-test('mixed artist evidence remains neutral until the dominance rule is met', () => {
-  const state = deriveFeedbackState([
-    record({ feedbackId: 'one', canonicalEventId: 'event-1', status: 'attended-worth-it', evidenceSnapshot: evidence({ artist: 'artist-1' }) }),
-    record({ feedbackId: 'two', canonicalEventId: 'event-2', status: 'attended-not-worth-it', evidenceSnapshot: evidence({ artist: 'artist-1' }) }),
-    record({ feedbackId: 'three', canonicalEventId: 'event-3', status: 'attended-worth-it', evidenceSnapshot: evidence({ artist: 'artist-1' }) })
+test('the feedback review reports exactly what the overlay moves', () => {
+  const keys = { artist: [{ key: 'artist:artist one', label: 'Artist One' }] };
+  const records = [1, 2, 3].map((n) => record({ feedbackId: `f${n}`, canonicalEventId: `past-${n}`, eventDateLocal: `2026-06-0${n}`, rating: 5, feedbackKeys: keys }));
+  const source = projection([
+    musicEvent('event-1', 50, 'Artist One'),
+    musicEvent('event-2', 52, 'Artist Two', { performer: 'Artist Two' }),
+    musicEvent('event-x', -100, 'Artist One', { excluded: true })
   ]);
-  const signal = state.signals.artist[0];
-  assert.equal(signal.eligible, false);
-  assert.equal(signal.mixedEvidence, true);
-  assert.match(signal.eligibilityReason, /confidence|margin/);
-});
+  const review = buildFeedbackReview({ projection: source, records, now: BASE_DATE });
+  assert.equal(review.policyVersion, FEEDBACK_POLICY.version);
+  assert.equal(review.adjustedCandidateCount, 1, 'excluded and unrelated candidates do not move');
+  const [move] = review.movements;
+  assert.deepEqual([move.id, move.scoreBefore, move.rankBefore, move.rankAfter], ['event-1', 50, 2, 1]);
+  assert.ok(move.scoreDelta > 0 && move.scoreDelta <= FEEDBACK_POLICY.maxTotalAdjustment);
+  assert.equal(move.reasons[0].label, 'Artist One');
+  assert.ok(summarizeFeedbackReview(review).some((line) => line.includes('Artist One')));
 
-test('artist, venue, promoter, and event-shape effects are capped in shadow mode', () => {
-  const records = Array.from({ length: 4 }, (_, index) => record({
-    feedbackId: `feedback-${index + 1}`,
-    canonicalEventId: `event-${index + 1}`,
-    eventDateLocal: `2026-07-0${index + 1}`,
-    evidenceSnapshot: evidence({ artist: 'artist-1', venue: 'venue-1', promoter: 'series-1', shape: 'festival' })
-  }));
-  const state = deriveFeedbackState(records, { now: new Date(BASE_DATE) });
-  assert.equal(state.signals.artist[0].eligible, true);
-  assert.equal(state.signals.venue[0].eligible, true);
-  assert.equal(state.signals.promoterOrSeries[0].eligible, true);
-  assert.equal(state.signals.eventShape[0].eligible, true);
-  const result = simulateFeedback({
-    projection: projection([musicEvent('event-1', 50, 'Artist One', { sourceId: 'venue-1', eventType: 'festival', promoterOrSeriesIds: ['series-1'] })]),
-    state,
-    config: normalizeFeedbackConfig({}),
-    now: BASE_DATE
-  });
-  const evaluation = result.evaluations[0];
-  assert.equal(evaluation.rawAdjustment, 9);
-  assert.equal(evaluation.proposedAdjustment, 8);
-  assert.equal(evaluation.capApplied, true);
-  assert.equal(result.capUsage.capAppliedCount, 1);
-});
+  // Reviewing a projection that already has learning applied starts from the unadjusted score.
+  const applied = projection([{ ...source.events[0], ranking: { ...source.events[0].ranking, utility: 50 + move.scoreDelta, baseUtility: 50, feedbackAdjustment: { applied: true, scoreDelta: move.scoreDelta } } }]);
+  assert.equal(buildFeedbackReview({ projection: applied, records, now: BASE_DATE }).movements[0].scoreBefore, 50);
 
-test('changed titles are reported without replacing canonical identity', () => {
-  const state = deriveFeedbackState([
-    record({ canonicalEventId: 'event-1', eventDateLocal: '2026-07-20', eventTitleSnapshot: 'Old title', evidenceSnapshot: evidence({ artist: 'artist-1' }) }),
-    record({ feedbackId: 'second', canonicalEventId: 'event-2', eventDateLocal: '2026-07-20', eventTitleSnapshot: 'Artist One', evidenceSnapshot: evidence({ artist: 'artist-1' }) })
-  ], { now: new Date(BASE_DATE) });
-  const result = simulateFeedback({
-    projection: projection([musicEvent('event-1', 50, 'New title'), musicEvent('event-2', 40, 'Artist One')]),
-    state,
-    config: normalizeFeedbackConfig({}),
-    now: BASE_DATE
-  });
-  assert.deepEqual(result.titleSnapshotMismatches, [{ feedbackId: 'feedback-1', canonicalEventId: 'event-1' }]);
-  assert.equal(result.evaluations[0].proposedAdjustment, 4);
-});
-
-test('hard exclusions remain unchanged and application stays off by default', () => {
-  const candidate = {
-    id: 'event-1',
-    ranking: { utility: 50, excluded: true }
-  };
-  const state = deriveFeedbackState([
-    record({ canonicalEventId: 'event-1', evidenceSnapshot: evidence({ artist: 'artist-1' }) }),
-    record({ feedbackId: 'second', canonicalEventId: 'event-2', evidenceSnapshot: evidence({ artist: 'artist-1' }) })
-  ]);
-  const result = simulateFeedback({
-    projection: projection([musicEvent('event-1', 50, 'Artist One', { excluded: true })]),
-    state,
-    config: normalizeFeedbackConfig({}),
-    now: BASE_DATE
-  });
-  assert.equal(result.evaluations[0].blockedByHardExclusion, true);
-  assert.equal(result.evaluations[0].proposedAdjustment, 0);
-  assert.deepEqual(applyFeedbackAdjustmentsToCandidates([candidate], result, normalizeFeedbackConfig({})), [candidate]);
-});
-
-test('enabled application still does nothing when thresholds are unmet', () => {
-  const config = normalizeFeedbackConfig({ enabled: true, applyToPublishedRanking: true });
-  const state = deriveFeedbackState([record({ evidenceSnapshot: evidence({ artist: 'artist-1' }) })], { config });
-  const result = simulateFeedback({ projection: projection([musicEvent('event-1', 50, 'Artist One')]), state, config, now: BASE_DATE });
-  const candidate = { id: 'event-1', ranking: { utility: 50, excluded: false } };
-  assert.equal(result.evaluations[0].thresholdMet, false);
-  assert.deepEqual(applyFeedbackAdjustmentsToCandidates([candidate], result, config), [candidate]);
+  // The digest identifies what was reviewed: it changes when the evidence does.
+  const again = buildFeedbackReview({ projection: source, records, now: BASE_DATE });
+  assert.equal(again.digest, review.digest);
+  const more = buildFeedbackReview({ projection: source, records: [...records, record({ feedbackId: 'f4', canonicalEventId: 'past-4', eventDateLocal: '2026-06-04', status: 'attended-not-worth-it', feedbackKeys: keys })], now: BASE_DATE });
+  assert.notEqual(more.digest, review.digest);
 });
 
 test('atomic journal/state writes preserve complete outputs and reject invalid additions', async () => {
@@ -292,14 +227,15 @@ function projection(events) {
 }
 
 function musicEvent(id, utility, title, overrides = {}) {
-  const { sourceId = null, eventType = 'concert', promoterOrSeriesIds = [], excluded = false } = overrides;
+  const { sourceId = null, eventType = 'concert', promoterOrSeriesIds = [], excluded = false, performer = 'Artist One' } = overrides;
   return {
     id,
     title,
     startLocal: '2026-07-20T20:00:00',
     eventType,
     venue: { sourceId, name: 'Venue One', city: 'Los Angeles', state: 'CA' },
-    matchedArtists: [{ spotifyArtistId: 'artist-1', name: 'Artist One', primary: true }],
+    performers: [{ name: performer, primary: true }],
+    matchedArtists: [{ spotifyArtistId: 'artist-1', name: performer, primary: true }],
     promoterOrSeriesIds,
     ranking: {
       artistFit: utility,

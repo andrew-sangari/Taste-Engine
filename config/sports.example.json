@@ -1,0 +1,30 @@
+{
+  "enabled": true,
+  "teamId": 119,
+  "teamName": "Los Angeles Dodgers",
+  "homeOnly": true,
+  "homeVenueIds": [22],
+  "homeVenueNames": ["Dodger Stadium"],
+  "featuredInterestThreshold": 70,
+  "maxPitcherStats": 48,
+  "maxTicketPages": 3,
+  "rivalries": {
+    "135": { "tier": "high", "label": "Padres rivalry" },
+    "137": { "tier": "high", "label": "Giants rivalry" }
+  },
+  "nfl": {
+    "enabled": true,
+    "teamId": "14",
+    "teamName": "Los Angeles Rams",
+    "homeVenueNames": ["SoFi Stadium"],
+    "homeVenue": { "lat": 33.9535, "lon": -118.3392 },
+    "seatGeekTaxonomy": "football",
+    "baseInterest": 42,
+    "baseHassle": 3,
+    "rivalries": {
+      "25": { "tier": "high", "label": "49ers rivalry", "division": true },
+      "26": { "tier": "medium", "label": "Seahawks rivalry", "division": true },
+      "22": { "tier": "medium", "label": "Cardinals rivalry", "division": true }
+    }
+  }
+}

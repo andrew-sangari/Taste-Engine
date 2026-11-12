@@ -1,0 +1,61 @@
+{
+  "fixtureNote": "Synthetic. Shaped like the documented EDMTrain /events response for the San Diego location; ids, links and artist names are invented. Event names, dates and venues are the publicly announced ones. Real EDMTrain payloads are not stored in this repository.",
+  "locations": [{ "id": 81, "city": "San Diego", "state": "California", "stateCode": "CA", "country": "United States" }],
+  "events": [
+    {
+      "id": 410001,
+      "link": "https://edmtrain.example/san-diego-ca/proper-nye-nyd-410001",
+      "name": "Proper NYE/NYD",
+      "ages": "21+",
+      "festivalInd": true,
+      "date": "2026-12-31",
+      "venue": { "id": 301, "name": "Petco Park", "location": "San Diego, CA", "latitude": 32.7073, "longitude": -117.1566 },
+      "artistList": [
+        { "id": 1, "name": "Example Headliner", "b2bInd": false },
+        { "id": 2, "name": "Example Duo A", "b2bInd": true },
+        { "id": 3, "name": "Example Duo B", "b2bInd": false },
+        { "id": 4, "name": "Example Opener", "b2bInd": false }
+      ]
+    },
+    {
+      "id": 410002,
+      "link": "https://edmtrain.example/san-diego-ca/proper-nye-nyd-410002",
+      "name": "Proper NYE/NYD",
+      "ages": "21+",
+      "festivalInd": true,
+      "date": "2027-01-01",
+      "venue": { "id": 301, "name": "Petco Park", "location": "San Diego, CA", "latitude": 32.7073, "longitude": -117.1566 },
+      "artistList": []
+    },
+    {
+      "id": 410003,
+      "link": "https://edmtrain.example/san-diego-ca/crssd-spring-2027-410003",
+      "name": "CRSSD Spring 2027",
+      "ages": "21+",
+      "festivalInd": true,
+      "date": "2027-03-13",
+      "venue": { "id": 302, "name": "Waterfront Park San Diego", "location": "San Diego, CA", "latitude": 32.7218, "longitude": -117.1727 },
+      "artistList": []
+    },
+    {
+      "id": 410004,
+      "link": "https://edmtrain.example/san-diego-ca/crssd-spring-2027-410004",
+      "name": "CRSSD Spring 2027",
+      "ages": "21+",
+      "festivalInd": true,
+      "date": "2027-03-14",
+      "venue": { "id": 302, "name": "Waterfront Park San Diego", "location": "San Diego, CA", "latitude": 32.7218, "longitude": -117.1727 },
+      "artistList": []
+    },
+    {
+      "id": 410005,
+      "link": "https://edmtrain.example/san-diego-ca/example-club-night-410005",
+      "name": "",
+      "ages": "21+",
+      "festivalInd": false,
+      "date": "2026-12-31",
+      "venue": { "id": 303, "name": "Example Club", "location": "San Diego, CA", "latitude": 32.7157, "longitude": -117.1611 },
+      "artistList": [{ "id": 9, "name": "Example Resident", "b2bInd": false }]
+    }
+  ]
+}

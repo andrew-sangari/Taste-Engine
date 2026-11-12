@@ -118,3 +118,44 @@ test('does not resolve conflicting normalized names without a provider identity'
   const [ranked] = rankCandidates([candidate({ performers: [{ name: 'the artist', primary: true }] })], conflicting, config);
   assert.equal(ranked.matchedArtists.length, 0);
 });
+
+test('discovered artists are separated by how much of the profile\'s scenes their tags cover', async () => {
+  const { buildSceneProfile, sceneFitFor, promoterAffinityFor } = await import('../src/ranking.js');
+  const direct = (name, seedStrength, genres) => ({ name, seedStrength, genres, origin: 'source', evidence: [{}] });
+  const found = (name, genres) => ({ name, seedStrength: 0, genres, origin: 'promoter' });
+  const artists = [
+    direct('Anchor One', 10, ['house', 'tech house', 'electronic', 'british']),
+    direct('Anchor Two', 8, ['house', 'electronic', 'seen live']),
+    direct('Anchor Three', 2, ['k-pop', 'pop']),
+    // Every discovered artist is "electronic", so that tag separates none of them.
+    ...['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((id) => found(`Filler ${id}`, ['electronic', 'bass'])),
+    found('House Act', ['house', 'tech house', 'electronic']),
+    found('Techno Act', ['techno', 'electronic']),
+    found('Untagged Act', [])
+  ];
+  const profile = buildSceneProfile(artists);
+  assert.equal(profile.tags.has('british'), false, 'nationality and listener-habit tags are not scenes');
+  assert.ok(profile.tags.get('electronic') < profile.tags.get('house'), 'a tag every discovery shares is discounted');
+  const house = sceneFitFor(artists.find((artist) => artist.name === 'House Act'), profile);
+  const techno = sceneFitFor(artists.find((artist) => artist.name === 'Techno Act'), profile);
+  const untagged = sceneFitFor(artists.find((artist) => artist.name === 'Untagged Act'), profile);
+  assert.ok(house.points > techno.points && techno.points >= untagged.points, `${house.points} > ${techno.points} >= ${untagged.points}`);
+  assert.equal(untagged.points, 0, 'no tags is no evidence, not a penalty');
+  assert.deepEqual(house.tags, ['house', 'tech house']);
+  assert.equal(promoterAffinityFor({}, { scene: house }).affinity - promoterAffinityFor({}, {}).affinity, house.points);
+});
+
+test('a watched destination festival is ranked as a deliberate trip, not priced out by distance', () => {
+  const far = candidate({
+    id: 'tm:proper', title: 'Proper NYE', performers: [],
+    venue: { name: 'Petco Park', city: 'San Diego', state: 'CA', lat: 32.7073, lon: -117.1566 },
+    destination: { name: 'Proper NYE', distanceLabel: 'about 110 mi to San Diego' }
+  });
+  const [trip] = rankCandidates([far], { artists: [] }, config);
+  const [drive] = rankCandidates([{ ...far, destination: undefined }], { artists: [] }, config);
+  assert.equal(trip.ranking.discovery.tier, 'destination');
+  assert.match(trip.ranking.whyYou, /destination watchlist/);
+  assert.ok(trip.ranking.hassleReasons.some((reason) => /destination trip/.test(reason)));
+  assert.ok(trip.ranking.hassleScore < drive.ranking.hassleScore);
+  assert.ok(trip.ranking.utility >= config.minimumUtility, 'explicit interest clears the bar without a matched artist');
+});

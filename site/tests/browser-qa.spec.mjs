@@ -49,7 +49,7 @@ test("renders the complete frozen fixture and its source-health states", async (
   await expect(page.locator(".overviewGrid > .overviewCard")).toHaveCount(5);
   await expect(page.locator(".planAheadCard")).toHaveCount(3);
   await expect(page.locator(".sourceHealthGroup")).toHaveCount(4);
-  await expect(page.getByText("Synthetic Night Market + more")).toBeVisible();
+  await expect(page.locator(".overviewCard").getByText("Synthetic Night Market + more")).toBeVisible();
   await expect(page.locator(".overviewCard h3").filter({ hasText: "Synthetic Projection" })).toBeVisible();
   const overviewInsight = page.locator(".overviewCard").filter({ hasText: "Synthetic Night Market + more" }).locator(".semanticInsightCompact");
   await expect(overviewInsight).toHaveCount(1);
@@ -89,20 +89,18 @@ test("renders the complete frozen fixture and its source-health states", async (
   expect(musicVisualState.some((visual) => visual.kind === "image" && visual.role === "img" && visual.label)).toBeTruthy();
 });
 
-test("renders a compact decision score with expandable factors and shared light fields", async ({ page }) => {
+test("renders the decision score with its four factors visible and shared light fields", async ({ page }) => {
   await visit(page);
   await expect(page.locator(".ghostRank")).toHaveCount(8);
-  const score = page.locator(".recommendationScore").first();
-  await expect(score).toHaveCount(1);
-  await expect(score.locator("summary")).toContainText("Decision points");
-  await expect(score).not.toHaveAttribute("open", "");
-  await score.locator("summary").click();
-  await expect(score).toHaveAttribute("open", "");
-  await expect(score.locator(".recommendationScoreFactors")).toContainText("Fit");
-  await expect(score.locator(".recommendationScoreFactors")).toContainText("Friction");
-  await expect(score.locator(".recommendationScoreFactors")).toContainText("Urgency");
-  await expect(score.locator(".recommendationScoreFactors")).toContainText("Confidence");
-  await expect(score.locator(".recommendationScoreFactors")).toContainText("Status");
+  const score = page.locator(".decisionScore").first();
+  await expect(score).toBeVisible();
+  await expect(page.locator("details.recommendationScore")).toHaveCount(0);
+  const factors = score.locator(".decisionFactors");
+  await expect(factors).toBeVisible();
+  await expect(factors).toContainText("Fit");
+  await expect(factors).toContainText("Friction");
+  await expect(factors).toContainText("Tickets");
+  await expect(factors).toContainText("Confidence");
   await expect(page.locator(".sourceHealthList.board")).toHaveCount(1);
   await expect(page.locator(".srcRow")).toHaveCount(12);
   await expect(page.locator(".srcNote").filter({ hasText: /active|partial|unavailable|not configured/i }).first()).toHaveCount(1);
@@ -150,12 +148,12 @@ test("ranks Taste signals by contribution with differentiated bars", async ({ pa
 test("switches all tabs and preserves the ARIA tab contract", async ({ page }) => {
   await visit(page);
   const tabs = page.getByRole("tab");
-  await expect(tabs).toHaveCount(5);
+  await expect(tabs).toHaveCount(6);
   await expect(page.getByRole("tab", { name: "Tonight" })).toHaveCount(0);
   await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveCount(1);
   await expect(page.locator('[role="tabpanel"]')).toHaveCount(1);
 
-  for (const [label, panel] of [["Overview", "panel-overview"], ["Music", "panel-music"], ["Movies", "panel-movies"], ["Sports", "panel-sports"], ["Taste", "panel-taste"]]) {
+  for (const [label, panel] of [["Overview", "panel-overview"], ["Radar", "panel-radar"], ["Music", "panel-music"], ["Movies", "panel-movies"], ["Sports", "panel-sports"], ["Taste", "panel-taste"]]) {
     const tab = page.getByRole("tab", { name: label });
     await expect(tab).toHaveCount(1);
     await tab.click();
@@ -180,9 +178,9 @@ test("supports roving keyboard tabs, native activation, hash reload, and history
   const overview = page.getByRole("tab", { name: "Overview" });
   await overview.focus();
   await overview.press("ArrowRight");
-  await expect(page.getByRole("tab", { name: "Music" })).toBeFocused();
-  await expect(page.getByRole("tab", { name: "Music" })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "Music" }).press("ArrowLeft");
+  await expect(page.getByRole("tab", { name: "Radar" })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Radar" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Radar" }).press("ArrowLeft");
   await expect(overview).toBeFocused();
   await overview.press("End");
   await expect(page.getByRole("tab", { name: "Taste" })).toBeFocused();
@@ -288,27 +286,150 @@ test("keeps links, controls, disclosures, and visuals accessible", async ({ page
   await expect(fitDetails).not.toHaveAttribute("open", "");
 });
 
-test("keeps card planning actions behind one disclosure in every vertical", async ({ page }) => {
+test("puts planning actions directly on the card in every vertical", async ({ page }) => {
   await visit(page);
   for (const label of ["Overview", "Music", "Movies", "Sports"]) {
     if (label !== "Overview") await page.getByRole("tab", { name: label }).click();
-    const disclosure = page.locator("details.cardActions").first();
-    await expect(disclosure).toBeVisible();
-    await expect(disclosure).not.toHaveAttribute("open", "");
-    await expect(disclosure.locator(".cardActionsMenu button").first()).not.toBeVisible();
-    const summary = disclosure.locator("summary");
-    await expect(summary).toContainText("Plan");
-    await summary.click();
-    await expect(disclosure).toHaveAttribute("open", "");
-    await expect(disclosure.locator(".cardActionsMenu button").first()).toBeVisible();
-    await expect(disclosure.getByRole("button", { name: /pass|skip/i })).toHaveCount(0);
+    const actions = page.locator(`#panel-${label.toLowerCase()} .cardActions`).first();
+    await expect(actions).toBeVisible();
+    await expect(page.locator("details.cardActions")).toHaveCount(0);
+    await expect(actions.locator(".cardActionsMenu button").first()).toBeVisible();
   }
+});
+
+test("a Not for me reason is an explicit choice and can be undone", async ({ page }) => {
+  await visit(page);
+  await page.getByRole("tab", { name: "Music" }).click();
+  const card = page.locator("#panel-music .eventCard").filter({ has: page.getByRole("button", { name: "Not for me" }) }).first();
+  const actions = page.locator(`[id="${await card.getAttribute("id")}"] .cardActions`);
+  await actions.getByRole("button", { name: "Not for me" }).click();
+  const reasons = actions.getByRole("group", { name: "Why is this not for you?" });
+  await expect(reasons.locator("select")).toHaveCount(0);
+  await reasons.getByRole("button", { name: "Venue" }).click();
+  await expect(actions.getByText("Passed")).toBeVisible();
+  await actions.getByRole("button", { name: "Undo" }).click();
+  await expect(actions.getByRole("button", { name: "Not for me" })).toBeVisible();
+});
+
+test("triage captures graded reads from the keyboard and saves the dates you are in on", async ({ page }) => {
+  await visit(page);
+  await page.getByRole("button", { name: /Start triage/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Triage upcoming dates" });
+  await expect(dialog).toBeVisible();
+  const firstTitle = await dialog.locator("h3").textContent();
+  await page.keyboard.press("ArrowRight");
+  await expect(dialog.locator("h3")).not.toHaveText(firstTitle ?? "");
+  await page.keyboard.press("ArrowLeft");
+  await expect(dialog.getByRole("group", { name: "Why pass?" })).toBeVisible();
+  await page.keyboard.press("3");
+  const stored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((name) => name.startsWith("taste-engine.feedback.v3"));
+    const store = JSON.parse(localStorage.getItem(key));
+    return {
+      records: Object.values(store.records).map((entry) => [entry.record.status, entry.record.rating, entry.record.reasonCodes.join()]),
+      saved: Object.values(store.planning).filter((item) => item.saved).length,
+    };
+  });
+  expect(stored.records).toEqual([["interested", 5, ""], ["lost-interest", null, "timing"]]);
+  expect(stored.saved).toBe(1);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
+test("feedback re-ranks the page the moment it is given, and the switch restores the published order", async ({ page }) => {
+  await visit(page);
+  await page.getByRole("tab", { name: "Music" }).click();
+  const card = page.locator("#panel-music .eventCard").filter({ has: page.getByRole("button", { name: "Not for me" }) }).first();
+  const id = await card.getAttribute("id");
+  const target = page.locator(`[id="${id}"]`);
+  const before = Number(await target.locator(".decisionPoints").textContent());
+  await target.getByRole("button", { name: "Not for me" }).click();
+  await target.getByRole("group", { name: "Why is this not for you?" }).getByRole("button", { name: "Not my taste" }).click();
+  // No refresh, no reload: the overlay is applied in the browser by the shared policy.
+  await expect(target.locator(".decisionLearned")).toContainText("from your feedback");
+  const after = Number(await target.locator(".decisionPoints").textContent());
+  expect(after).toBeLessThan(before);
+
+  await page.getByRole("tab", { name: "Taste" }).click();
+  const control = page.getByRole("switch", { name: "Use my feedback in the ranking" });
+  await expect(control).toBeChecked();
+  await expect(page.locator(".learnedStatus")).toContainText("moved right now");
+  await control.click();
+  await expect(page.locator(".learnedStatus")).toContainText("published order");
+  await page.getByRole("tab", { name: "Music" }).click();
+  await expect(page.locator(`[id="${id}"] .decisionPoints`)).toHaveText(String(before));
+  await expect(page.locator(`[id="${id}"] .decisionLearned`)).toHaveCount(0);
+});
+
+test("the radar plots every ranked date and stays operable without the canvas", async ({ page }) => {
+  await visit(page, "#radar");
+  const radar = page.locator(".radarSection");
+  await expect(radar.getByRole("img")).toHaveAttribute("aria-label", /Radar showing \d+ upcoming/);
+  const contacts = radar.locator(".radarStrongest button");
+  await expect(contacts.first()).toBeVisible();
+  const second = contacts.nth(1);
+  const title = await second.locator(".radarListTitle").textContent();
+  await second.click();
+  await expect(second).toHaveAttribute("aria-pressed", "true");
+  await expect(radar.locator(".radarContact h3")).toHaveText(title ?? "");
+  await expect(radar.locator(".radarContact a")).toHaveAttribute("href", /^#/);
+  // Raising the squelch hides weaker contacts and says so.
+  await radar.getByRole("slider").fill("60");
+  await expect(radar.locator(".radarSquelch output")).toHaveText("under 60 hidden");
+  const layout = await radar.locator("canvas").evaluate((canvas) => ({ width: canvas.clientWidth, height: canvas.clientHeight, parent: canvas.parentElement.clientWidth }));
+  expect(layout.width).toBe(layout.height);
+  expect(layout.width).toBeLessThanOrEqual(layout.parent);
+});
+
+test("the overview solves the ranked dates into plans that obey the person's limits", async ({ page }) => {
+  await visit(page, "#overview");
+  const plans = page.locator("#plans");
+  await expect(plans.getByRole("heading", { level: 2 })).toHaveText(/way(s)? to spend the next 30 days|Nothing in the next 30 days/);
+  const first = plans.locator(".planCard").first();
+  await expect(first).toBeVisible();
+  const nights = async () => Number(await first.locator(".planTotals dd").first().textContent());
+  const before = await nights();
+  expect(before).toBeGreaterThan(0);
+  // Every pick is on its own day, and the strip lights exactly those days.
+  await expect(first.locator(".planDayOn")).toHaveCount(before);
+  // Saving a pick claims it; the plan keeps it and marks it saved.
+  const save = first.locator(".planPickSave").first();
+  await save.click();
+  await expect(save).toHaveAttribute("aria-pressed", "true");
+  await expect(plans.locator(".plansLede")).toContainText("already claimed");
+  // Tightening the weekly limit never yields more nights, and is remembered.
+  await plans.getByLabel("Nights a week").selectOption("1");
+  expect(await nights()).toBeLessThanOrEqual(before);
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.locator("#plans").getByLabel("Nights a week")).toHaveValue("1");
+  await expect(page.locator("#plans .planPickSave[aria-pressed='true']").first()).toBeVisible();
+});
+
+test("the constellation draws the evidence graph and explains a night by its routes", async ({ page }) => {
+  await visit(page, "#radar");
+  await page.getByRole("button", { name: "Constellation" }).click();
+  const chart = page.locator(".constellation");
+  await expect(chart.getByRole("img")).toHaveAttribute("aria-label", /Constellation of \d+ upcoming nights/);
+  expect(await chart.locator(".constellationNode.node-event").count()).toBeGreaterThan(0);
+  expect(await chart.locator(".constellationLink").count()).toBeGreaterThan(0);
+  // A night is reachable from the keyboard and reads out why it is here.
+  const night = chart.locator(".constellationNode.node-event").first();
+  await night.focus();
+  await page.keyboard.press("Enter");
+  await expect(night).toHaveAttribute("aria-pressed", "true");
+  await expect(chart.locator(".constellationReadout h3")).not.toHaveText("Every line is a reason");
+  await expect(chart.locator(".constellationPaths li").first()).toBeVisible();
+  expect(await chart.locator(".constellationLink.isLit").count()).toBeGreaterThan(0);
+  const box = await chart.locator("svg").evaluate((svg) => ({ width: svg.clientWidth, parent: svg.parentElement.clientWidth }));
+  expect(box.width).toBeLessThanOrEqual(box.parent);
+  // The scope is still one click away and unchanged.
+  await page.getByRole("button", { name: "Scope" }).click();
+  await expect(page.locator(".radarSection canvas")).toBeVisible();
 });
 
 test("opens a calendar hold and makes save and hold states explicitly reversible", async ({ page }) => {
   await visit(page);
-  const disclosure = page.locator("details.cardActions").first();
-  await disclosure.locator("summary").click();
+  const disclosure = page.locator(".cardActions").first();
 
   const save = disclosure.getByRole("button", { name: "Save", exact: true });
   await save.click();
@@ -336,26 +457,30 @@ test("opens a calendar hold and makes save and hold states explicitly reversible
   await expect(disclosure.getByRole("button", { name: "Hold date" })).toHaveAttribute("aria-pressed", "false");
 });
 
-test("uses a history-driven, two-step feedback flow in the intended section order", async ({ page }) => {
+test("uses a history-driven, graded check-in in the intended section order", async ({ page }) => {
   await visit(page);
   await page.getByRole("tab", { name: "Taste" }).click();
   const headings = page.locator(".tasteBlockHeading .eyebrow");
   await expect(headings).toHaveText([
+    "Check-ins",
     "Upcoming saves",
-    "Recent recommendations",
+    "From your feedback",
+    "Taste profile",
     "Hosted engine",
     "Coverage review",
-    "Taste profile",
     "Feedback sync",
   ]);
   const row = page.locator(".recentRecommendation").filter({ hasText: "Past Synthetic Set" });
   await expect(row.getByText("Did you go?")).toBeVisible();
-  await row.getByRole("button", { name: "Yes" }).click();
+  await row.getByRole("button", { name: "I went" }).click();
   await expect(row.getByText("Was it worth it?")).toBeVisible();
   await row.getByRole("button", { name: "Back" }).click();
   await expect(row.getByText("Did you go?")).toBeVisible();
-  await row.getByRole("button", { name: "Yes" }).click();
-  await row.getByRole("button", { name: "No" }).click();
+  await row.getByRole("button", { name: "I went" }).click();
+  await row.getByRole("button", { name: "Regret" }).click();
+  await expect(row.getByText("What let it down?")).toBeVisible();
+  await row.getByRole("button", { name: "Venue" }).click();
+  await row.getByRole("button", { name: "Save regret" }).click();
   await expect(page.getByText("1 new outcome ready to export.")).toBeVisible();
   await expect(row).toHaveCount(0);
   await expect(page.getByText("Past Synthetic Film")).toBeVisible();

@@ -1,8 +1,9 @@
+import type { ReactNode } from "react";
 import { CardActions, calendarInputFrom, planningInputFrom } from "./card-actions";
 import { ChangesStrip, type ChangesSinceRefresh } from "./changes-strip";
-import type { PublicFeedbackSnapshot } from "./feedback-store";
+import type { FeedbackKeys, PublicFeedbackSnapshot } from "./feedback-store";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
-import { RecommendationScore } from "./signal-texture";
+import { RecommendationScore, type FeedbackAdjustment } from "./signal-texture";
 import { eventHref } from "./event-anchor";
 import { formatLocalDate as formatLaDate } from "./local-date";
 import { SemanticEventInsightView, type SemanticEventInsight } from "./semantic-event-insight";
@@ -26,6 +27,9 @@ export type OverviewItem = {
   eventType?: string;
   semanticInsight?: SemanticEventInsight | null;
   feedbackSnapshot?: PublicFeedbackSnapshot | null;
+  feedbackKeys?: FeedbackKeys | null;
+  feedbackAdjustment?: FeedbackAdjustment | null;
+  fallback?: boolean;
 };
 
 export type Editorial = {
@@ -36,7 +40,7 @@ export type Editorial = {
   decisionNotes?: string[];
 };
 
-export function OverviewExplorer({ overview, planAhead, generatedAt, projectionGeneratedAt, editorial, dateAwareRefresh = false, changesSinceRefresh = null }: { overview: OverviewItem[]; planAhead: OverviewItem[]; generatedAt: string; projectionGeneratedAt?: string; editorial?: Editorial; dateAwareRefresh?: boolean; changesSinceRefresh?: ChangesSinceRefresh | null }) {
+export function OverviewExplorer({ overview, planAhead, generatedAt, projectionGeneratedAt, editorial, dateAwareRefresh = false, changesSinceRefresh = null, between = null, adjustedByFeedback = false }: { adjustedByFeedback?: boolean; between?: ReactNode; overview: OverviewItem[]; planAhead: OverviewItem[]; generatedAt: string; projectionGeneratedAt?: string; editorial?: Editorial; dateAwareRefresh?: boolean; changesSinceRefresh?: ChangesSinceRefresh | null }) {
   const liveEditorial = editorial ? {
     ...editorial,
     lead: dateAwareRefresh ? dropStaleSentences(editorial.lead) : editorial.lead,
@@ -51,6 +55,7 @@ export function OverviewExplorer({ overview, planAhead, generatedAt, projectionG
         <div>
           <p className="eyebrow">Current call · next 14 days · {dateAwareRefresh ? 'as of' : 'refreshed'} {asOfDate}</p>
           <h2>{headline}</h2>
+          {adjustedByFeedback ? <p className="overviewAdjusted">This shortlist is reordered by your feedback. <a href="#taste">See what changed</a></p> : null}
         </div>
         <div className="overviewVerdictCopy">
           <p>{lead}</p>
@@ -71,6 +76,9 @@ export function OverviewExplorer({ overview, planAhead, generatedAt, projectionG
           <p>{liveEditorial?.skipCall ?? 'The full vertical views remain available when you want to inspect the evidence.'}</p>
         </div>
       )}
+
+      {/* The shortlist stays first; the wider view and triage follow it. */}
+      {between}
 
       <section className="planAhead" aria-label="Plan ahead recommendations">
         <div className="planAheadIntro rv"><h3>Plan ahead</h3><p>Exceptional longer-lead dates · ranked by fit.</p></div>
@@ -101,7 +109,7 @@ function OverviewCard({ item, index, planAhead = false }: { item: OverviewItem; 
       <span className={`verticalBadge overviewCardBadge vertical-${item.vertical}`}>{verticalLabel}</span>
       <div className="feature-card__content overviewCardContent">
         <div className="overviewTopline"><span className="overviewNumber">{String(index + 1).padStart(2, '0')}</span></div>
-        <p className="overviewDate">{formatLocalDate(item.startLocal)}</p>
+        <p className="overviewDate">{formatLocalDate(item.startLocal)}{item.fallback ? <span className="overviewFallback"> · nothing clears the bar; this is the closest</span> : null}</p>
         <h3>{formatEditorialTitle(item.title)}</h3>
         <p className="overviewPlace">{item.venue?.name ?? 'Venue TBD'} · {item.venue?.city ?? 'Los Angeles'}</p>
         <p className="overviewReason">{item.reason}</p>
@@ -112,8 +120,9 @@ function OverviewCard({ item, index, planAhead = false }: { item: OverviewItem; 
             fit={item.interestScore ?? item.score}
             friction={item.hassleScore}
             score={item.score}
-            status={item.call ?? callLabel(item.score)}
+            status={item.fallback ? "Only if" : item.call ?? callLabel(item.score)}
             urgency={item.urgency}
+            adjustment={item.feedbackAdjustment}
           />
           <a className="overviewUtilityCta" href={eventHref(item.id)}>View in {verticalLabel} <span aria-hidden="true">→</span></a>
           <CardActions

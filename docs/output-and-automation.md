@@ -96,11 +96,11 @@ Framework is a followed promoter calendar and supplies a low-frequency public ar
 
 The native search is a discovery adapter, not the ranker. It creates candidates; the deterministic pipeline deduplicates and scores them later.
 
-Do not supply SeatGeek API payloads to the native search or another model. SeatGeek remains a separate deterministic connector under its API terms. Do not scrape Vivid Seats, TickPick, or EDMTrain. When `EDMTRAIN_CLIENT_KEY` is configured, the documented EDMTrain API may enrich an existing Music occurrence only under the adapter's explicit confident-match rules. Unmatched results are audit-only, source failure is non-blocking, and raw EDMTrain fields never enter Ollama.
+Do not supply SeatGeek API payloads to the native search or another model. SeatGeek remains a separate deterministic connector under its API terms. Do not scrape Vivid Seats, TickPick, or EDMTrain. When `EDMTRAIN_CLIENT_KEY` is configured, the documented EDMTrain API may enrich an existing Music occurrence only under the adapter's explicit confident-match rules, and may announce an exact destination-watchlist festival that no ticketing API lists yet. Other unmatched results are audit-only, source failure is non-blocking, and raw EDMTrain fields never enter Ollama.
 
 ## Guarded local refresh lifecycle
 
-`npm run taste:refresh` operates in a private isolated workspace under `data/taste/workflow/`. It preflights Playlist Sync, runs the existing source/model/build path in isolation when available, or reuses the last accepted projection when it is unavailable. Optional source degradation and model fallback are warnings. The command validates and seals the preview but never changes accepted output or publishes remotely.
+`npm run taste:refresh` operates in a private isolated workspace under `data/taste/workflow/`. It preflights Taste Engine's own Spotify connection (keeping the last valid Spotify snapshot and refreshing every other source when it is not connected), runs the existing source/model/build path in isolation when available, or reuses the last accepted projection when it is unavailable. Optional source degradation and model fallback are warnings. The command validates and seals the preview but never changes accepted output or publishes remotely.
 
 When `config/feedback.json` enables capture, refresh runs the private shadow simulation after projection generation. The resulting report remains inside the preview's private `data/` tree and cannot enter Sites output. Published feedback application remains a hard validation failure.
 

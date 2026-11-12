@@ -27,6 +27,7 @@ export function buildRecommendationHistory({
         title: candidate.title,
         locationLabel: candidate.locationLabel,
         feedbackSnapshotId: candidate.feedbackSnapshotId ?? existing.feedbackSnapshotId ?? null,
+        feedbackKeys: candidate.feedbackKeys ?? existing.feedbackKeys ?? null,
         lastShownAt: nowIso,
         surfaces: orderedSurfaces([...existing.surfaces, ...candidate.surfaces]),
         bestRank: bestRank(existing.bestRank, candidate.bestRank)
@@ -49,6 +50,7 @@ export function serializeRecentHistory(state) {
       historyId: item.historyId,
       canonicalEventId: item.canonicalEventId,
       feedbackSnapshotId: item.feedbackSnapshotId ?? null,
+      feedbackKeys: item.feedbackKeys ?? null,
       vertical: item.vertical,
       title: item.title,
       dateLocal: item.dateLocal,
@@ -122,6 +124,7 @@ function toHistoryCandidate(item, vertical, surface, rank) {
     historyId,
     canonicalEventId,
     feedbackSnapshotId: ['music', 'sports'].includes(vertical) ? item.feedbackSnapshot?.feedbackSnapshotId ?? null : null,
+    feedbackKeys: ['music', 'sports'].includes(vertical) ? item.feedbackKeys ?? null : null,
     vertical,
     title,
     dateLocal,

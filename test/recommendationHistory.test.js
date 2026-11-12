@@ -73,7 +73,7 @@ test('prunes items more than 90 days past and serializes only public allowlisted
   const published = serializeRecentHistory(state);
   assert.deepEqual(published.map((item) => item.canonicalEventId), ['recent']);
   assert.deepEqual(Object.keys(published[0]).sort(), [
-    'bestRank', 'canonicalEventId', 'dateLocal', 'feedbackSnapshotId', 'firstShownAt', 'historyId',
+    'bestRank', 'canonicalEventId', 'dateLocal', 'feedbackKeys', 'feedbackSnapshotId', 'firstShownAt', 'historyId',
     'lastShownAt', 'locationLabel', 'surfaces', 'title', 'vertical'
   ]);
 });

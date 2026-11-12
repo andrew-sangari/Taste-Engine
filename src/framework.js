@@ -1,5 +1,6 @@
 import { normalizeArtistName } from './ranking.js';
 import { createEvidenceFact, createEventEvidence, meaningfulClassifications } from './eventEvidence.js';
+import { parsePromoterTitle } from './eventTitle.js';
 
 const API_URL = 'https://thisisframework.com/wp-json/tribe/events/v1/events';
 const ARTISTS_URL = 'https://thisisframework.com/artists/';
@@ -62,7 +63,7 @@ export function parseFrameworkArtists(html) {
   return artists;
 }
 
-export function normalizeFrameworkEvent(event, retrievedAt = new Date()) {
+export function normalizeFrameworkEvent(event, retrievedAt = new Date(), { knownArtistNames = [] } = {}) {
   const title = decodeText(event.title);
   const venue = event.venue ?? {};
   const retrieved = new Date(retrievedAt).toISOString();
@@ -80,7 +81,8 @@ export function normalizeFrameworkEvent(event, retrievedAt = new Date()) {
   const publishedStartLocal = allDay ? null : startLocal;
   const description = decodeText(event.description ?? event.excerpt ?? event.summary ?? event.content);
   const classifications = frameworkClassifications(event);
-  const performers = frameworkPerformersFromEvent(event, title);
+  const billing = frameworkBilling(event, title, knownArtistNames);
+  const performers = billing.performers;
   const hasExplicitLineup = hasExplicitFrameworkPerformers(event);
   const venueInfo = {
     name: decodeText(venue.venue),
@@ -152,6 +154,10 @@ export function normalizeFrameworkEvent(event, retrievedAt = new Date()) {
     timeTbd: allDay,
     dateTbd: false,
     status: event.status ?? 'scheduled',
+    // Framework's own calendar: Framework promotes this night. Co-presenters
+    // and the night's name are kept apart from the performers.
+    promoters: [...new Set(['Framework', ...billing.presenters.filter((name) => !/^framework$/i.test(name))])],
+    eventName: billing.eventName,
     venue: {
       sourceId: venue.id ? String(venue.id) : null,
       name: decodeText(venue.venue),
@@ -215,15 +221,19 @@ function frameworkClassifications(event) {
   return meaningfulClassifications(values, { provider: 'framework' });
 }
 
-function frameworkPerformersFromEvent(event, title) {
+function frameworkBilling(event, title, knownArtistNames = []) {
+  const parsed = parsePromoterTitle(title, { knownArtistNames, housePromoters: ['Framework'] });
   const raw = event.performers ?? event.artists ?? event.artistNames ?? event.lineup;
-  if (!raw) return frameworkPerformers(title);
-  const values = Array.isArray(raw) ? raw : [raw];
-  const performers = values.map((item, index) => {
+  const values = raw == null ? [] : Array.isArray(raw) ? raw : [raw];
+  const explicit = values.map((item, index) => {
     const name = decodeText(typeof item === 'object' ? item.name ?? item.title : item);
     return { sourceId: typeof item === 'object' && item.id ? String(item.id) : null, name, primary: index === 0, spotifyId: null };
   }).filter((performer) => performer.name);
-  return performers.length ? performers : frameworkPerformers(title);
+  return {
+    performers: explicit.length ? explicit : frameworkPerformers(title, { knownArtistNames }),
+    presenters: parsed.presenters,
+    eventName: parsed.eventName
+  };
 }
 
 function hasExplicitFrameworkPerformers(event) {
@@ -233,14 +243,9 @@ function hasExplicitFrameworkPerformers(event) {
   return Boolean(decodeText(raw));
 }
 
-export function frameworkPerformers(title) {
-  const cleaned = decodeText(title)
-    .replace(/^framework\s+presents\s*/i, '')
-    .replace(/\([^)]*(?:show added|open\s+to\s+close)[^)]*\)/gi, '')
-    .trim();
-  return cleaned.split(/\s+b2b\s+|\s+&\s+/i)
-    .map((name, index) => ({ sourceId: null, name: name.trim(), primary: index === 0, spotifyId: null }))
-    .filter((performer) => performer.name);
+export function frameworkPerformers(title, { knownArtistNames = [] } = {}) {
+  return parsePromoterTitle(decodeText(title), { knownArtistNames, housePromoters: ['Framework'] }).performers
+    .map((performer) => ({ sourceId: null, name: performer.name, primary: performer.primary, spotifyId: null }));
 }
 
 function normalizeLocalDate(value) {
