@@ -75,15 +75,13 @@ The site does two things with the ranking beyond listing it, both in the browser
 
 The site is a Next.js app deployed to Vercel with Postgres and sign-in on Supabase; see `site/README.md` and `docs/hosted-runtime-migration.md`. Sections below that say "Sites" describe the earlier ChatGPT Sites deployment, which the owner is retiring.
 
-The site projects concerts and a second movie vertical across the next 180 days:
-
-- https://taste-engine-la.andrewsangari.chatgpt.site
+The site projects concerts and a second movie vertical across the next 180 days. Production is the Vercel project `taste-engine`, deployed from `master`.
 
 Run `npm run site:refresh` to expand the current Spotify seed through Last.fm and rebuild the display-safe projection in `site/app/data/upcoming.json`. It uses the `LASTFM_API_KEY` already configured in the sibling Playlist Sync project as a fallback, or the same variable in this project's `.env`. The site is date-aware at render time: past-dated music, sports, movie, Overview, and Plan Ahead records fall away in the browser without requiring a rebuild. A rebuild is still needed to retrieve new source records or refreshed rankings.
 
-For the complete refresh plus site build, run `npm run build:site`. It prints compact timings for Spotify/Last.fm, ticket sources, MLB/TMDB, normalization, Ollama enhancement, projection export, the Next/vinext build, and the total run.
+For the complete refresh plus site build, run `npm run build:site`. It prints compact timings for Spotify/Last.fm, ticket sources, MLB/TMDB, normalization, Ollama enhancement, projection export, the Next.js build, and the total run.
 
-For a deterministic code release from a clean checkout, use `npm ci --prefix site` followed by `npm run verify:release`. `npm run build:release` builds only the checked-out application and bundled recovery projection; it never contacts sources or mutates durable taste data. See the deployment/profile runbook above for versioning, D1 migration, health checks, and friend-specific Spotify onboarding.
+For a deterministic code release from a clean checkout, use `npm ci --prefix site` followed by `npm run verify:release`. `npm run build:release` builds only the checked-out application and bundled recovery projection; it never contacts sources or mutates durable taste data. See the deployment/profile runbook above for versioning, the Postgres migration, health checks, and friend-specific Spotify onboarding.
 
 Concert retrieval now merges and deduplicates:
 
