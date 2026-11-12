@@ -4,6 +4,9 @@ import {
   sanitizeErrorMessage,
   sanitizePromptContext
 } from './diagnostics.js';
+import { classifyEventType } from './eventType.js';
+
+export { classifyEventType };
 
 const PASS_DEFINITIONS = {
   personalFit: {
@@ -43,21 +46,21 @@ const PASS_DEFINITIONS = {
 
 const SPORTS_PASS_DEFINITIONS = {
   personalFit: {
-    instruction: 'Assess the personal value of a Dodgers home game from the supplied MLB context and personal preferences. The Dodgers affinity is already deterministic; explain the incremental appeal of the opponent, rivalry, pitching, leverage, and timing without inventing facts.',
+    instruction: 'Assess the personal value of a followed team\'s home game from the supplied schedule context and personal preferences. `league` is mlb for a Dodgers game and nfl for a Rams game. The team affinity is already deterministic; explain the incremental appeal of the opponent, rivalry, leverage, and timing without inventing facts. pitchingScore applies only to mlb; never mention pitching for an nfl game.',
     fields: {
       score: { type: 'integer', minimum: 0, maximum: 100 },
       label: { type: 'string', enum: ['strong fit', 'possible fit', 'exploratory', 'weak fit'] },
       explanation: { type: 'string', maxLength: 180 }
     },
-    input: (item) => pick(item, ['ref', 'daysUntil', 'opponentQuality', 'rivalryTier', 'pitchingScore', 'leverageScore', 'convenienceScore', 'deterministicInterest', 'confidence'])
+    input: (item) => pick(item, ['ref', 'league', 'daysUntil', 'opponentQuality', 'rivalryTier', 'pitchingScore', 'leverageScore', 'convenienceScore', 'deterministicInterest', 'confidence'])
   },
   recommendation: {
-    instruction: 'Give a selective recommendation for a Dodgers home game from the supplied MLB context. It is valid to recommend skipping. Do not invent ticket, schedule, standings, or pitcher facts.',
+    instruction: 'Give a selective recommendation for a followed team\'s home game from the supplied schedule context. `league` is mlb for a Dodgers game and nfl for a Rams game. It is valid to recommend skipping. Do not invent ticket, schedule, standings, roster, or pitcher facts, and never mention pitching for an nfl game.',
     fields: {
       verdict: { type: 'string', enum: ['prioritize', 'consider', 'watch', 'skip'] },
       explanation: { type: 'string', maxLength: 180 }
     },
-    input: (item) => pick(item, ['ref', 'daysUntil', 'opponentQuality', 'rivalryTier', 'pitchingScore', 'leverageScore', 'convenienceScore', 'deterministicInterest', 'confidence'])
+    input: (item) => pick(item, ['ref', 'league', 'daysUntil', 'opponentQuality', 'rivalryTier', 'pitchingScore', 'leverageScore', 'convenienceScore', 'deterministicInterest', 'confidence'])
   },
   urgency: {
     instruction: 'Review only the deterministic ticket urgency label and timing. Never infer inventory, scarcity, prices, sellout risk, or access loss. Unknown ticket coverage must remain unknown.',
@@ -87,6 +90,8 @@ export async function enhanceEventsWithOllama(events, personalContext, {
 } = {}) {
   const safePersonalContext = sanitizePromptContext(personalContext);
   const required = new Set(requiredIds);
+  // A candidate known only from an EDMTrain announcement is never model input.
+  events = events.filter((event) => !isAnnouncementOnly(event));
   const requiredEvents = events.filter((event) => required.has(event.id));
   const remaining = [...events]
     .filter((event) => !required.has(event.id))
@@ -216,8 +221,11 @@ export async function enhanceSportsWithOllama(games, personalContext, {
   const vectors = selected.map((game, index) => {
     const ref = `sports-${index + 1}`;
     refToId.set(ref, game.id);
+    const league = String(game.league ?? game.sportsContext?.league ?? '').toLowerCase() === 'nfl' ? 'nfl' : 'mlb';
     return {
       ref,
+      // Schedule-derived only: MLB Stats API for mlb, ESPN's schedule for nfl.
+      league,
       daysUntil: daysUntil(game.startLocal, now),
       opponentQuality: game.ranking?.opponentQuality ?? 0,
       rivalryTier: game.sportsContext?.rivalryTier ?? 'none',
@@ -305,12 +313,6 @@ export function reusePreviousEnhancements(enhancement, currentItems, previousIte
   return { reusedPassCount, reusedItemCount };
 }
 
-export function classifyEventType(event) {
-  const title = String(event.title ?? '').toLowerCase();
-  if (title.includes('festival') || (event.performers?.length ?? 0) >= 6) return 'festival';
-  if (title.includes('dj set') || title.includes('open to close')) return 'dj set';
-  return 'concert';
-}
 
 async function callOllamaPass({ baseUrl, model, timeoutMs, fetchImpl, personalContext, definition, items, roleDescription = 'You are a private local advisory layer.' }) {
   const itemProperties = { ref: { type: 'string' }, ...definition.fields };
@@ -472,4 +474,11 @@ function sameAdvisorySubject(current, previous) {
   const currentVenue = String(current.venue?.name ?? '').trim().toLowerCase();
   const previousVenue = String(previous.venue?.name ?? '').trim().toLowerCase();
   return currentTitle === previousTitle && currentDate === previousDate && currentVenue === previousVenue;
+}
+
+/** True when every source of a candidate is an EDMTrain announcement. */
+export function isAnnouncementOnly(event) {
+  const sources = (event?.sourceOccurrences ?? []).map((occurrence) => occurrence.source);
+  if (event?.source) sources.push(event.source);
+  return sources.length > 0 && sources.every((source) => source === 'edmtrain');
 }

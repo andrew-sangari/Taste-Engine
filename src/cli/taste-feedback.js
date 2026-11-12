@@ -6,15 +6,14 @@ import {
   FEEDBACK_REASON_CODES,
   FEEDBACK_STATUSES,
   appendFeedbackRecord,
-  buildFeedbackReport,
   deriveFeedbackState,
   loadFeedbackConfig,
   readFeedbackJournal,
   replayFeedbackRecords,
-  simulateFeedback,
   snapshotFeedbackEvent,
   writeJsonAtomic
 } from '../feedback.js';
+import { buildFeedbackReview, summarizeFeedbackReview } from '../feedbackReview.js';
 
 const [command = 'help', ...args] = process.argv.slice(2);
 
@@ -46,8 +45,9 @@ async function runCommand(name, options) {
     case 'rebuild':
       await rebuildFeedback(options);
       return;
+    case 'review':
     case 'simulate':
-      await simulateFeedbackReport(options);
+      await reviewFeedback(options);
       return;
     case 'import':
       await importFromSite(options);
@@ -56,7 +56,7 @@ async function runCommand(name, options) {
       printHelp();
       return;
     default:
-      throw new Error(`Unknown feedback command: ${name}. Use taste:feedback:add, list, revoke, validate, rebuild, simulate, or import.`);
+      throw new Error(`Unknown feedback command: ${name}. Use taste:feedback:add, list, revoke, validate, rebuild, review, or import.`);
   }
 }
 
@@ -188,33 +188,46 @@ async function rebuildFeedback(options) {
   const statePath = resolve(options.output ?? config.statePath);
   const journal = await readFeedbackJournal(journalPath);
   const replay = replayFeedbackRecords(journal.records);
-  const state = deriveFeedbackState(journal.records, { journalIssues: journal.issues, config });
+  const state = deriveFeedbackState(journal.records, { journalIssues: journal.issues });
   await writeJsonAtomic(statePath, state);
   console.log(`Rebuilt feedback state: ${state.activeFeedbackCount} active record(s), ${state.revokedCount} revocation(s), ${state.malformedCount} malformed/ignored condition(s).`);
   if (journal.issues.length || replay.issues.length) console.log('Invalid records were excluded from evidence; run taste:feedback:validate for recovery details.');
 }
 
-async function simulateFeedbackReport(options) {
+async function computeReview(options) {
   const config = await loadConfig(options);
-  const journalPath = resolve(options.journal ?? config.journalPath);
-  const reportPath = resolve(options.output ?? config.reportPath);
-  const projectionPath = resolve(options.projection ?? 'site/app/data/upcoming.json');
-  const journal = await readFeedbackJournal(journalPath);
-  const projection = await readProjection(projectionPath);
-  const state = deriveFeedbackState(journal.records, { journalIssues: journal.issues, config });
-  const planAheadMinScore = options.planAheadMinScore == null
-    ? await readPlanAheadMinScore(options.briefConfig ?? 'config/brief.json')
-    : Number(options.planAheadMinScore);
-  const simulation = simulateFeedback({
+  const journal = await readFeedbackJournal(resolve(options.journal ?? config.journalPath));
+  const projection = await readProjection(resolve(options.projection ?? 'site/app/data/upcoming.json'));
+  const state = deriveFeedbackState(journal.records, { journalIssues: journal.issues });
+  const brief = await readBriefThresholds(options.briefConfig ?? 'config/brief.json');
+  const review = buildFeedbackReview({
     projection,
-    state,
-    config,
-    planAheadMinScore,
-    now: projection.generatedAt
+    records: state.activeRecords,
+    // Reviewed against the projection as it stands today, so decay matches
+    // what the next refresh would apply.
+    now: options.now ? new Date(options.now) : new Date(),
+    currentMinScore: brief.minimumUtility,
+    planAheadMinScore: options.planAheadMinScore == null ? brief.overviewPlanAheadMinScore : Number(options.planAheadMinScore)
   });
-  const report = buildFeedbackReport({ state, simulation, config });
-  await writeJsonAtomic(reportPath, report);
-  console.log(`Simulated ${report.shadowCandidateCount} candidate(s): ${report.shadowRankingDiffs.length} ranking diff(s), ${report.potentialOverviewChanges.length} Overview change(s), ${report.eligibleSignals.length} eligible signal(s).`);
+  return { config, state, review };
+}
+
+// What the local journal's feedback would move on the current projection.
+async function reviewFeedback(options) {
+  const { config, state, review } = await computeReview(options);
+  await writeJsonAtomic(resolve(options.output ?? config.reportPath), {
+    ...review,
+    journal: {
+      validRecordCount: state.validRecordCount,
+      activeFeedbackCount: state.activeFeedbackCount,
+      revokedCount: state.revokedCount,
+      malformedCount: state.malformedCount,
+      outcomesByStatus: state.outcomesByStatus,
+      recordsIgnored: state.ignored
+    }
+  });
+  for (const line of summarizeFeedbackReview(review)) console.log(line);
+  console.log('This is what the local journal would move. On the site, feedback applies live as an overlay you can switch off in the Taste tab.');
 }
 
 async function importFromSite(options) {
@@ -376,12 +389,12 @@ function parseList(value) {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
 }
 
-async function readPlanAheadMinScore(path) {
+async function readBriefThresholds(path) {
   try {
     const config = await loadBriefConfig(resolve(path));
-    return config.overviewPlanAheadMinScore;
+    return { minimumUtility: config.minimumUtility, overviewPlanAheadMinScore: config.overviewPlanAheadMinScore };
   } catch {
-    return 55;
+    return { minimumUtility: 28, overviewPlanAheadMinScore: 55 };
   }
 }
 
@@ -402,7 +415,7 @@ function printHelp() {
   console.log('  revoke --feedback-id ID --yes');
   console.log('  validate');
   console.log('  rebuild');
-  console.log('  simulate [--projection PATH]');
+  console.log('  review [--projection PATH]      what the journal\'s feedback would move');
   console.log('  import --file PATH [--snapshot-index PATH]');
   console.log(`  statuses: ${FEEDBACK_STATUSES.join(', ')}`);
   console.log(`  reasons: ${FEEDBACK_REASON_CODES.join(', ')} (required for wanted-to-attend, lost-interest, and did-not-attend-logistical)`);

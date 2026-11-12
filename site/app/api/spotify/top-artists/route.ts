@@ -1,12 +1,15 @@
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { crossSiteRejection } from "../../../../server/request-guard";
+import { getSignedInUser } from "../../../auth.ts";
 import { refreshSpotifyTopArtists, SpotifyHttpError } from "../../../../server/spotify";
 import { resolveProfile } from "../../../../server/profiles";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "Sign in with ChatGPT." }, { status: 401 });
+  const crossSite = crossSiteRejection(request);
+  if (crossSite) return crossSite;
+  const user = await getSignedInUser();
+  if (!user) return Response.json({ error: "Sign in to Taste Engine." }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({})) as { limit?: number };
     return Response.json(await refreshSpotifyTopArtists(await resolveProfile(user), body.limit ?? 50), {

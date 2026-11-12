@@ -1,0 +1,43 @@
+/* Movies: confirmed screenings above the watchlist. Uses the tokens declared
+   in globals.css; import after globals.css and evolution.css. */
+
+.movieGroupHeader.movieGroupSplit { align-items: baseline; display: flex; flex-wrap: wrap; gap: 6px 24px; justify-content: space-between; }
+.movieGroupNote { color: var(--text-muted); font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: .06em; margin: 0; text-transform: uppercase; }
+.movieGroupConfirmed .movieGroupHeader .eyebrow { color: var(--accent-bright); }
+.movieConfirmedEmpty { color: var(--text-secondary); font-size: 15px; line-height: 1.45; margin: 0; max-width: 620px; padding: 6px 0 4px; }
+
+/* Confirmed card: same card, a firmer edge, and a solid format mark where the
+   watchlist card carries a dashed "format watch" one. */
+.movieCard.movieScreening { border-color: rgba(98, 223, 195, .34); min-height: 420px; }
+.movieScreening .movieMeta { align-items: center; gap: 12px; }
+.movieScreening .movieMeta .movieNext { color: var(--accent-bright); }
+.movieScreening .movieMeta span:last-child { background: var(--accent-wash); border: 1px solid var(--accent); color: var(--accent-bright); white-space: nowrap; }
+
+/* Cards in a row stretch to the tallest one: keep the title under the meta row
+   and let the taste tier and actions settle at the bottom instead. */
+.movieCard.movieScreening h3 { margin-top: 28px; }
+.movieScreening .movieScore { margin-top: auto; }
+
+.movieEngagements { border-top: 1px solid var(--line); display: grid; gap: 18px; list-style: none; margin: 20px 0 24px; padding: 18px 0 0; }
+.movieEngagement { display: grid; gap: 8px; }
+.movieEngagement + .movieEngagement { border-top: 1px dashed var(--line); padding-top: 18px; }
+.movieEngagement p { margin: 0; }
+.movieEngagementHead { align-items: baseline; display: flex; font-family: var(--font-mono), monospace; font-size: 11px; gap: 12px; justify-content: space-between; letter-spacing: .04em; text-transform: uppercase; }
+.movieEngagementHead strong { color: var(--text-primary); font-weight: 600; }
+.movieEngagementHead span { color: var(--accent-bright); white-space: nowrap; }
+.movieEngagementDates { color: var(--text-secondary); font-size: 15px; line-height: 1.4; }
+.movieShowtimes { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.movieShowtimes li { align-items: center; color: var(--text-secondary); display: flex; flex-wrap: wrap; font-family: var(--font-mono), monospace; font-size: 11px; gap: 6px; text-transform: uppercase; }
+.movieShowtimes li > span { color: var(--text-muted); min-width: 92px; }
+.movieShowtimes b { border: 1px solid var(--line); border-radius: 999px; color: var(--text-primary); font-weight: 500; padding: 5px 9px; }
+.movieShowtimes .movieShowtimesMore { color: var(--text-muted); }
+.movieEngagementNote { color: var(--text-secondary); font-size: 14px; line-height: 1.45; }
+.movieEngagementFoot { align-items: center; display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; }
+.movieCard .movieEngagementSource { align-items: center; color: var(--accent-bright); display: inline-flex; gap: 6px; min-height: 44px; }
+.movieCard .movieEngagementSource:hover { text-decoration: underline; }
+.movieEngagementQuiet { color: var(--text-muted); font-family: var(--font-mono), monospace; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+
+@media (max-width: 820px) {
+  .movieCard.movieScreening { min-height: 0; }
+  .movieShowtimes li > span { min-width: 0; width: 100%; }
+}

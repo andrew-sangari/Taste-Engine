@@ -24,6 +24,8 @@ export type HostedPipelineConfig = {
   movies: Record<string, unknown> & {
     maxCandidates: number;
     priorityTheaters: unknown[];
+    // Reviewed screening confirmations for this profile, or null for none.
+    engagements: unknown[] | null;
   };
   sports: Record<string, unknown> & {
     enabled: boolean;
@@ -120,6 +122,7 @@ export function readHostedPipelineConfig(profile?: ProfileScope): HostedPipeline
       ...movieInput,
       maxCandidates: integer(movieInput.maxCandidates, 20),
       priorityTheaters: Array.isArray(movieInput.priorityTheaters) ? movieInput.priorityTheaters : [],
+      engagements: Array.isArray(movieInput.engagements) ? movieInput.engagements : null,
     },
     sports: {
       ...sportsInput,

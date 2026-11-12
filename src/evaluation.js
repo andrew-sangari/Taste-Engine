@@ -12,7 +12,7 @@ import {
 } from './sports.js';
 import { normalizeTmdbMovie } from './tmdb.js';
 import { deduplicateCandidates } from './candidates.js';
-import { rankCandidates, normalizeArtistName } from './ranking.js';
+import { rankCandidates, normalizeArtistName, selectPublishedConcerts } from './ranking.js';
 import { buildOverviewBuckets } from './overview.js';
 import { buildEditorialCandidates, generateEditorialBrief } from './editorial.js';
 import { enhanceEventsWithOllama, enhanceSportsWithOllama } from './eventEnhancement.js';
@@ -40,9 +40,7 @@ export async function evaluateFixture(fixture, {
   const deduplication = {};
   const allConcerts = deduplicateCandidates(normalized.concerts, deduplication);
   const rankedAll = rankCandidates(allConcerts, normalized.artistSnapshot, config, generatedAt);
-  const ranked = rankedAll
-    .filter((candidate) => !candidate.ranking.excluded && candidate.matchedArtists.length > 0)
-    .slice(0, 120);
+  const ranked = selectPublishedConcerts(rankedAll);
 
   const deterministicOverviewBuckets = buildOverviewBuckets(
     ranked.map((candidate) => toDisplayEvent(candidate)),
@@ -50,6 +48,7 @@ export async function evaluateFixture(fixture, {
     {
       now: generatedAt,
       currentDays: 14,
+      currentMinScore: config.minimumUtility,
       planAheadMinScore: config.overviewPlanAheadMinScore,
       horizonDays
     }
@@ -121,6 +120,7 @@ export async function evaluateFixture(fixture, {
   const finalOverviewBuckets = buildOverviewBuckets(projection.events, projection.sports, {
     now: generatedAt,
     currentDays: 14,
+    currentMinScore: config.minimumUtility,
     planAheadMinScore: config.overviewPlanAheadMinScore,
     horizonDays
   });

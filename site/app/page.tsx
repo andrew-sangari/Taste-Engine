@@ -3,7 +3,8 @@ import type { CSSProperties } from "react";
 import { loadProjection } from "./data/projection";
 import { Reveal } from "./reveal";
 import { VerticalShell } from "./vertical-shell";
-import { chatGPTSignInPath, getChatGPTUser } from "./chatgpt-auth";
+import { getSignedInUser } from "./auth.ts";
+import { SignInForm } from "./signin-form";
 import { ProfileAccessError, profileScopeForUser, resolveProfile, type ProfileScope } from "../server/profiles";
 import { HostedConnections } from "./hosted-connections";
 import { deploymentEnvironment } from "../server/release";
@@ -14,25 +15,26 @@ import type { Movie } from "./movie-explorer";
 import type { Editorial, OverviewItem } from "./overview-explorer";
 import type { SportsGame } from "./sports-explorer";
 import type { TasteProfile } from "./taste-explorer";
+import type { RankingConfig } from "./vertical-shell";
 
 export const metadata: Metadata = {
   title: "Taste Engine — Upcoming",
-  description: "A private, ranked view of the music, movies, and Dodgers games worth leaving home for.",
+  description: "A private, ranked view of the music, movies, and games worth leaving home for.",
 };
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const user = await getChatGPTUser();
-  if (!user && !["local", "test"].includes(deploymentEnvironment())) return <SignInRequired />;
+export default async function Home({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const user = await getSignedInUser();
+  if (!user && !["local", "test"].includes(deploymentEnvironment())) return <SignInRequired linkFailed={(await searchParams)?.signin === "link-failed"} />;
   let profile: ProfileScope | null = null;
   if (user) {
     try {
       profile = await resolveProfile(user);
     } catch (error) {
       if (error instanceof ProfileAccessError) throw error;
-      // D1 outages may use the bundled projection only for the explicitly
-      // configured original profile. Authorization failures never bypass D1.
+      // A database outage may use the bundled projection only for the explicitly
+      // configured original profile. Authorization failures never bypass it.
       profile = await profileScopeForUser(user);
     }
   }
@@ -59,6 +61,7 @@ export default async function Home() {
         <div className="mastheadMeta">
           <span className="mastheadLocation">Los Angeles</span>
           {profile ? <span>Profile · {profile.displayName}</span> : null}
+          {user ? <form action="/auth/signout" className="signOutForm" method="post"><button type="submit">Sign out</button></form> : null}
           <span className="liveDot">Refreshed {new Date(projection.generatedAt).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric" })}</span>
           <a className="mastheadNotes" href="#engine-notes">Engine notes ↓</a>
         </div>
@@ -73,7 +76,7 @@ export default async function Home() {
           <p>
           Start with the short list, then switch verticals without losing the
           timing lens. Music remains the primary learned taste signal; films
-          and Dodgers games stay legible, bounded, and explainable.
+          and Dodgers and Rams games stay legible, bounded, and explainable.
           </p>
           <p className="projectionUtility"><span><b data-count={projection.events.length + movies.length + sports.length}>{projection.events.length + movies.length + sports.length}</b> ranked candidates</span><span aria-hidden="true">·</span><span><b data-count={projection.expandedArtistCount ?? projection.sourceArtistCount}>{projection.expandedArtistCount ?? projection.sourceArtistCount}</b> taste signals</span><span aria-hidden="true">·</span><span><b data-count={projection.horizon.days}>{projection.horizon.days}</b>-day horizon</span></p>
         </div>
@@ -84,6 +87,8 @@ export default async function Home() {
         allowLegacyStorageMigration={profile?.legacyDefault ?? true}
         events={projection.events}
         editorial={projection.editorial}
+        horizonDays={projection.horizon?.days ?? null}
+        rankingConfig={projection.rankingConfig ?? null}
         featuredInterestThreshold={projection.sportsConfig?.featuredInterestThreshold ?? 70}
         generatedAt={projection.generatedAt}
         movies={movies}
@@ -140,7 +145,7 @@ export default async function Home() {
           </li>
           <li className="methodStep">
             <span className="methodNode">02</span>
-            <strong>Retrieve</strong><p>Music comes from independent SeatGeek, Ticketmaster, and Framework paths. Insomniac remains explicitly unavailable until its adapter is verified. MLB defines Dodgers games; TMDB keeps a refined theatrical film shortlist.</p>
+            <strong>Retrieve</strong><p>Music comes from independent SeatGeek, Ticketmaster, Framework, and Insomniac paths, plus named destination festivals worth a trip. MLB defines Dodgers games and the NFL schedule defines Rams games; TMDB keeps a refined theatrical film shortlist, and a film becomes actionable only with a confirmed screening.</p>
           </li>
           <li className="methodStep">
             <span className="methodNode">03</span>
@@ -170,8 +175,9 @@ export default async function Home() {
           <div>
           <p>
             The seed is intentionally editable. Add representative playlists as
-            your taste shifts, then refresh the projection. After each outing, a
-            quick worth-it check-in is the feedback loop that can change future fit.
+            your taste shifts, then refresh the projection. Your own reads and
+            outcomes are laid over the ranking the moment you give them, and can be
+            switched off in the Taste tab.
           </p>
           {projection.priorityTheaters?.length ? (
             <p className="theaterList"><strong>Premium-format watch</strong><span>{projection.priorityTheaters.map((theater) => theater.name).join(" · ")}</span></p>
@@ -215,12 +221,12 @@ function ProfileOnboarding({ displayName }: { displayName: string }) {
   </main>;
 }
 
-function SignInRequired() {
+function SignInRequired({ linkFailed }: { linkFailed: boolean }) {
   return <main>
     <header className="masthead"><span className="wordmark"><span>TASTE</span><span>ENGINE</span></span></header>
     <section className="projectionHero" id="top">
       <div><p className="kicker">Private by design</p><h1>Sign in to select your taste profile.</h1></div>
-      <div className="projectionAside"><p>Recommendation and Spotify state are selected only from the authenticated ChatGPT identity.</p><p><a href={chatGPTSignInPath("/")} target="_top">Sign in with ChatGPT</a></p></div>
+      <div className="projectionAside"><p>Recommendations, feedback and Spotify state belong to one signed-in profile. Enter your email and a one-time code arrives there; there is no password.</p><SignInForm linkFailed={linkFailed} /></div>
     </section>
   </main>;
 }
@@ -230,6 +236,7 @@ type SourceHealth = { source: string; status: string; itemCount: number; warning
 type ProjectionView = {
   changesSinceRefresh?: ChangesSinceRefresh | null;
   editorial?: Editorial;
+  rankingConfig?: RankingConfig | null;
   events: EventItem[];
   expandedArtistCount?: number;
   generatedAt: string;
@@ -268,9 +275,9 @@ function summarizeSourceHealth(sources: SourceHealth[]) {
 }
 
 function sourceCategory(source: string) {
-  if (["seatgeek", "ticketmaster", "framework", "framework-artists", "insomniac", "edmtrain", "jev-events", "ollama-events", "spotify-top-artists"].includes(source)) return "Music";
-  if (["mlb", "sports-seatgeek", "sports-ticketmaster", "ollama-sports"].includes(source)) return "Sports";
-  if (source === "tmdb") return "Movies";
+  if (["seatgeek", "ticketmaster", "framework", "framework-artists", "insomniac", "destination-events", "artist-tags", "edmtrain", "jev-events", "ollama-events", "spotify-top-artists"].includes(source)) return "Music";
+  if (["mlb", "nfl", "sports-seatgeek", "sports-ticketmaster", "ollama-sports"].includes(source)) return "Sports";
+  if (source === "tmdb" || source === "movie-engagements") return "Movies";
   if (source === "ollama" || source === "ollama-overview") return "Editorial";
   return "Other";
 }
@@ -281,16 +288,20 @@ function sourceLabel(source: string) {
     ticketmaster: "Ticketmaster music",
     framework: "Framework events",
     "framework-artists": "Framework artist roster",
-    edmtrain: "EDMTrain lineup enrichment",
+    edmtrain: "EDMTrain lineups and festival announcements",
     insomniac: "Insomniac events",
+    "destination-events": "Destination festivals",
+    "artist-tags": "Genre tags for discovered artists",
     "jev-events": "Jev event characterization",
     "ollama-events": "Ollama music advisories",
     "spotify-top-artists": "Spotify Top Artists",
     mlb: "MLB schedule",
+    nfl: "Rams schedule (ESPN)",
     "sports-seatgeek": "SeatGeek sports tickets",
     "sports-ticketmaster": "Ticketmaster sports tickets",
     "ollama-sports": "Ollama sports advisories",
     tmdb: "TMDB film candidates",
+    "movie-engagements": "Confirmed screenings",
     ollama: "Ollama editorial brief",
     "ollama-overview": "Ollama overview queue"
   } as Record<string, string>)[source] ?? source;
@@ -311,6 +322,9 @@ function formatSourceNote(source: SourceHealth) {
 function formatSourceDetails(details: Record<string, string | number | null>) {
   if (details.matchedEvents != null) {
     return `${details.matchedEvents} matched · ${details.lineupArtists ?? 0} lineup artists · ${details.ambiguousMatches ?? 0} ambiguous`;
+  }
+  if (details.confirmedFilms != null) {
+    return `${details.confirmedFilms} film${Number(details.confirmedFilms) === 1 ? "" : "s"} with a confirmed screening`;
   }
   if (details.reusedPasses != null) {
     return Number(details.reusedPasses) > 0 ? `${details.reusedPasses} prior passes retained across ${details.reusedItems ?? 0} unchanged items` : "no prior passes needed";

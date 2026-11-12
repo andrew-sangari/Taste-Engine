@@ -1,4 +1,5 @@
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { crossSiteRejection } from "../../../../server/request-guard";
+import { getSignedInUser } from "../../../auth.ts";
 import {
   listSpotifyPlaylists,
   readPlaylistSelections,
@@ -11,8 +12,8 @@ import { resolveProfile } from "../../../../server/profiles";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "Sign in with ChatGPT." }, { status: 401 });
+  const user = await getSignedInUser();
+  if (!user) return Response.json({ error: "Sign in to Taste Engine." }, { status: 401 });
   try {
     const profile = await resolveProfile(user);
     const available = new URL(request.url).searchParams.get("available") === "1"
@@ -27,8 +28,10 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "Sign in with ChatGPT." }, { status: 401 });
+  const crossSite = crossSiteRejection(request);
+  if (crossSite) return crossSite;
+  const user = await getSignedInUser();
+  if (!user) return Response.json({ error: "Sign in to Taste Engine." }, { status: 401 });
   try {
     const body = await request.json() as { playlists?: unknown };
     return Response.json({ selected: await writePlaylistSelections(await resolveProfile(user), body.playlists) });

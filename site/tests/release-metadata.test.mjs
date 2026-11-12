@@ -14,7 +14,7 @@ test("release metadata is byte-stable for fixed inputs and contains no wall-cloc
   assert.equal(first.release, "2026.08.30-rc.1");
   assert.equal(first.commitSha, "a".repeat(40));
   assert.equal(first.builtAt, "2026-08-30T08:00:00.000Z");
-  assert.equal(first.databaseSchemaVersion, 3);
+  assert.equal(first.databaseSchemaVersion, 4);
   assert.equal(first.projectionSchemaVersion, 5);
   assert.equal(first.sourceState, "declared");
   assert.equal(first.releasable, true);

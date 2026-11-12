@@ -1,12 +1,12 @@
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { getSignedInUser } from "../../../auth.ts";
 import { getSpotifyPlaylistArtists, SpotifyHttpError } from "../../../../server/spotify";
 import { resolveProfile } from "../../../../server/profiles";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "Sign in with ChatGPT." }, { status: 401 });
+  const user = await getSignedInUser();
+  if (!user) return Response.json({ error: "Sign in to Taste Engine." }, { status: 401 });
   const url = new URL(request.url);
   const playlistId = url.searchParams.get("playlistId");
   if (!playlistId) return Response.json({ error: "playlistId is required." }, { status: 400 });

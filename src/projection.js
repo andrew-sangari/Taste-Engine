@@ -1,6 +1,7 @@
 import { classifyEventType } from './eventEnhancement.js';
 import { buildSemanticEventInsight } from './nightlife/cardInsight.js';
 import { resolveMusicVisual, resolveSportsVisual } from './visuals.js';
+import { feedbackKeysFor } from './feedbackPolicy.js';
 
 /**
  * The published event row. Shared by the local export and the hosted refresh
@@ -37,6 +38,12 @@ export function toDisplayEvent(candidate, localEnhancement = null) {
     startLocal: candidate.startLocal,
     timeTbd: candidate.timeTbd === true,
     venue: candidate.venue,
+    promoters: Array.isArray(candidate.promoters) ? candidate.promoters.map(String) : [],
+    eventName: candidate.eventName ?? null,
+    destination: candidate.destination ?? null,
+    // What feedback about this night can teach, derived only from fields this
+    // row already displays. Frozen into a record when feedback is given.
+    feedbackKeys: feedbackKeysFor(candidate, 'music'),
     performers: (candidate.performers ?? []).map((performer) => ({ name: performer?.name, primary: performer?.primary === true })),
     ticketObservation: candidate.ticketObservation,
     matchedArtists: (candidate.matchedArtists ?? []).map(({ spotifyArtistId, name, seedStrength, origin, matchMethod, primary }) => ({ spotifyArtistId, name, seedStrength, origin, matchMethod, primary })),
@@ -74,7 +81,8 @@ export function toDisplaySportsGame(game, localEnhancement = null) {
   ].map((link) => [`${link.source}|${link.url}`, link])).values()];
   return {
     id: game.id,
-    source: 'mlb',
+    source: game.source ?? 'mlb',
+    league: game.league ?? 'mlb',
     sourceUrl: game.sourceUrl,
     startLocal: game.startLocal,
     timeTbd: game.timeTbd === true,
@@ -87,6 +95,7 @@ export function toDisplaySportsGame(game, localEnhancement = null) {
     ticketObservations: game.ticketObservations,
     sourceLinks,
     ranking: game.ranking,
+    feedbackKeys: feedbackKeysFor(game, 'sports'),
     visual: game.visual ?? resolveSportsVisual(game),
     localEnhancement
   };

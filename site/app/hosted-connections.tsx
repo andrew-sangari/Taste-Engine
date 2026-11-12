@@ -102,7 +102,7 @@ export function HostedConnections() {
         <p className="eyebrow">Hosted engine</p>
         <h3 id="hosted-connections-title">Sources that run while your computer is off.</h3>
       </div>
-      {!status ? <p className="tasteQuietEmpty">Sign in with ChatGPT to inspect hosted connections.</p> : (
+      {!status ? <p className="tasteQuietEmpty">Sign in to inspect hosted connections.</p> : (
         <div className="timelineList">
           <article className="timelineRow">
             <div>

@@ -15,3 +15,16 @@ await build({
   target: "es2022",
   banner: { js: "// Generated from deterministic Taste Engine modules. Do not edit directly.\n" },
 });
+
+// The browser gets its own small bundle of the same source modules: the
+// feedback overlay, the shortlist builder and the review. One implementation,
+// two generated copies, so what the page shows live is the policy itself.
+await build({
+  entryPoints: [resolve(root, "app/engine-client-entry.js")],
+  outfile: resolve(root, "app/engine-client.js"),
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  banner: { js: "// Generated from deterministic Taste Engine modules. Do not edit directly.\n" },
+});

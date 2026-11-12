@@ -1,5 +1,5 @@
-import type { ChatGPTUser } from "../app/chatgpt-auth";
-import { getD1 } from "../db/index.ts";
+import type { SignedInUser } from "../app/auth.ts";
+import { getDatabase } from "../db/index.ts";
 import { deploymentEnvironment } from "./release.ts";
 
 const LEGACY_OWNER_KEY = "legacy-default";
@@ -11,7 +11,7 @@ export type ProfileScope = {
   legacyDefault: boolean;
 };
 
-export async function profileScopeForUser(user: ChatGPTUser): Promise<ProfileScope> {
+export async function profileScopeForUser(user: SignedInUser): Promise<ProfileScope> {
   const email = canonicalEmail(user.email);
   assertAllowedProfileEmail(email);
   return {
@@ -22,10 +22,10 @@ export async function profileScopeForUser(user: ChatGPTUser): Promise<ProfileSco
   };
 }
 
-export async function resolveProfile(user: ChatGPTUser): Promise<ProfileScope> {
+export async function resolveProfile(user: SignedInUser): Promise<ProfileScope> {
   const candidate = await profileScopeForUser(user);
   const identityHash = await sha256Hex(candidate.email);
-  const db = getD1();
+  const db = getDatabase();
   if (candidate.legacyDefault) {
     const existingLegacyOwner = await db.prepare(`
       SELECT profile_id
@@ -76,7 +76,7 @@ export async function profileIdForEmail(email: string): Promise<string> {
 
 export async function readProfile(profileId: string): Promise<ProfileScope | null> {
   assertProfileId(profileId);
-  const row = await getD1().prepare(`
+  const row = await getDatabase().prepare(`
     SELECT profile_id, owner_email, display_name, legacy_default, enabled
     FROM profiles
     WHERE profile_id = ?1
@@ -97,7 +97,7 @@ export async function readProfile(profileId: string): Promise<ProfileScope | nul
 }
 
 export async function listConnectedProfiles(): Promise<ProfileScope[]> {
-  const result = await getD1().prepare(`
+  const result = await getDatabase().prepare(`
     SELECT p.profile_id, p.owner_email, p.display_name, p.legacy_default
     FROM profiles p
     INNER JOIN spotify_tokens t ON t.profile_id = p.profile_id
@@ -122,7 +122,7 @@ export function assertProfileId(value: string): void {
 }
 
 async function claimLegacyRows(profile: ProfileScope): Promise<void> {
-  const db = getD1();
+  const db = getDatabase();
   const ownerScopedTables = [
     "feedback_state",
     "feedback_records",
@@ -155,16 +155,20 @@ function assertAllowedProfileEmail(email: string): void {
   if (!allowedProfileEmail(email)) throw new ProfileAccessError("This account is not allowed to use Taste Engine.");
 }
 
+/** Whether this address may use Taste Engine at all. Fails closed outside local development and tests. */
+export function isAllowedProfileEmail(email: string): boolean {
+  return allowedProfileEmail(canonicalEmail(email));
+}
+
 function allowedProfileEmail(email: string): boolean {
   const configured = String(process.env.TASTE_ALLOWED_PROFILE_EMAILS ?? "")
     .split(",")
     .map(canonicalEmail)
     .filter(Boolean);
   if (!configured.length) {
-    if (deploymentEnvironment() === "production") {
-      return false;
-    }
-    return true;
+    // Fail closed: an unset or mistyped environment is not a reason to admit
+    // every signed-in account. Only local development and tests are open.
+    return ["local", "test"].includes(deploymentEnvironment());
   }
   return configured.includes(canonicalEmail(email));
 }

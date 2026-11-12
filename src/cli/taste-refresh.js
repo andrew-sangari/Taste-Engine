@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createValidationManifest, feedbackSimulationArgs, validatePreview, writeValidationManifest } from '../refreshWorkflow.js';
 import { processFeedbackInbox } from '../feedbackInbox.js';
+import { getSpotifyAuthStatus } from '../spotifyClient.js';
 
 const root = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const workflowRoot = resolve(root, 'data/taste/workflow');
@@ -22,13 +23,26 @@ try {
   await mkdir(previewDir, { recursive: true });
   await copyWorkspace(previewDir);
 
-  const playlistSync = await preflightPlaylistSync();
-  const mode = playlistSync.available && !args.has('--cached-only') ? 'live-isolated' : 'cached-projection';
+  // Three ways to refresh, best first. Spotify is Taste Engine's own
+  // connection now (npm run spotify:connect); nothing else has to be running.
+  //   live-isolated      Spotify connected: reseed taste, then every source.
+  //   live-sources       Not connected, but a seed exists: keep the last valid
+  //                      Spotify snapshot and still refresh every other source.
+  //   cached-projection  Asked for, or nothing to seed from: rebuild the last
+  //                      accepted projection unchanged.
+  const spotify = preflightSpotify();
+  const seedExists = await readFile(join(root, 'data/taste/artists.json'), 'utf8').then(() => true, () => false);
+  const mode = args.has('--cached-only') ? 'cached-projection'
+    : spotify.connected ? 'live-isolated'
+      : seedExists ? 'live-sources' : 'cached-projection';
   const warnings = [];
   if (mode === 'live-isolated') {
     await run(process.execPath, ['scripts/build-site.js'], previewDir);
+  } else if (mode === 'live-sources') {
+    warnings.push(`${spotify.warning} Reused the last valid Spotify snapshot and refreshed every other source.`);
+    await run(process.execPath, ['scripts/build-site.js', '--skip-seed'], previewDir);
   } else {
-    warnings.push(args.has('--cached-only') ? 'Cached-only refresh requested; reused the last accepted projection.' : playlistSync.warning);
+    warnings.push(args.has('--cached-only') ? 'Cached-only refresh requested; reused the last accepted projection.' : `${spotify.warning} No taste seed exists yet; reused the last accepted projection.`);
     await run(process.execPath, ['scripts/update-recommendation-history.js'], previewDir);
     await run(npm(), ['run', 'build'], join(previewDir, 'site'));
   }
@@ -45,7 +59,7 @@ try {
   const validation = await validatePreview({
     previewDir,
     acceptedDir: root,
-    feedbackApplicationEnabled: feedback?.feedback?.applyToPublishedRanking === true,
+    rebaseline: args.has('--rebaseline'),
     browserSmokePassed
   });
   if (!validation.ok) throw new Error(`Preview validation failed: ${validation.errors.map((item) => item.code).join(', ')}`);
@@ -56,7 +70,8 @@ try {
     mode,
     validated: true,
     previewHash: manifest.contentSha256,
-    warningCodes: [...validation.warnings.map((item) => item.code), ...warnings.map(() => 'cache-reuse')],
+    warningCodes: [...validation.warnings.map((item) => item.code), ...warnings.map(() => mode === 'live-sources' ? 'spotify-snapshot-reuse' : 'cache-reuse')],
+    rebaseline: args.has('--rebaseline'),
     browserSmoke: args.has('--browser') ? 'passed' : 'not requested'
   });
   console.log(`Validated preview ready: ${previewDir}`);
@@ -95,40 +110,25 @@ async function copyPrivateData(destination) {
     await mkdir(target, { recursive: true });
     const tasteEntries = await readdir(source, { withFileTypes: true });
     for (const tasteEntry of tasteEntries) {
-      if (tasteEntry.name === 'workflow') continue;
+      // The preview never needs the credential: Spotify state always resolves
+      // to the canonical data directory (see resolveSpotifyStateDir).
+      if (tasteEntry.name === 'workflow' || tasteEntry.name === 'spotify-token.json') continue;
       await cp(join(source, tasteEntry.name), join(target, tasteEntry.name), { recursive: true, force: true });
     }
   }
 }
 
-async function preflightPlaylistSync() {
-  const baseUrl = await playlistSyncBaseUrl();
-  const statusUrl = new URL('/api/status', `${baseUrl}/`);
-  try {
-    const response = await fetch(statusUrl, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) return { available: false, warning: `Playlist Sync status returned HTTP ${response.status}; reused the last accepted projection.` };
-    const status = await response.json().catch(() => ({}));
-    if (status.connected?.spotify === false) return { available: false, warning: 'Playlist Sync is running but Spotify is disconnected; reused the last accepted projection.' };
-    const missingScopes = Array.isArray(status.spotifyAuth?.missingScopes) ? status.spotifyAuth.missingScopes : [];
-    if (missingScopes.includes('user-top-read')) {
-      console.log('Playlist Sync preflight: running; user-top-read is missing, so Top Artists will fall back without blocking playlist evidence.');
-    } else {
-      console.log('Playlist Sync preflight: running and Spotify-connected.');
-    }
-    return { available: true, warning: null };
-  } catch (error) {
-    const code = error?.cause?.code || error?.code || error?.name || 'network error';
-    return { available: false, warning: `Playlist Sync status could not be reached (${code}); reused the last accepted projection. If port 4317 is listening, run the refresh with localhost network permission.` };
+function preflightSpotify() {
+  const status = getSpotifyAuthStatus();
+  if (!status.connected) {
+    return { connected: false, warning: 'Spotify is not connected (run `npm run spotify:connect`).' };
   }
-}
-
-async function playlistSyncBaseUrl() {
-  try {
-    const config = JSON.parse(await readFile(join(root, 'config/spotify-playlists.json'), 'utf8'));
-    return String(config.playlistSyncBaseUrl ?? 'http://127.0.0.1:4317').replace(/\/$/, '');
-  } catch {
-    return 'http://127.0.0.1:4317';
+  if (status.missingScopes.includes('user-top-read')) {
+    console.log('Spotify preflight: connected; user-top-read is missing, so Top Artists will fall back without blocking playlist evidence.');
+  } else {
+    console.log('Spotify preflight: connected.');
   }
+  return { connected: true, warning: null };
 }
 
 function run(command, childArgs, cwd) {

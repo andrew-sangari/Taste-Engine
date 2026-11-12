@@ -331,3 +331,37 @@ async function seatGeekJson(url, fetchImpl, context, maxRetries = 3) {
   }
   throw new Error(`SeatGeek ${context} failed after retries.`);
 }
+
+/**
+ * Name search for a watchlist of destination events (see destinationEvents.js).
+ * It uses the documented `q` parameter and the caller's own range instead of
+ * the home search radius. `q` is loose: the caller must still match names
+ * exactly. Results stay on the deterministic path like every SeatGeek payload.
+ */
+export async function fetchSeatGeekEventsByQuery({
+  clientId,
+  query,
+  startDate,
+  endDate,
+  home = null,
+  rangeMiles = null,
+  perPage = 50,
+  fetchImpl = fetch
+} = {}) {
+  if (!clientId) throw new Error('Set SEATGEEK_CLIENT_ID before searching events by name.');
+  if (!String(query ?? '').trim()) throw new Error('SeatGeek name search needs a query.');
+  const url = new URL(EVENTS_URL);
+  url.searchParams.set('client_id', clientId);
+  url.searchParams.set('q', String(query).trim());
+  if (home && Number.isFinite(home.lat) && Number.isFinite(home.lon) && Number.isFinite(rangeMiles)) {
+    url.searchParams.set('lat', String(home.lat));
+    url.searchParams.set('lon', String(home.lon));
+    url.searchParams.set('range', `${Math.ceil(rangeMiles)}mi`);
+  }
+  if (startDate) url.searchParams.set('datetime_local.gte', startDate);
+  if (endDate) url.searchParams.set('datetime_local.lte', `${endDate}T23:59:59`);
+  url.searchParams.set('per_page', String(perPage));
+  url.searchParams.set('sort', 'datetime_local.asc');
+  const body = await seatGeekJson(url, fetchImpl, `name search for ${query}`);
+  return Array.isArray(body.events) ? body.events : [];
+}

@@ -53,7 +53,8 @@ export function normalizeEdmtrainEvent(raw) {
     festival: Boolean(raw.festivalInd),
     venue: {
       name: String(raw.venue?.name ?? raw.venueName ?? '').trim(),
-      city: String(raw.venue?.location?.city ?? raw.venue?.city ?? '').trim(),
+      // The API gives the place as one string, "San Diego, CA".
+      city: String(raw.venue?.location?.city ?? raw.venue?.city ?? (typeof raw.venue?.location === 'string' ? raw.venue.location.split(',')[0] : '')).trim(),
       lat: finite(raw.venue?.latitude ?? raw.venue?.lat),
       lon: finite(raw.venue?.longitude ?? raw.venue?.lon)
     },

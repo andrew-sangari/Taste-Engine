@@ -8,7 +8,9 @@ const repositoryRoot = resolve(siteRoot, "..");
 
 export function resolveReleaseMetadata({ env = process.env, cwd = repositoryRoot, source = undefined } = {}) {
   const packageVersion = JSON.parse(readFileSync(resolve(siteRoot, "package.json"), "utf8")).version;
-  const declaredCommit = normalizedCommit(env.TASTE_ENGINE_COMMIT_SHA);
+  // Vercel names the commit it is building. A deployment made from a working
+  // tree (the CLI without git metadata) declares nothing and is not releasable.
+  const declaredCommit = normalizedCommit(env.TASTE_ENGINE_COMMIT_SHA) ?? normalizedCommit(env.VERCEL_GIT_COMMIT_SHA);
   const git = declaredCommit ? null : (source === undefined ? gitSource(cwd) : source);
   const commitSha = declaredCommit ?? git?.commitSha ?? "unknown";
   const sourceState = declaredCommit ? "declared" : git ? (git.dirty ? "dirty" : "clean") : "unknown";
@@ -26,7 +28,7 @@ export function resolveReleaseMetadata({ env = process.env, cwd = repositoryRoot
     builtAt: sourceDateEpoch == null ? null : new Date(sourceDateEpoch * 1000).toISOString(),
     application: "taste-engine-site",
     applicationVersion: String(packageVersion),
-    databaseSchemaVersion: 3,
+    databaseSchemaVersion: 4,
     projectionSchemaVersion: 5,
     sourceState,
     releasable,

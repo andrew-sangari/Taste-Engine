@@ -115,3 +115,17 @@ The tests will also assert that notes are absent from derived state/reports, no 
 ## Stop conditions
 
 Stop and report instead of editing further if the canonical projection ID cannot be identified, if safe private storage cannot be separated from the Sites export, if atomic journal replacement cannot be guaranteed, if an implementation would require raw provider payloads or Ollama input, if a test needs live credentials, or if the default path changes the public projection. Do not automatically publish or promote any build.
+
+## Current design: a read-time overlay with per-action sync
+
+Everything above this section is history; this is what is built.
+
+**Learning (`src/feedbackPolicy.js`, pure).** Signals are graded: loved / worth it / mixed / regret, wanted-but-missed, pre-event interest from triage, and a pass with a stated reason each carry a value and a weight. Per key, `score = Σ(w·v·d) / (Σ(w·d) + 1.5)` and the adjustment is `cap × score`, so one outcome moves a little, agreement moves more, mixed evidence cancels, and decay runs from the night itself (365-day half-life for taste, 180 for friction). Caps: artist 6, venue 3, opponent 3, promoter 2, kind of night 1.5, total ±10; learned friction ±2 hassle points. Logistics reasons (timing, price, distance, availability, calendar, recovery) only feed friction. Keys are derived from fields a card already displays and are frozen into each record at capture.
+
+**Application.** `applyFeedbackOverlay(rows, vertical, signals)` returns adjusted copies of published rows with `ranking.baseUtility` preserved and `ranking.feedbackAdjustment.reasons` attached. The site calls it in `LiveRanking` (`site/app/vertical-shell.tsx`) from the records in the browser store, re-runs `buildOverviewBuckets` over the adjusted rows, and feeds every view from the result. Nothing is persisted and the published projection is never modified; the refresh pipelines do not read feedback for ranking, and preview validation fails if a projection carries applied adjustments. The overlay is on by default and switched off per profile in the Taste tab.
+
+**Storage.** Four tables, one row per thing: `feedback_records` (append-only; the latest record for a night is its answer and `withdrawn` erases it), `feedback_plans` and `feedback_history_responses` (last write wins per item, an answer never downgraded to a skip), `profile_settings`. `POST /api/feedback/sync` applies a batch of small operations and returns the merged state; `GET` returns it. The old whole-state blob (`feedback_state`) is read once to carry plans and check-ins over and is otherwise unused. State-changing routes reject cross-site requests.
+
+**Sync (`site/app/feedback-sync.ts`).** State-based and convergent: `pendingOps(local, remote)` is whatever the device has that the server lacks, `mergeRemote` folds the answer back in. The device copy is usable immediately; a failed request leaves the difference in place and retries with backoff, on reconnect, and when the tab becomes visible. Signed out, the same store works on the device alone and can be exported as JSONL for the local journal.
+
+**Local tools.** `npm run taste:feedback:review` prints what the local journal's feedback would move on the current projection, using the same overlay.

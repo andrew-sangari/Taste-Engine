@@ -129,6 +129,42 @@ test('runs optional sports advisory passes from normalized MLB context only', as
   assert.equal(result.byId.get('mlb:1').urgency.label, 'unknown');
 });
 
+test('sports advisory vectors carry the league so a Rams game is never read as baseball', async () => {
+  const ranking = { utility: 70, interestScore: 80, opponentQuality: 12, pitchingScore: 0, leverageScore: 6, convenienceScore: 8, hassleScore: 5, urgency: 'unknown', confidence: 'high' };
+  const games = [
+    { id: 'nfl:1', league: 'nfl', source: 'espn', startLocal: '2026-11-25T17:15:00-08:00', homeTeam: { name: 'DO NOT SEND TEAM' }, sportsContext: { league: 'nfl', rivalryTier: 'none' }, ranking },
+    { id: 'mlb:1', startLocal: '2026-08-15T16:10:00-07:00', sportsContext: { rivalryTier: 'high' }, ranking }
+  ];
+  const sent = [];
+  await enhanceSportsWithOllama(games, {}, {
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      sent.push(body);
+      const input = JSON.parse(body.messages[1].content).candidates;
+      return new Response(JSON.stringify({ message: { content: JSON.stringify({ items: input.map(({ ref }) => ({ ref })) }) } }));
+    }
+  });
+  const fit = sent.find((body) => body.messages[0].content.includes('personal value'));
+  assert.match(fit.messages[0].content, /never mention pitching for an nfl game/);
+  assert.deepEqual(JSON.parse(fit.messages[1].content).candidates.map((candidate) => candidate.league).sort(), ['mlb', 'nfl']);
+  assert.doesNotMatch(JSON.stringify(sent), /DO NOT SEND TEAM|espn/);
+});
+
+test('a candidate known only from an EDMTrain announcement is left out of the music advisory passes', async () => {
+  const refs = [];
+  const result = await enhanceEventsWithOllama([event('announced', ['edmtrain']), event('listed', ['ticketmaster'])], {}, {
+    requiredIds: ['announced'],
+    fetchImpl: async (_url, options) => {
+      const input = JSON.parse(JSON.parse(options.body).messages[1].content).candidates;
+      refs.push(input.length);
+      return new Response(JSON.stringify({ message: { content: JSON.stringify({ items: [] }) } }));
+    }
+  });
+  assert.equal(result.byId.has('announced'), false);
+  assert.equal(result.byId.has('listed'), true);
+  assert.ok(refs.every((count) => count === 1));
+});
+
 test('recursively strips restricted nested personal context values before building prompts', async () => {
   const requests = [];
   await enhanceEventsWithOllama([event('two', ['framework'])], {

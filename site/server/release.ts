@@ -1,11 +1,14 @@
 declare const __TASTE_ENGINE_RELEASE__: string | undefined;
 declare const __TASTE_ENGINE_COMMIT_SHA__: string | undefined;
-declare const __TASTE_ENGINE_BUILT_AT__: string | null | undefined;
+declare const __TASTE_ENGINE_BUILT_AT__: string | undefined;
 declare const __TASTE_ENGINE_APPLICATION_VERSION__: string | undefined;
 declare const __TASTE_ENGINE_SOURCE_STATE__: string | undefined;
-declare const __TASTE_ENGINE_RELEASABLE__: boolean | undefined;
+// "true" or "false": Next defines every compile-time value as a string.
+declare const __TASTE_ENGINE_RELEASABLE__: string | undefined;
 
-export const DATABASE_SCHEMA_VERSION = 3;
+// 4 is the first Postgres schema (drizzle/0000_initial_postgres.sql); 1-3 were
+// the retired SQLite/D1 schema.
+export const DATABASE_SCHEMA_VERSION = 4;
 export const PROJECTION_SCHEMA_VERSION = 5;
 
 export type ReleaseMetadata = {
@@ -46,16 +49,25 @@ export function releasePublicationReady(): boolean {
 }
 
 function compileValue(key: "release" | "commitSha" | "builtAt" | "applicationVersion" | "sourceState"): string | null {
-  if (key === "release") return typeof __TASTE_ENGINE_RELEASE__ === "undefined" ? null : __TASTE_ENGINE_RELEASE__;
-  if (key === "commitSha") return typeof __TASTE_ENGINE_COMMIT_SHA__ === "undefined" ? null : __TASTE_ENGINE_COMMIT_SHA__;
-  if (key === "applicationVersion") return typeof __TASTE_ENGINE_APPLICATION_VERSION__ === "undefined" ? null : __TASTE_ENGINE_APPLICATION_VERSION__;
-  if (key === "sourceState") return typeof __TASTE_ENGINE_SOURCE_STATE__ === "undefined" ? null : __TASTE_ENGINE_SOURCE_STATE__;
-  return typeof __TASTE_ENGINE_BUILT_AT__ === "undefined" ? null : __TASTE_ENGINE_BUILT_AT__;
+  if (key === "release") return defined(typeof __TASTE_ENGINE_RELEASE__ === "undefined" ? undefined : __TASTE_ENGINE_RELEASE__);
+  if (key === "commitSha") return defined(typeof __TASTE_ENGINE_COMMIT_SHA__ === "undefined" ? undefined : __TASTE_ENGINE_COMMIT_SHA__);
+  if (key === "applicationVersion") return defined(typeof __TASTE_ENGINE_APPLICATION_VERSION__ === "undefined" ? undefined : __TASTE_ENGINE_APPLICATION_VERSION__);
+  if (key === "sourceState") return defined(typeof __TASTE_ENGINE_SOURCE_STATE__ === "undefined" ? undefined : __TASTE_ENGINE_SOURCE_STATE__);
+  return defined(typeof __TASTE_ENGINE_BUILT_AT__ === "undefined" ? undefined : __TASTE_ENGINE_BUILT_AT__);
 }
 
+// Only the exact strings count: anything else (a missing define, or a quoted
+// value from a misconfigured build) is unknown, never a truthy string.
 function compileBoolean(key: "releasable"): boolean | null {
-  if (key === "releasable") return typeof __TASTE_ENGINE_RELEASABLE__ === "undefined" ? null : __TASTE_ENGINE_RELEASABLE__;
-  return null;
+  if (key !== "releasable") return null;
+  const value = typeof __TASTE_ENGINE_RELEASABLE__ === "undefined" ? undefined : __TASTE_ENGINE_RELEASABLE__;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return typeof value === "undefined" ? null : false;
+}
+
+function defined(value: string | undefined): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
 }
 
 function declaredSourceState(): "declared" | "unknown" {

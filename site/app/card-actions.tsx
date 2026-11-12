@@ -4,24 +4,44 @@ import { useState } from "react";
 import { buildCalendarEvent, type CalendarEventInput } from "./ics";
 import { useFeedback } from "./feedback-context";
 import type { PlanningInput } from "./feedback-store";
-import type { FeedbackReasonCode } from "./feedback-store";
+import type { FeedbackKeys, FeedbackReasonCode } from "./feedback-store";
 
 // Shared secondary-action disclosure. Cards keep their primary decision CTA
 // visible and tuck planning/feedback actions behind one compact control.
 // Movies pass a planning input with feedbackSnapshot null (planning + calendar
 // only — no attendance journal for films).
+const NOT_FOR_ME: Array<{ code: FeedbackReasonCode; label: string }> = [
+  { code: "artist", label: "Not my taste" },
+  { code: "lineup", label: "Lineup" },
+  { code: "venue", label: "Venue" },
+  { code: "timing", label: "Wrong night" },
+  { code: "price", label: "Price" },
+  { code: "distance", label: "Too far" },
+];
+const STATE_LABELS: Record<string, string> = {
+  interested: "You're interested",
+  "lost-interest": "Passed",
+  "attended-worth-it": "Went · worth it",
+  "attended-not-worth-it": "Went · not worth it",
+  "wanted-to-attend": "Wanted to go",
+  "did-not-attend-logistical": "Couldn't make it",
+};
+
+// Planning and feedback sit on the card, one tap each, instead of behind a
+// disclosure. A reason is always an explicit choice (never a default), and
+// anything recorded here can be undone.
 export function CardActions({ layout, planning, calendarEvent }: {
   layout: "overview" | "music" | "sports" | "movie";
   planning: PlanningInput | null;
   calendarEvent: CalendarEventInput | null;
 }) {
   const feedback = useFeedback();
-  const [confirmingNegative, setConfirmingNegative] = useState(false);
-  const [negativeReason, setNegativeReason] = useState<FeedbackReasonCode>("artist");
+  const [choosingReason, setChoosingReason] = useState(false);
   const item = planning && feedback?.ready ? feedback.planningFor(planning.planningSnapshot.itemId) : null;
   const saved = item?.saved ?? false;
   const held = item?.held ?? false;
-  const outcomeRecorded = feedback?.hasOutcome(planning?.feedbackSnapshot ?? null) ?? false;
+  const snapshot = planning?.feedbackSnapshot ?? null;
+  const recorded = feedback?.ready ? feedback.feedbackFor(snapshot) : null;
   const canPlan = Boolean(planning?.planningSnapshot.dateLocal) && feedback?.ready;
   const holdDate = () => {
     if (held) {
@@ -38,38 +58,31 @@ export function CardActions({ layout, planning, calendarEvent }: {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
   if (!planning && !calendarEvent) return null;
-  const stateLabel = outcomeRecorded ? "Feedback added" : saved && held ? "Saved · Held" : saved ? "Saved" : held ? "Held" : null;
   return (
-    <details className={`cardActions cardActions-${layout}`}>
-      <summary>
-        <span>Plan</span>
-        {stateLabel ? <strong>{stateLabel}</strong> : null}
-      </summary>
+    <div className={`cardActions cardActions-${layout}`}>
       <div className="cardActionsMenu">
-        {planning ? <>
-          <button
-            aria-pressed={saved}
-            className={saved ? "cardAction actionActive" : "cardAction"}
-            disabled={!canPlan}
-            onClick={() => feedback?.setIntent(planning, "saved", !saved)}
-            type="button"
-          >{saved ? "Remove save" : "Save"}</button>
-        </> : null}
+        {planning ? <button
+          aria-pressed={saved}
+          className={saved ? "cardAction actionActive" : "cardAction"}
+          disabled={!canPlan}
+          onClick={() => feedback?.setIntent(planning, "saved", !saved)}
+          type="button"
+        >{saved ? "Remove save" : "Save"}</button> : null}
         {calendarEvent ? <button aria-pressed={held} className={held ? "cardAction actionActive" : "cardAction"} onClick={holdDate} type="button">{held ? "Remove hold" : "Hold date"}</button> : null}
-        {planning?.feedbackSnapshot && !outcomeRecorded && !confirmingNegative ? (
-          <button className="cardAction cardActionQuiet" onClick={() => setConfirmingNegative(true)} type="button">Not for me</button>
+        {snapshot && !recorded && !choosingReason ? (
+          <button className="cardAction cardActionQuiet" onClick={() => setChoosingReason(true)} type="button">Not for me</button>
         ) : null}
-        {planning?.feedbackSnapshot && confirmingNegative ? <span className="cardActionConfirm" role="group" aria-label="Confirm Not for me">
-          <span>What changed?</span>
-          <select aria-label="Not for me reason" onChange={(event) => setNegativeReason(event.target.value as FeedbackReasonCode)} value={negativeReason}>
-            <option value="artist">Artist or taste</option><option value="lineup">Lineup</option><option value="production">Production quality</option><option value="venue">Venue</option><option value="timing">Timing</option><option value="price">Price</option><option value="distance">Distance</option><option value="other">Other</option>
-          </select>
-          <button onClick={() => { feedback?.notForMe(planning.feedbackSnapshot!, [negativeReason]); setConfirmingNegative(false); }} type="button">Confirm</button>
-          <button onClick={() => setConfirmingNegative(false)} type="button">Cancel</button>
+        {snapshot && recorded ? <span className="cardActionResolved">
+          {STATE_LABELS[recorded.status] ?? "Feedback recorded"}
+          <button className="cardActionUndo" onClick={() => feedback?.withdraw(snapshot)} type="button">Undo</button>
         </span> : null}
-        {outcomeRecorded ? <span className="cardActionResolved">Taste feedback recorded</span> : null}
       </div>
-    </details>
+      {snapshot && choosingReason && !recorded ? <div className="cardActionConfirm" role="group" aria-label="Why is this not for you?">
+        <span>Because…</span>
+        {NOT_FOR_ME.map((reason) => <button key={reason.code} onClick={() => { feedback?.notForMe(snapshot, [reason.code]); setChoosingReason(false); }} type="button">{reason.label}</button>)}
+        <button className="cardActionCancel" onClick={() => setChoosingReason(false)} type="button">Cancel</button>
+      </div> : null}
+    </div>
   );
 }
 
@@ -82,6 +95,7 @@ export function planningInputFrom(vertical: "music" | "sports" | "movies", item:
   releaseDate?: string | null;
   venue?: VenueLike;
   feedbackSnapshot?: PlanningInput["feedbackSnapshot"];
+  feedbackKeys?: FeedbackKeys | null;
 }): PlanningInput | null {
   const dateLocal = (item.startLocal ?? item.releaseDate ?? "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateLocal)) return null;
@@ -93,7 +107,7 @@ export function planningInputFrom(vertical: "music" | "sports" | "movies", item:
       vertical,
       locationLabel: locationLabel(item.venue),
     },
-    feedbackSnapshot: vertical === "movies" ? null : item.feedbackSnapshot ?? null,
+    feedbackSnapshot: vertical === "movies" || !item.feedbackSnapshot ? null : { ...item.feedbackSnapshot, feedbackKeys: item.feedbackKeys ?? item.feedbackSnapshot.feedbackKeys ?? null },
   };
 }
 

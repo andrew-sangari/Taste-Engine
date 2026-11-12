@@ -1,4 +1,4 @@
-import { getD1 } from "../../../db/index.ts";
+import { getDatabase } from "../../../db/index.ts";
 import { releaseMetadata } from "../../../server/release.ts";
 import { spotifyTokenEncryptionStatus } from "../../../server/token-crypto.ts";
 import { readHostedPipelineConfig } from "../../../server/hosted-config.ts";
@@ -27,7 +27,7 @@ async function databaseReadiness(): Promise<{
   profiles: ProfileScope[];
 }> {
   try {
-    const db = getD1();
+    const db = getDatabase();
     const profileRows = await db.prepare(`
       SELECT profile_id, owner_email, display_name, legacy_default
       FROM profiles

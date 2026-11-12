@@ -344,3 +344,42 @@ function numberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
+
+/**
+ * Name search for a watchlist of destination events (see destinationEvents.js).
+ * Unlike the regional sweep it applies no music classification filter, because
+ * festival passes are routinely filed under the "Undefined" segment, and its
+ * radius is the caller's own rather than the home search radius. Keyword search
+ * is loose: the caller must still match names exactly.
+ */
+export async function fetchTicketmasterEventsByKeyword({
+  apiKey,
+  keyword,
+  startDate,
+  endDate,
+  home = null,
+  radiusMiles = null,
+  countryCode = 'US',
+  size = 50,
+  fetchImpl = fetch
+} = {}) {
+  if (!apiKey) throw new Error('TICKETMASTER_API_KEY is not configured.');
+  if (!String(keyword ?? '').trim()) throw new Error('Ticketmaster keyword search needs a keyword.');
+  const url = new URL(API_URL);
+  url.searchParams.set('apikey', apiKey);
+  url.searchParams.set('keyword', String(keyword).trim());
+  if (countryCode) url.searchParams.set('countryCode', countryCode);
+  if (home && Number.isFinite(home.lat) && Number.isFinite(home.lon) && Number.isFinite(radiusMiles)) {
+    url.searchParams.set('latlong', `${home.lat},${home.lon}`);
+    url.searchParams.set('radius', String(Math.ceil(radiusMiles)));
+    url.searchParams.set('unit', 'miles');
+  }
+  if (startDate) url.searchParams.set('startDateTime', `${startDate}T00:00:00Z`);
+  if (endDate) url.searchParams.set('endDateTime', `${endDate}T23:59:59Z`);
+  url.searchParams.set('includeTBA', 'yes');
+  url.searchParams.set('includeTBD', 'yes');
+  url.searchParams.set('size', String(size));
+  url.searchParams.set('sort', 'date,asc');
+  const body = await requestJson(url, fetchImpl);
+  return body._embedded?.events ?? [];
+}

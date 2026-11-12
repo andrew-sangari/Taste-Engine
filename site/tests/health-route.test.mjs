@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { setRuntimeD1 } from "../db/index.ts";
+import { setDatabaseForTests } from "../db/index.ts";
 import { GET } from "../app/api/health/route.ts";
+import { migratedDatabase, unavailableDatabase } from "./helpers/pg-database.mjs";
 
 const TOKEN_KEY = Buffer.alloc(32, 11).toString("base64url");
 const PROFILE_A = "profile_aaaaaaaaaaaaaaaaaaaaaaaa";
@@ -35,22 +36,10 @@ test("production health reports deterministic release metadata without exposing 
   process.env.TASTE_ENGINE_RELEASE = "health-test-release";
   process.env.TASTE_LEGACY_PROFILE_EMAIL = "a@example.com";
   process.env.TASTE_REFRESH_SECRET = "health-test-refresh-secret-value";
-  setRuntimeD1({
-    prepare(sql) {
-      return {
-        async all() {
-          assert.match(sql, /FROM profiles/);
-          return { results: [
-            { profile_id: PROFILE_A, owner_email: "a@example.com", display_name: "A", legacy_default: 1 },
-            { profile_id: PROFILE_B, owner_email: "b@example.com", display_name: "B", legacy_default: 0 },
-          ] };
-        },
-        async first() {
-          return { active_projection_count: 2 };
-        },
-      };
-    },
-  });
+  const db = await seededDatabase([
+    { id: PROFILE_A, email: "a@example.com", name: "A", legacyDefault: 1 },
+    { id: PROFILE_B, email: "b@example.com", name: "B", legacyDefault: 0 },
+  ]);
 
   try {
     const response = await GET();
@@ -59,7 +48,7 @@ test("production health reports deterministic release metadata without exposing 
     assert.equal(response.status, 200);
     assert.equal(body.status, "ready");
     assert.equal(body.release.application, "taste-engine-site");
-    assert.equal(body.release.databaseSchemaVersion, 3);
+    assert.equal(body.release.databaseSchemaVersion, 4);
     assert.deepEqual(body.database, { ready: true, profileCount: 2, activeProjectionCount: 2 });
     assert.equal(body.configuration.spotifyTokenEncryption, "configured");
     assert.equal(body.configuration.profileConfig, true);
@@ -68,7 +57,8 @@ test("production health reports deterministic release metadata without exposing 
     assert.equal(body.configuration.sourceRelease, true);
     assert.doesNotMatch(serialized, /health-test-client|health-test-refresh-secret-value|eyJ|enc:v1/);
   } finally {
-    setRuntimeD1(null);
+    setDatabaseForTests(null);
+    await db.close();
     restoreEnvironment(previous);
   }
 });
@@ -96,17 +86,7 @@ test("health rejects malformed profile configuration and invalid encryption keys
   process.env.TASTE_ENGINE_ENV = "production";
   process.env.TASTE_LEGACY_PROFILE_EMAIL = "a@example.com";
   process.env.TASTE_REFRESH_SECRET = "long-enough-refresh-secret";
-  setRuntimeD1({
-    prepare(sql) {
-      return {
-        async all() {
-          assert.match(sql, /FROM profiles/);
-          return { results: [{ profile_id: PROFILE_A, owner_email: "a@example.com", display_name: "A", legacy_default: 1 }] };
-        },
-        async first() { return { active_projection_count: 1 }; },
-      };
-    },
-  });
+  const db = await seededDatabase([{ id: PROFILE_A, email: "a@example.com", name: "A", legacyDefault: 1 }]);
   try {
     const response = await GET();
     const body = await response.json();
@@ -114,7 +94,8 @@ test("health rejects malformed profile configuration and invalid encryption keys
     assert.equal(body.configuration.profileConfig, false);
     assert.equal(body.configuration.spotifyTokenEncryption, "invalid");
   } finally {
-    setRuntimeD1(null);
+    setDatabaseForTests(null);
+    await db.close();
     restoreEnvironment(previous);
   }
 });
@@ -131,7 +112,7 @@ test("health fails closed when the database or required production configuration
     "TASTE_REFRESH_SECRET",
   ]);
   for (const key of previous.keys()) delete process.env[key];
-  setRuntimeD1(null);
+  setDatabaseForTests(unavailableDatabase());
 
   try {
     const response = await GET();
@@ -139,11 +120,39 @@ test("health fails closed when the database or required production configuration
     assert.equal(response.status, 503);
     assert.equal(body.status, "degraded");
     assert.equal(body.database.ready, false);
+    assert.deepEqual(body.database, { ready: false, profileCount: null, activeProjectionCount: null });
     assert.equal(body.configuration.spotifyTokenEncryption, "required");
   } finally {
+    setDatabaseForTests(null);
     restoreEnvironment(previous);
   }
 });
+
+// A migrated database holding these enabled profiles, each with one active
+// projection, plus a disabled profile and an inactive projection that the
+// route must not count. Installed as the application database.
+async function seededDatabase(profiles) {
+  const { db } = await migratedDatabase();
+  const profile = db.prepare(`
+    INSERT INTO profiles (profile_id, identity_hash, owner_email, display_name, enabled, legacy_default, created_at, updated_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'now', 'now')
+  `);
+  const snapshot = db.prepare(`
+    INSERT INTO recommendation_snapshots (snapshot_id, profile_id, generated_at, payload_json, payload_hash, created_at, active)
+    VALUES (?1, ?2, 'now', '{}', ?1, 'now', ?3)
+  `);
+  await db.batch([
+    ...profiles.flatMap((item) => [
+      profile.bind(item.id, `hash-${item.id}`, item.email, item.name, 1, item.legacyDefault),
+      snapshot.bind(`active-${item.id}`, item.id, 1),
+      snapshot.bind(`inactive-${item.id}`, item.id, 0),
+    ]),
+    profile.bind("profile_dddddddddddddddddddddddd", "hash-disabled", "disabled@example.com", "Disabled", 0, 0),
+    snapshot.bind("unowned-active", null, 1),
+  ]);
+  setDatabaseForTests(db);
+  return db;
+}
 
 function snapshotEnvironment(keys) {
   return new Map(keys.map((key) => [key, process.env[key]]));

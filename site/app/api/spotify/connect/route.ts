@@ -1,12 +1,12 @@
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { getSignedInUser } from "../../../auth.ts";
 import { createSpotifyConnectUrl, SpotifyInputError } from "../../../../server/spotify";
 import { resolveProfile } from "../../../../server/profiles";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user) return Response.redirect(new URL("/signin-with-chatgpt?return_to=%2F%23taste", request.url));
+  const user = await getSignedInUser();
+  if (!user) return Response.redirect(new URL("/", request.url));
   try {
     return Response.redirect(await createSpotifyConnectUrl(await resolveProfile(user), new URL(request.url).origin));
   } catch (error) {

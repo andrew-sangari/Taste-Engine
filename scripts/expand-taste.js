@@ -5,7 +5,6 @@ import { loadEnv } from '../src/env.js';
 import { buildExpandedArtistSnapshot } from '../src/tasteExpansion.js';
 
 loadEnv();
-loadEnv(resolve('../Playlist Sync/.env'));
 
 const config = await loadBriefConfig(resolve('config/brief.json'));
 const source = JSON.parse(await readFile(resolve('data/taste/artists.json'), 'utf8'));
@@ -26,7 +25,7 @@ function sourceOnlySnapshot(snapshot, warning) {
   return {
     version: 1,
     generatedAt: new Date().toISOString(),
-    source: 'playlist-sync',
+    source: 'spotify',
     sourceGeneratedAt: snapshot.generatedAt,
     playlistCount: snapshot.playlistCount,
     sourceArtistCount: snapshot.sourceArtistCount ?? snapshot.artistCount,

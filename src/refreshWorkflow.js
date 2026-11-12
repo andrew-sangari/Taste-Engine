@@ -14,15 +14,20 @@ export const DEFAULT_WORKFLOW_PATHS = Object.freeze({
 });
 
 export function feedbackSimulationArgs(config) {
-  return config?.feedback?.enabled === true ? ['src/cli/taste-feedback.js', 'simulate'] : null;
+  return config?.feedback?.enabled === true ? ['src/cli/taste-feedback.js', 'review'] : null;
 }
 
 export async function validatePreview({
   previewDir,
   acceptedDir = null,
-  feedbackApplicationEnabled = false,
   thresholds = { maxAdded: 50, maxRemoved: 25, maxCountChange: 0.35 },
-  browserSmokePassed = true
+  browserSmokePassed = true,
+  // An operator's explicit acknowledgement that this preview is expected to
+  // differ a lot from the accepted one (a long gap, a new source, a contract
+  // change). It downgrades only the churn and optional-field checks to
+  // warnings. Zero-candidate collapse, schema version, required fields,
+  // duplicate ids, private artifacts and history shape still fail.
+  rebaseline = false
 }) {
   const errors = [];
   const warnings = [];
@@ -48,13 +53,14 @@ export async function validatePreview({
 
   const publicFiles = await listFiles(join(previewDir, 'site', 'dist'));
   if (!publicFiles.length) errors.push(issue('build-failure', 'Preview bundle is missing.'));
-  if (!publicFiles.some((path) => path.endsWith('/client/index.html') || path.endsWith('/server/index.js'))) errors.push(issue('required-asset-missing', 'Preview has no client or server entry point.'));
+  // `BUILD_ID` marks a complete Next.js build; the other two are the entry
+  // points of the earlier Worker bundle and of the test fixtures.
+  if (!publicFiles.some((path) => path.endsWith('/BUILD_ID') || path.endsWith('/client/index.html') || path.endsWith('/server/index.js'))) errors.push(issue('required-asset-missing', 'Preview has no client or server entry point.'));
   if (publicFiles.some((path) => PRIVATE_NAME.test(basename(path)))) errors.push(issue('private-artifact-public', 'A private artifact was copied into the public bundle.'));
-  if (feedbackApplicationEnabled) {
-    const learning = projection?.feedbackLearning;
-    if (!learning || learning.applied !== true || !Number.isInteger(learning.policyVersion) || !learning.capUsage) {
-      errors.push(issue('feedback-learning-audit-missing', 'Published feedback adjustment is missing validated aggregate audit metadata.'));
-    }
+  // Feedback is a read-time overlay. A projection that carries applied
+  // adjustments has personal learning baked into published scores.
+  if (projection?.feedbackLearning?.applied === true) {
+    errors.push(issue('feedback-applied-to-published-scores', 'Feedback adjustments were written into the published projection; they must be applied only at read time.'));
   }
   if (!browserSmokePassed) errors.push(issue('browser-smoke-failure', 'Browser smoke validation failed.'));
 
@@ -74,8 +80,11 @@ export async function validatePreview({
       const afterCount = COLLECTIONS.reduce((sum, key) => sum + (projection[key]?.length ?? 0), 0);
       if (beforeCount > 0 && afterCount === 0) errors.push(issue('candidate-collapse', 'Candidates collapsed to zero from a previously non-empty projection.'));
       diff = diffProjections(accepted, projection, thresholds);
-      if (!diff.structurallyCompatible) errors.push(issue('projection-structural-diff', 'Projection diff is structurally incompatible.'));
-      if (diff.thresholds.exceeded) errors.push(issue('projection-collapse-threshold', `Projection thresholds exceeded: ${diff.thresholds.reasons.join(', ')}.`));
+      const schemaBroken = diff.schema.changed || diff.schema.missingRequiredBefore.length > 0 || diff.schema.missingRequiredAfter.length > 0;
+      const acknowledge = (code, message) => (rebaseline ? warnings : errors).push(issue(rebaseline ? 'rebaseline-acknowledged' : code, message));
+      if (schemaBroken) errors.push(issue('projection-structural-diff', 'Projection schema version or required fields changed.'));
+      else if (!diff.structurallyCompatible) acknowledge('projection-structural-diff', 'Fields present in the accepted projection are absent from the preview.');
+      if (diff.thresholds.exceeded) acknowledge('projection-collapse-threshold', `Projection thresholds exceeded: ${diff.thresholds.reasons.join(', ')}.`);
     } catch {
       errors.push(issue('projection-diff-failure', 'The material projection diff could not be generated.'));
     }
@@ -194,9 +203,13 @@ function issue(code, message) {
 
 function validPublicHistoryItem(item) {
   const allowed = ['historyId', 'canonicalEventId', 'feedbackSnapshotId', 'vertical', 'title', 'dateLocal', 'locationLabel', 'firstShownAt', 'lastShownAt', 'surfaces', 'bestRank'];
+  // Display-derived feedback keys ride along so a check-in still teaches
+  // after the event has left the projection. Optional: older items lack them.
+  const optional = ['feedbackKeys'];
   return Boolean(item && typeof item === 'object' && !Array.isArray(item)
-    && Object.keys(item).every((key) => allowed.includes(key))
+    && Object.keys(item).every((key) => allowed.includes(key) || optional.includes(key))
     && allowed.every((key) => Object.hasOwn(item, key))
+    && (item.feedbackKeys == null || (typeof item.feedbackKeys === 'object' && !Array.isArray(item.feedbackKeys)))
     && typeof item.historyId === 'string' && typeof item.canonicalEventId === 'string'
     && (item.feedbackSnapshotId === null || typeof item.feedbackSnapshotId === 'string')
     && ['music', 'sports', 'movies'].includes(item.vertical)

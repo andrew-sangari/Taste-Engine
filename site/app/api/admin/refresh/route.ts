@@ -4,6 +4,9 @@ import { listConnectedProfiles, ProfileAccessError, readProfile, type ProfileSco
 import { releasePublicationReady } from "../../../../server/release";
 
 export const dynamic = "force-dynamic";
+// A refresh retrieves every source and runs the optional advisory passes in
+// one invocation; 300 seconds is the ceiling on Vercel's Hobby plan.
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   if (!hasRefreshAuthorization(request)) {

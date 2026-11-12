@@ -15,7 +15,8 @@ export async function loadSpotifySeedConfig(path) {
 }
 
 export function normalizeSpotifySeedConfig(input = {}) {
-  const baseUrl = String(input.playlistSyncBaseUrl ?? 'http://127.0.0.1:4317').replace(/\/$/, '');
+  // A legacy `playlistSyncBaseUrl` key in an existing config file is ignored:
+  // Taste Engine reads Spotify directly.
   const maxTracksPerPlaylist = positiveInteger(input.maxTracksPerPlaylist ?? 500, 'maxTracksPerPlaylist');
   const playlists = Array.isArray(input.playlists) ? input.playlists : [];
 
@@ -41,7 +42,7 @@ export function normalizeSpotifySeedConfig(input = {}) {
   const ids = normalized.map((playlist) => playlist.id);
   if (new Set(ids).size !== ids.length) throw new Error('Spotify seed playlist IDs must be unique');
 
-  return { playlistSyncBaseUrl: baseUrl, maxTracksPerPlaylist, playlists: normalized };
+  return { maxTracksPerPlaylist, playlists: normalized };
 }
 
 function positiveInteger(value, name) {

@@ -1,6 +1,7 @@
 config/spotify-playlists.json
 config/brief.json
 config/movies.json
+config/movie-engagements.json
 config/personal-context.json
 /data/
 config/feedback.local.json

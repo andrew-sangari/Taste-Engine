@@ -1,0 +1,95 @@
+{
+  "fixtureNote": "Trimmed real Ticketmaster Discovery response for keyword=CRSSD, retrieved 2026-11-11. Images, links, outlets, seat map and locale fields removed; no values changed.",
+  "_embedded": {
+    "events": [
+      {
+        "name": "FNGRS CRSSD presents Proper NYE/NYD 2027 (21 and Over) - Two Day Pass",
+        "type": "event",
+        "id": "Z7r9jZ1AAvsAP",
+        "url": "https://www.ticketmaster.com/event/Z7r9jZ1AAvsAP",
+        "sales": {
+          "public": {
+            "startDateTime": "1900-01-01T18:00:00Z",
+            "startTBD": false,
+            "startTBA": false,
+            "endDateTime": "2027-01-03T07:59:20Z"
+          }
+        },
+        "dates": {
+          "start": {
+            "dateTBD": false,
+            "dateTBA": true,
+            "timeTBA": true,
+            "noSpecificTime": false
+          },
+          "status": {
+            "code": "onsale"
+          },
+          "spanMultipleDays": false
+        },
+        "classifications": [
+          {
+            "primary": true,
+            "segment": {
+              "id": "KZFzniwnSyZfZ7v7nl",
+              "name": "Undefined"
+            },
+            "family": false
+          }
+        ],
+        "_embedded": {
+          "venues": [
+            {
+              "name": "Gallagher Square at Petco Park",
+              "type": "venue",
+              "id": "Z7r9jZa7dQ",
+              "postalCode": "92101",
+              "timezone": "America/Los_Angeles",
+              "city": {
+                "name": "San Diego"
+              },
+              "state": {
+                "name": "California",
+                "stateCode": "CA"
+              },
+              "country": {
+                "name": "United States Of America",
+                "countryCode": "US"
+              },
+              "address": {
+                "line1": "840 K St."
+              },
+              "location": {
+                "longitude": "-117.172096000",
+                "latitude": "32.725300000"
+              }
+            }
+          ],
+          "attractions": [
+            {
+              "name": "Proper NYE/NYD",
+              "type": "attraction",
+              "id": "Z7r9jZ177akv",
+              "classifications": [
+                {
+                  "primary": true,
+                  "segment": {
+                    "id": "KZFzniwnSyZfZ7v7nl",
+                    "name": "Undefined"
+                  },
+                  "family": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "page": {
+    "size": 50,
+    "totalElements": 1,
+    "totalPages": 1,
+    "number": 0
+  }
+}

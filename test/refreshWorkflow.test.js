@@ -12,9 +12,8 @@ import {
 } from '../src/refreshWorkflow.js';
 
 test('feedback simulation runs for shadow and validated publication modes', () => {
-  assert.deepEqual(feedbackSimulationArgs({ feedback: { enabled: true, applyToPublishedRanking: false } }), ['src/cli/taste-feedback.js', 'simulate']);
-  assert.equal(feedbackSimulationArgs({ feedback: { enabled: false, applyToPublishedRanking: false } }), null);
-  assert.deepEqual(feedbackSimulationArgs({ feedback: { enabled: true, applyToPublishedRanking: true } }), ['src/cli/taste-feedback.js', 'simulate']);
+  assert.deepEqual(feedbackSimulationArgs({ feedback: { enabled: true } }), ['src/cli/taste-feedback.js', 'review']);
+  assert.equal(feedbackSimulationArgs({ feedback: { enabled: false } }), null);
 });
 
 function projection(overrides = {}) {
@@ -48,17 +47,39 @@ async function fixture() {
 
 test('validation fails closed on duplicate IDs, private artifacts, missing feedback audit, and collapse', async () => {
   const { preview, accepted } = await fixture();
-  const duplicate = projection({ events: [{ id: 'same' }, { id: 'same' }], overview: [{ id: 'same' }] });
+  const duplicate = projection({ events: [{ id: 'same' }, { id: 'same' }], overview: [{ id: 'same' }], feedbackLearning: { applied: true } });
   await writeFile(join(preview, 'site', 'app', 'data', 'upcoming.json'), JSON.stringify(duplicate));
   await writeFile(join(preview, 'site', 'dist', 'client', 'feedback-report.json'), '{}');
-  const result = await validatePreview({ previewDir: preview, acceptedDir: accepted, feedbackApplicationEnabled: true });
+  const result = await validatePreview({ previewDir: preview, acceptedDir: accepted });
   assert.equal(result.ok, false);
   const codes = result.errors.map((item) => item.code);
-  for (const code of ['duplicate-published-id', 'feedback-learning-audit-missing', 'private-artifact-public']) assert.ok(codes.includes(code));
+  for (const code of ['duplicate-published-id', 'feedback-applied-to-published-scores', 'private-artifact-public']) assert.ok(codes.includes(code));
 
   await writeFile(join(preview, 'site', 'app', 'data', 'upcoming.json'), JSON.stringify(projection({ events: [], overview: [] })));
   const collapsed = await validatePreview({ previewDir: preview, acceptedDir: accepted });
   assert.ok(collapsed.errors.some((item) => item.code === 'candidate-collapse'));
+});
+
+test('a rebaseline acknowledges churn and optional-field removals but never a zero collapse', async () => {
+  const { preview, accepted } = await fixture();
+  // The accepted projection has one event; the preview replaces it with many
+  // and drops an optional field the accepted one carried.
+  const base = projection();
+  const many = Array.from({ length: 60 }, (_, index) => ({ id: `event:new-${index}`, title: `New ${index}`, ranking: { utility: 50 } }));
+  await writeFile(join(accepted, 'site', 'app', 'data', 'upcoming.json'), JSON.stringify({ ...base, feedbackLearning: { capUsage: { capAppliedCount: 0 } } }));
+  await writeFile(join(preview, 'site', 'app', 'data', 'upcoming.json'), JSON.stringify({ ...base, events: many, overview: [{ id: many[0].id }], feedbackLearning: { applied: false } }));
+
+  const guarded = await validatePreview({ previewDir: preview, acceptedDir: accepted });
+  assert.equal(guarded.ok, false);
+  assert.ok(guarded.errors.some((item) => item.code === 'projection-collapse-threshold'));
+
+  const acknowledged = await validatePreview({ previewDir: preview, acceptedDir: accepted, rebaseline: true });
+  assert.equal(acknowledged.ok, true, JSON.stringify(acknowledged.errors));
+  assert.ok(acknowledged.warnings.some((item) => item.code === 'rebaseline-acknowledged'));
+
+  await writeFile(join(preview, 'site', 'app', 'data', 'upcoming.json'), JSON.stringify({ ...base, events: [], overview: [] }));
+  const collapsed = await validatePreview({ previewDir: preview, acceptedDir: accepted, rebaseline: true });
+  assert.ok(collapsed.errors.some((item) => item.code === 'candidate-collapse'), 'a collapse to zero is never acknowledged away');
 });
 
 test('validation manifest detects any preview change after validation', async () => {

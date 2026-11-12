@@ -2,8 +2,15 @@
 // companion is rebuilt before every Sites build so Worker ranking cannot drift
 // from the root deterministic modules.
 export {
+  PROMOTER_SOURCES,
   UNORDERED_URGENCIES,
   URGENCY_PRIORITY,
+  NOISY_TAGS,
+  buildSceneProfile,
+  callLabel,
+  sceneFitFor,
+  promoterAffinityFor,
+  selectPublishedConcerts,
   calculateHassle,
   normalizeArtistName,
   playlistAffinityFor,
@@ -11,6 +18,15 @@ export {
   rankCandidates,
   topItemsAffinityFor
 } from "../../src/ranking.js";
+export { addPromoterEvidence, applyArtistTags, knownArtistNames } from "../../src/discovery.js";
+export { artistTagKey, resolveArtistTags } from "../../src/artistTags.js";
+export { FEEDBACK_POLICY, applyFeedbackOverlay, deriveFeedbackSignals, describeLearning, feedbackKeysFor } from "../../src/feedbackPolicy.js";
+export { SOURCE_DEADLINE_MS, withDeadline } from "../../src/deadline.js";
+export { buildFeedbackReview } from "../../src/feedbackReview.js";
+export { applyEngagements, engagementSourceHealth, normalizeEngagements } from "../../src/movieEngagements.js";
+export { RAMS_TEAM_ID, SOFI_STADIUM, applyNflStandings, fetchNflStandings, fetchRamsHomeGames, nflSeasonsForWindow, normalizeNflGame, normalizeNflStandings } from "../../src/nfl.js";
+export { sportsLeagueConfig, sportsLeagueOf } from "../../src/sports.js";
+export { parsePromoterTitle } from "../../src/eventTitle.js";
 export { canonicalEventTitle, deduplicateCandidates, sameOccurrence } from "../../src/candidates.js";
 export { EDMTRAIN_API_BASE_URL, buildEdmtrainUrl, enrichEventsWithEdmtrain, fetchEdmtrainEvents, normalizeEdmtrainEvent } from "../../src/edmtrain.js";
 export { fetchDodgersHomeGames, fetchMlbPitcherStats, fetchMlbStandings, applyPitcherStats, normalizeMlbGame, normalizePitcher, normalizeStandings, normalizeTeam } from "../../src/mlb.js";
@@ -19,6 +35,7 @@ export { eventWithinRadius, fetchSeatGeekEvents, fetchSeatGeekEventsForPerformer
 export { fetchTicketmasterEvents, fetchTicketmasterEventsForArtists, normalizeTicketmasterEvent, ticketmasterEventMatchesArtist } from "../../src/ticketmaster.js";
 export { fetchFrameworkArtists, fetchFrameworkEvents, frameworkPerformers, normalizeFrameworkEvent, parseFrameworkArtists } from "../../src/framework.js";
 export { fetchInsomniacEvents, INSOMNIAC_ADAPTER_VERIFIED, normalizeInsomniacEvent, parseInsomniacEvents } from "../../src/insomniac.js";
+export { DEFAULT_DESTINATION_WATCHLIST, fetchDestinationEvents, resolveDestinationWatchlist } from "../../src/destinationEvents.js";
 export { enrichMovieMetadata, fetchUpcomingMovies, normalizeTmdbMovie, resolveTmdbAuth } from "../../src/tmdb.js";
 export { selectMovieCandidates } from "../../src/movieSelection.js";
 export { DEFAULT_FOCAL_POINT, isAllowedTmdbImage, normalizeFocalPoint, normalizeVisual, resolveMovieVisual, resolveMusicVisual, resolveSportsVisual } from "../../src/visuals.js";

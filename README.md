@@ -26,14 +26,15 @@ The repository starts with the product brief and an execution plan. The first mi
 
 ## First working slice
 
-Taste Engine can now create its canonical artist seed by reading selected playlists through the sibling `Playlist Sync` service.
+Taste Engine reads Spotify itself; nothing else has to be installed or running.
 
-1. Start Playlist Sync and connect Spotify there.
-2. Copy `config/spotify-playlists.example.json` to `config/spotify-playlists.json`.
-3. Add the playlists that represent your taste.
-4. Run `npm run taste:seed` in this project.
+1. Sign in once: `npm run spotify:connect` (opens Spotify in your browser, read-only scopes, and stores the token under the gitignored `data/taste/`). If you used the older Playlist Sync project, stop it first: both use port 4317 for the sign-in callback.
+2. `npm run spotify:playlists` lists your playlists with ids; put the ones that represent your taste in `config/spotify-playlists.json`.
+3. `npm run taste:seed`.
 
-The command writes the replaceable snapshot expected by event matching and scheduled discovery to `data/taste/artists.json`. It also preflights Playlist Sync's `user-top-read` scope and merges current Spotify Top Artists affinity from short-, medium-, and long-term windows when available. If the scope is missing, the command records one warning and continues with playlist-only evidence.
+`npm run spotify:status` shows scopes and Top Artists freshness without printing any token. `npm run spotify:disconnect -- --confirm DISCONNECT` deletes the token and every Spotify-derived snapshot.
+
+The command writes the replaceable snapshot expected by event matching and scheduled discovery to `data/taste/artists.json`. It also preflights the `user-top-read` scope and merges current Spotify Top Artists affinity from short-, medium-, and long-term windows when available. If the scope is missing, the command records one warning and continues with playlist-only evidence.
 
 ### Keep the taste seed current
 
@@ -63,7 +64,18 @@ Use `--event-title` and `--event-date-local` for a historical event that is no l
 
 ## Upcoming decision site
 
-The Sites surface projects concerts and a second movie vertical across the next 180 days:
+### Decision plans and the evidence graph
+
+The site does two things with the ranking beyond listing it, both in the browser, both deterministic, and neither changing a score:
+
+- **Plans** (Overview): `src/decisionPlan.js` solves the ranked dates of the next 2 weeks to 90 days into the best combination of nights under your limits (nights a week, an optional budget, no back-to-back nights, trips on or off), built around anything you have saved or held and never offering back a night you passed on. It shows up to three plans that favour different things, and for each the nights it left out and why. Prices that no source reports are shown as unpriced, never estimated.
+- **Constellation** (Radar tab): `src/evidenceGraph.js` turns the relationships already on each card (who is on the bill, who you play, which promoter, which room) into a graph. Each night shows its independent routes back to you, cards with two or more routes list them, and clusters of related upcoming nights you have not played appear as scenes.
+
+### Hosting
+
+The site is a Next.js app deployed to Vercel with Postgres and sign-in on Supabase; see `site/README.md` and `docs/hosted-runtime-migration.md`. Sections below that say "Sites" describe the earlier ChatGPT Sites deployment, which the owner is retiring.
+
+The site projects concerts and a second movie vertical across the next 180 days:
 
 - https://taste-engine-la.andrewsangari.chatgpt.site
 
@@ -105,7 +117,7 @@ The next upcoming candidates may also receive four separate local advisory passe
 
 The event explorer supports date-window and event-type filters, personal-fit/date/urgency/hassle sorting, urgent-only and low-hassle views, a source-health jump link, and UI-only collation of repeat appearances by the same primary artist. The mixed Overview explicitly queues its selected music and sports candidates ahead of the general Ollama advisory cap. Source health is grouped by Music, Sports, Movies, and Editorial. Festivals remain separate occurrences except when cross-source listings represent the same dated festival event.
 
-For music advisory passes, intentionally absent lineup, genre, or identity detail is uncertainty rather than a reason to skip; missing-evidence skips fall back to the deterministic call. Optional `EDMTRAIN_CLIENT_KEY` enables documented-API lineup enrichment only for confidently matched existing events. Unmatched results stay in a private audit and EDMTrain payloads never enter Ollama.
+For music advisory passes, intentionally absent lineup, genre, or identity detail is uncertainty rather than a reason to skip; missing-evidence skips fall back to the deterministic call. Optional `EDMTRAIN_CLIENT_KEY` enables documented-API lineup enrichment for confidently matched existing events, plus an announced card for a destination-watchlist festival (CRSSD, Proper NYE) that no ticketing API lists yet. Other unmatched results stay in a private audit and EDMTrain payloads never enter Ollama.
 
 ### Source-grounded event characterization
 
@@ -137,9 +149,9 @@ npm run taste:promote -- --confirm PROMOTE
 npm run taste:rollback -- --confirm ROLLBACK
 ```
 
-`taste:refresh` builds in `data/taste/workflow/previews/latest`, validates the projection and bundle, writes a private manifest, and never changes accepted output. If Playlist Sync is unavailable it reuses the accepted projection, rebuilds it in isolation, and reports cache reuse. Add `--browser` to require the opt-in Playwright smoke suite during refresh. `taste:preview` serves only an unchanged validated preview and prints its content hash.
+`taste:refresh` builds in `data/taste/workflow/previews/latest`, validates the projection and bundle, writes a private manifest, and never changes accepted output. If Spotify is not connected it keeps the last valid Spotify snapshot and still refreshes every other source; with no seed at all, or with `--cached-only`, it rebuilds the accepted projection and reports cache reuse. Add `--browser` to require the opt-in Playwright smoke suite during refresh. `taste:preview` serves only an unchanged validated preview and prints its content hash.
 
-When local feedback capture is enabled, refresh also generates the private shadow report inside the preview workspace. Published feedback application must remain disabled; validation fails if it is active.
+Feedback never changes what is published: the projection carries canonical scores and the site applies each person's feedback on top at read time (see `docs/feedback-plan.md`). Refresh also writes a private report of what the local journal's feedback would move; validation fails if adjustments are ever written into the projection itself.
 
 Promotion is local only: it displays no secrets, requires the literal confirmation, rejects a stale or invalid preview, preserves the prior accepted projection and bundle, and never publishes to Sites. Remote publishing remains a separate manual action under the site's existing restricted access policy. Run the full and empty browser suites sequentially because both build `site/dist`.
 

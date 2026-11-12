@@ -8,7 +8,8 @@ import type { PublicFeedbackSnapshot } from "./feedback-store";
 import { FilterDisclosure } from "./filter-disclosure";
 import { RecommendationVisual, type RecommendationVisual as RecommendationVisualType } from "./recommendation-visual";
 import { hasSemanticInsight, SemanticEventInsightView, type SemanticEventInsight } from "./semantic-event-insight";
-import { RecommendationScore, UrgencyChip } from "./signal-texture";
+import { RecommendationScore, UrgencyChip, type FeedbackAdjustment } from "./signal-texture";
+import type { FeedbackKeys } from "./feedback-store";
 import { eventAnchor } from "./event-anchor";
 import { daysFromLocalDate, formatLocalDate, formatLocalTime } from "./local-date";
 
@@ -26,6 +27,7 @@ export type EventItem = {
   sources?: string[];
   sourceLinks?: Array<{ source: string; url: string }>;
   eventType?: "concert" | "festival" | "dj set";
+  destination?: { name: string; days?: string[]; announcedBy?: string } | null;
   startLocal: string | null;
   timeTbd: boolean;
   venue: { name: string; city: string; state: string };
@@ -40,7 +42,13 @@ export type EventItem = {
     confidence: string;
     urgency: string;
     whyYou: string;
+    call?: string;
+    discovery?: { tier: "direct" | "similar" | "tag" | "roster" | "promoter-night" | "destination" | "none"; promoterShow: string | null; rosterPromoter: string | null } | null;
+    feedbackAdjustment?: FeedbackAdjustment | null;
   };
+  feedbackKeys?: FeedbackKeys | null;
+  promoters?: string[];
+  eventName?: string | null;
   localEnhancement?: LocalEnhancement | null;
   semanticInsight?: SemanticEventInsight | null;
   visual?: RecommendationVisualType;
@@ -62,8 +70,15 @@ type EventTypeFilter = "all" | "concert" | "festival" | "dj set";
 type ProviderFilter = "all" | "seatgeek" | "ticketmaster" | "framework" | "insomniac";
 type SortMode = "fit" | "date" | "urgency" | "hassle";
 
-export function EventExplorer({ events, generatedAt, targetEventId = null }: { events: EventItem[]; generatedAt: string; targetEventId?: string | null }) {
-  const [windowFilter, setWindowFilter] = useState<WindowFilter>(targetEventId ? "all" : "soon");
+export function EventExplorer({ events, generatedAt, targetEventId = null, routes = null }: { events: EventItem[]; generatedAt: string; targetEventId?: string | null; routes?: Map<string, string[]> | null }) {
+  // Default to the next 30 days only when something is actually in it; an
+  // empty first screen hides a calendar that has plenty further out.
+  const hasSoon = useMemo(() => events.some((event) => (daysFromLocalDate(event.startLocal, generatedAt) ?? Infinity) <= 30), [events, generatedAt]);
+  const [windowFilter, setWindowFilter] = useState<WindowFilter>(targetEventId || !hasSoon ? "all" : "soon");
+  const windowCounts = useMemo(() => {
+    const soon = events.filter((event) => (daysFromLocalDate(event.startLocal, generatedAt) ?? Infinity) <= 30).length;
+    return { all: events.length, soon, later: events.length - soon };
+  }, [events, generatedAt]);
   const [eventType, setEventType] = useState<EventTypeFilter>("all");
   const [provider, setProvider] = useState<ProviderFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("fit");
@@ -93,7 +108,7 @@ export function EventExplorer({ events, generatedAt, targetEventId = null }: { e
       <div className="filterBar">
         <div className="dateFilterGroup" aria-label="Date range filter">
           {([['all', 'All dates'], ['soon', 'Next 30 days'], ['later', 'Later']] as const).map(([value, label]) => (
-            <button aria-pressed={windowFilter === value} className={windowFilter === value ? "filterActive" : ""} key={value} onClick={() => { setWindowFilter(value); setShowAll(false); }} type="button">{label}</button>
+            <button aria-pressed={windowFilter === value} className={windowFilter === value ? "filterActive" : ""} key={value} onClick={() => { setWindowFilter(value); setShowAll(false); }} type="button">{label} <small>{windowCounts[value]}</small></button>
           ))}
         </div>
         <FilterDisclosure count={[eventType !== "all", provider !== "all", sortMode !== "fit", urgentOnly, lowHassleOnly].filter(Boolean).length} onClear={() => { setEventType("all"); setProvider("all"); setSortMode("fit"); setUrgentOnly(false); setLowHassleOnly(false); setShowAll(false); }}>
@@ -120,7 +135,7 @@ export function EventExplorer({ events, generatedAt, targetEventId = null }: { e
 
       {groups.length > 0 ? (
         <div className="eventGrid" data-stagger="">
-          {visibleGroups.map((group, index) => <EventCard event={group[0]} featured={index === 0 && sortMode === "fit"} key={groupKey(group[0])} occurrences={group} />)}
+          {visibleGroups.map((group, index) => <EventCard event={group[0]} featured={index === 0 && sortMode === "fit"} key={groupKey(group[0])} occurrences={group} routes={routes?.get(group[0].id) ?? null} />)}
         </div>
       ) : (
         <div className="emptyState"><p className="eyebrow">Good filter</p><h3>Nothing clears that bar yet.</h3><p>That is a useful answer. Try widening timing, type, urgency, or hassle.</p></div>
@@ -130,10 +145,10 @@ export function EventExplorer({ events, generatedAt, targetEventId = null }: { e
   );
 }
 
-function EventCard({ event, featured, occurrences }: { event: EventItem; featured: boolean; occurrences: EventItem[] }) {
+function EventCard({ event, featured, occurrences, routes }: { event: EventItem; featured: boolean; occurrences: EventItem[]; routes: string[] | null }) {
   const price = event.ticketObservation.lowestPriceUsd;
   const origin = event.matchedArtists[0]?.origin ?? "source";
-  const originLabel = origin === "similar" ? "Similar artist" : origin === "tag" ? "Genre discovery" : origin === "promoter" ? "Promoter pick" : "In your rotation";
+  const originLabel = discoveryLabel(event);
   const enhancement = event.localEnhancement;
   const lineup = event.lineupDisplay;
   const displayTitle = lineup?.displayTitle || event.title;
@@ -156,12 +171,13 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
         <h3>{displayTitle}</h3>
         {lineupPreview.length ? <p className="lineupPreview">Taste matches in the lineup: {lineupPreview.map((artist) => artist.displayName).join(" · ")}</p> : null}
         <p className="eventWhy">{event.ranking.whyYou}</p>
+        {routes ? <p className="cardRoutes"><strong>{routes.length} routes to you</strong>{routes.map((route) => <span key={route}>{route}</span>)}</p> : null}
         {event.ranking.artistFit >= 55 && event.ranking.hassleScore >= 6 ? <p className="planningObstacle">Strong fit · planning obstacle: {event.ranking.hassleReasons.join(" · ") || "check logistics before committing"}.</p> : null}
         {enhancement || hasSemanticInsight(event.semanticInsight) ? <LocalTake enhancement={enhancement} semanticInsight={event.semanticInsight} /> : null}
         {lineup && lineup.totalArtists > 0 ? <LineupDetails lineup={lineup} /> : null}
       </div>
 
-      <div className="scoreBlock"><RecommendationScore confidence={event.ranking.confidence} fit={event.ranking.artistFit} friction={event.ranking.hassleScore} score={event.ranking.utility} status={event.ranking.utility >= 55 ? "Selective" : "Watch"} urgency={event.ranking.urgency} /></div>
+      <div className="scoreBlock"><RecommendationScore confidence={event.ranking.confidence} fit={event.ranking.artistFit} friction={event.ranking.hassleScore} score={event.ranking.utility} status={event.ranking.call ?? (event.ranking.utility >= 55 ? "Selective" : "Watch")} urgency={event.ranking.urgency} adjustment={event.ranking.feedbackAdjustment} /></div>
 
       {occurrences.length > 1 ? (
         <details className="occurrenceList">
@@ -181,7 +197,7 @@ function EventCard({ event, featured, occurrences }: { event: EventItem; feature
           layout="music"
           planning={planningInputFrom("music", { ...event, title: displayTitle })}
         />
-        <a href={event.sourceUrl} rel="noreferrer" target="_blank">View tickets <span aria-hidden="true">↗</span></a>
+        <a href={event.sourceUrl} rel="noreferrer" target="_blank">{event.destination?.announcedBy ? "View announcement" : "View tickets"} <span aria-hidden="true">↗</span></a>
       </div>
     </article>
   );
@@ -249,12 +265,26 @@ function collateOccurrenceRows(occurrences: EventItem[]) {
   return [...rows.values()].sort((left, right) => String(left.dateLocal).localeCompare(String(right.dateLocal)));
 }
 
+// How the match was found, kept apart from who is putting the night on. A
+// roster artist playing someone else's show is not a "promoter pick".
+export function discoveryLabel(event: Pick<EventItem, "ranking" | "matchedArtists">) {
+  const discovery = event.ranking.discovery;
+  const origin = event.matchedArtists[0]?.origin ?? "source";
+  if (discovery?.tier === "destination") return "Destination trip";
+  if (discovery?.tier === "promoter-night") return `${discovery.promoterShow ?? "Promoter"} night`;
+  if (discovery?.tier === "roster") return `${discovery.rosterPromoter ?? "Followed"} roster`;
+  if (origin === "similar") return "Similar artist";
+  if (origin === "tag") return "Genre discovery";
+  if (origin === "promoter") return "Followed promoter";
+  return "In your rotation";
+}
+
 function providerLabel(value: string) {
-  return ({ seatgeek: "SeatGeek", ticketmaster: "Ticketmaster", framework: "Framework", insomniac: "Insomniac", source: "Source" } as Record<string, string>)[value] ?? value;
+  return ({ seatgeek: "SeatGeek", ticketmaster: "Ticketmaster", framework: "Framework", insomniac: "Insomniac", edmtrain: "EDMTrain", source: "Source" } as Record<string, string>)[value] ?? value;
 }
 
 function eventComparator(mode: SortMode) {
-  const urgency = (value: string) => ({ "buy now": 0, watch: 1, "safe to wait": 2 }[value] ?? 3);
+  const urgency = (value: string) => ({ "buy now": 0, watch: 1, "safe to wait": 2, unknown: 3 }[value] ?? 4);
   return (left: EventItem, right: EventItem) => {
     if (mode === "date") return String(left.startLocal).localeCompare(String(right.startLocal));
     if (mode === "urgency") return urgency(left.ranking.urgency) - urgency(right.ranking.urgency) || String(left.startLocal).localeCompare(String(right.startLocal));

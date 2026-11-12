@@ -1,4 +1,4 @@
-import { getD1 } from "../db/index.ts";
+import { getDatabase } from "../db/index.ts";
 import type { ProfileScope } from "./profiles";
 import {
   isSealedSpotifyToken,
@@ -76,9 +76,9 @@ export async function createSpotifyConnectUrl(profile: ProfileScope, origin: str
   const challenge = await sha256Base64Url(verifier);
   const state = randomBase64Url(24);
   const expiresAt = Date.now() + OAUTH_STATE_TTL_MS;
-  await getD1().batch([
-    getD1().prepare("DELETE FROM spotify_oauth_states WHERE expires_at < ?1").bind(Date.now()),
-    getD1().prepare(`
+  await getDatabase().batch([
+    getDatabase().prepare("DELETE FROM spotify_oauth_states WHERE expires_at < ?1").bind(Date.now()),
+    getDatabase().prepare(`
       INSERT INTO spotify_oauth_states (state, owner_email, profile_id, verifier, expires_at)
       VALUES (?1, ?2, ?3, ?4, ?5)
     `).bind(state, profile.email, profile.id, verifier, expiresAt),
@@ -100,7 +100,7 @@ export async function completeSpotifyConnection(callbackUrl: URL, expectedProfil
   const code = callbackUrl.searchParams.get("code");
   const state = callbackUrl.searchParams.get("state");
   if (!code || !state) throw new SpotifyInputError("Spotify callback is missing code or state.");
-  const row = await getD1()
+  const row = await getDatabase()
     .prepare("SELECT owner_email, profile_id, verifier, expires_at FROM spotify_oauth_states WHERE state = ?1")
     .bind(state)
     .first<{ owner_email: string; profile_id: string | null; verifier: string; expires_at: number }>();
@@ -121,7 +121,7 @@ export async function completeSpotifyConnection(callbackUrl: URL, expectedProfil
     displayName: row.owner_email,
     legacyDefault: false,
   }, normalizeToken(token));
-  await getD1().prepare("DELETE FROM spotify_oauth_states WHERE state = ?1").bind(state).run();
+  await getDatabase().prepare("DELETE FROM spotify_oauth_states WHERE state = ?1").bind(state).run();
 }
 
 export async function spotifyStatus(profile: ProfileScope) {
@@ -137,8 +137,16 @@ export async function spotifyStatus(profile: ProfileScope) {
   };
 }
 
+export async function invalidateSpotifyAuthorization(profile: ProfileScope): Promise<void> {
+  const db = getDatabase();
+  await db.batch([
+    db.prepare("DELETE FROM spotify_tokens WHERE profile_id = ?1").bind(profile.id),
+    db.prepare("DELETE FROM spotify_top_artist_windows WHERE profile_id = ?1").bind(profile.id),
+  ]);
+}
+
 export async function disconnectSpotify(profile: ProfileScope): Promise<void> {
-  const db = getD1();
+  const db = getDatabase();
   await db.batch([
     db.prepare("DELETE FROM spotify_tokens WHERE profile_id = ?1").bind(profile.id),
     db.prepare("DELETE FROM spotify_top_artist_windows WHERE profile_id = ?1").bind(profile.id),
@@ -223,7 +231,7 @@ export async function refreshSpotifyTopArtists(profile: ProfileScope, limit = 50
         artistName: String(artist.name ?? ""),
         rank: index + 1,
       })).filter((artist) => artist.artistId && artist.artistName);
-      await getD1().prepare(`
+      await getDatabase().prepare(`
         INSERT INTO spotify_top_artist_windows (owner_email, profile_id, window_key, fetched_at, expires_at, items_json)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         ON CONFLICT(profile_id, window_key) DO UPDATE SET
@@ -242,18 +250,21 @@ export async function refreshSpotifyTopArtists(profile: ProfileScope, limit = 50
     }
   }
   if (authenticationFailure) {
-    await disconnectSpotify(profile);
+    // An expired authorization is not a disconnect. Drop only what the dead
+    // authorization can no longer refresh; playlist selections and the last
+    // valid published projection stay until Spotify is reconnected.
+    await invalidateSpotifyAuthorization(profile);
     throw new SpotifyHttpError(401, "Spotify authorization is missing or expired. Reconnect Spotify.");
   }
   return buildTopArtistResponse(windows, now);
 }
 
 export async function readPlaylistSelections(profile: ProfileScope) {
-  const result = await getD1().prepare(`
+  const result = await getDatabase().prepare(`
     SELECT playlist_id, playlist_name, weight, enabled, updated_at
     FROM spotify_playlist_selections
     WHERE profile_id = ?1
-    ORDER BY playlist_name COLLATE NOCASE, playlist_id
+    ORDER BY lower(playlist_name) COLLATE "C", playlist_id COLLATE "C"
   `).bind(profile.id).all<{
     playlist_id: string;
     playlist_name: string;
@@ -281,16 +292,20 @@ export async function writePlaylistSelections(profile: ProfileScope, selections:
     if (!id || !name || name.length > 200) throw new SpotifyInputError("Each playlist needs a valid id and name.");
     return { id, name, weight, enabled: input.enabled !== false };
   });
-  const db = getD1();
+  // Duplicate ids would fail the insert after the delete had already run.
+  const seen = new Set<string>();
+  const distinct = normalized.filter((item) => (seen.has(item.id) ? false : (seen.add(item.id), true)));
+  const db = getDatabase();
   const now = new Date().toISOString();
-  await db.prepare("DELETE FROM spotify_playlist_selections WHERE profile_id = ?1").bind(profile.id).run();
-  if (normalized.length) {
-    await db.batch(normalized.map((item) => db.prepare(`
+  // Delete and insert in one batch so a failure cannot leave no selections.
+  await db.batch([
+    db.prepare("DELETE FROM spotify_playlist_selections WHERE profile_id = ?1").bind(profile.id),
+    ...distinct.map((item) => db.prepare(`
       INSERT INTO spotify_playlist_selections
         (owner_email, profile_id, playlist_id, playlist_name, weight, enabled, updated_at)
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-    `).bind(profile.email, profile.id, item.id, item.name, item.weight, item.enabled ? 1 : 0, now)));
-  }
+    `).bind(profile.email, profile.id, item.id, item.name, item.weight, item.enabled ? 1 : 0, now)),
+  ]);
   return readPlaylistSelections(profile);
 }
 
@@ -320,7 +335,7 @@ async function getAccessToken(profile: ProfileScope): Promise<string> {
 }
 
 async function readToken(profile: ProfileScope): Promise<SpotifyToken | null> {
-  const row = await getD1().prepare(`
+  const row = await getDatabase().prepare(`
     SELECT access_token, refresh_token, expires_at, scopes
     FROM spotify_tokens
     WHERE profile_id = ?1
@@ -353,7 +368,7 @@ async function saveToken(profile: ProfileScope, token: SpotifyToken): Promise<vo
     if (error instanceof TokenEncryptionError) throw new SpotifyInputError(error.message);
     throw error;
   }
-  await getD1().prepare(`
+  await getDatabase().prepare(`
     INSERT INTO spotify_tokens
       (owner_email, profile_id, access_token, refresh_token, expires_at, scopes, updated_at)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -387,7 +402,7 @@ function normalizeToken(input: SpotifyTokenResponse): SpotifyToken {
 }
 
 async function readCachedWindow(profile: ProfileScope, windowKey: string, now: Date) {
-  const row = await getD1().prepare(`
+  const row = await getDatabase().prepare(`
     SELECT fetched_at, expires_at, items_json
     FROM spotify_top_artist_windows
     WHERE profile_id = ?1 AND window_key = ?2

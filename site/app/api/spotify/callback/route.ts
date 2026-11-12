@@ -1,12 +1,12 @@
 import { completeSpotifyConnection, SpotifyHttpError, SpotifyInputError } from "../../../../server/spotify";
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { getSignedInUser } from "../../../auth.ts";
 import { resolveProfile } from "../../../../server/profiles";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user) return Response.json({ error: "Sign in with ChatGPT to complete Spotify authorization." }, { status: 401 });
+  const user = await getSignedInUser();
+  if (!user) return Response.json({ error: "Sign in to complete Spotify authorization." }, { status: 401 });
   try {
     const profile = await resolveProfile(user);
     await completeSpotifyConnection(new URL(request.url), profile.id);

@@ -24,12 +24,14 @@ export function normalizeBriefConfig(input = {}) {
   const seatGeekPerformerArtistLimit = positiveInteger(input.seatGeekPerformerArtistLimit ?? 250, 'seatGeekPerformerArtistLimit');
   const frameworkArtistLimit = positiveInteger(input.frameworkArtistLimit ?? 200, 'frameworkArtistLimit');
   const ticketmasterArtistQueryLimit = positiveInteger(input.ticketmasterArtistQueryLimit ?? 200, 'ticketmasterArtistQueryLimit');
+  const artistTagLookupsPerRun = positiveInteger(input.artistTagLookupsPerRun ?? 80, 'artistTagLookupsPerRun');
   const lastFmSeedArtistLimit = positiveInteger(input.lastFmSeedArtistLimit ?? 40, 'lastFmSeedArtistLimit');
   const lastFmSimilarPerArtist = positiveInteger(input.lastFmSimilarPerArtist ?? 6, 'lastFmSimilarPerArtist');
   const lastFmTopTagCount = positiveInteger(input.lastFmTopTagCount ?? 5, 'lastFmTopTagCount');
   const lastFmArtistsPerTag = positiveInteger(input.lastFmArtistsPerTag ?? 25, 'lastFmArtistsPerTag');
   const maxTicketPriceUsd = positiveNumber(input.maxTicketPriceUsd ?? 120, 'maxTicketPriceUsd');
   const minimumUtility = finiteNumber(input.minimumUtility ?? 28, 'minimumUtility');
+  const hardMaxTicketPriceUsd = input.hardMaxTicketPriceUsd == null ? null : positiveNumber(input.hardMaxTicketPriceUsd, 'hardMaxTicketPriceUsd');
   const overviewPlanAheadMinScore = finiteNumber(input.overviewPlanAheadMinScore ?? 55, 'overviewPlanAheadMinScore');
   const changesSinceRefreshTopN = positiveInteger(input.changesSinceRefreshTopN ?? 5, 'changesSinceRefreshTopN');
   const feedbackSnapshotRetentionDays = positiveInteger(input.feedbackSnapshotRetentionDays ?? 365, 'feedbackSnapshotRetentionDays');
@@ -45,11 +47,13 @@ export function normalizeBriefConfig(input = {}) {
     seatGeekPerformerArtistLimit,
     frameworkArtistLimit,
     ticketmasterArtistQueryLimit,
+    artistTagLookupsPerRun,
     lastFmSeedArtistLimit,
     lastFmSimilarPerArtist,
     lastFmTopTagCount,
     lastFmArtistsPerTag,
     maxTicketPriceUsd,
+    hardMaxTicketPriceUsd,
     minimumUtility,
     overviewPlanAheadMinScore,
     changesSinceRefreshTopN,
@@ -60,6 +64,8 @@ export function normalizeBriefConfig(input = {}) {
       state: String(edmtrain.state ?? 'California'),
       cacheTtlHours: positiveNumber(edmtrain.cacheTtlHours ?? 24, 'edmtrain.cacheTtlHours')
     },
+    // Named festivals worth travelling for; null means the built-in list.
+    destinationEvents: Array.isArray(input.destinationEvents) ? input.destinationEvents : null,
     pinnedArtists: normalizeNames(input.pinnedArtists),
     excludedArtists: normalizeNames(input.excludedArtists),
     excludedVenues: normalizeNames(input.excludedVenues)

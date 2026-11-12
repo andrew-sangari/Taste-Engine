@@ -32,6 +32,22 @@ import {
   joinSportsTickets,
   normalizeArtistName,
   normalizeFrameworkEvent,
+  applyArtistTags,
+  artistTagKey,
+  resolveArtistTags,
+  fetchDestinationEvents,
+  applyNflStandings,
+  fetchNflStandings,
+  fetchRamsHomeGames,
+  nflSeasonsForWindow,
+  sportsLeagueConfig,
+  applyEngagements,
+  engagementSourceHealth,
+  withDeadline,
+  FEEDBACK_POLICY,
+  addPromoterEvidence,
+  knownArtistNames,
+  selectPublishedConcerts,
   normalizeInsomniacEvent,
   normalizeSeatGeekEvent,
   normalizeSeatGeekSportsEvent,
@@ -50,7 +66,6 @@ import {
   toDisplaySportsGame,
 } from "./deterministic-engine.js";
 import { buildHostedTasteProfile } from "./taste-profile.ts";
-import { applyHostedFeedbackAdjustments, applyHostedPersonalContext } from "./feedback-learning.ts";
 import { enhanceHostedMusic, enhanceHostedSports, generateHostedEditorial } from "./hosted-advisory.ts";
 import { readHostedPipelineConfig } from "./hosted-config.ts";
 import type { ProfileScope } from "./profiles";
@@ -126,14 +141,17 @@ export async function buildHostedProjection({
     home: config.brief.home,
     searchRadiusMiles: config.brief.searchRadiusMiles,
   };
+  const nflEnabled = config.sports.enabled && record(sportsLeagueConfig(sportsSourceConfig, "nfl")).enabled !== false;
 
   const [
     seatGeek,
     ticketmaster,
     framework,
     insomniac,
+    destination,
     edmtrain,
     mlb,
+    nfl,
     sportsSeatGeek,
     sportsTicketmaster,
     tmdb,
@@ -214,16 +232,31 @@ export async function buildHostedProjection({
     }),
     optionalSource(sourceHealth, "framework", true, async () => ({
       items: array(await fetchFrameworkEvents({ startDate, endDate }))
-        .map((event) => normalizeFrameworkEvent(event, generatedAt)),
+        .map((event) => normalizeFrameworkEvent(event, generatedAt, { knownArtistNames: knownArtistNames(artistSnapshot, frameworkArtists) })),
       warnings: [],
     })),
     optionalSource(sourceHealth, "insomniac", true, async () => {
       if (!INSOMNIAC_ADAPTER_VERIFIED) throw new Error("Insomniac parser is unverified.");
+      const diagnostics: { warnings: string[] } = { warnings: [] };
+      const known = knownArtistNames(artistSnapshot, frameworkArtists);
       return {
-        items: array(await fetchInsomniacEvents({ startDate, endDate }))
-          .map((event) => normalizeInsomniacEvent(event, generatedAt)),
-        warnings: [],
+        items: array(await fetchInsomniacEvents({ startDate, endDate, diagnostics }))
+          .map((event) => normalizeInsomniacEvent(event, generatedAt, { knownArtistNames: known })),
+        warnings: array(diagnostics.warnings).map(String),
       };
+    }),
+    optionalSource(sourceHealth, "destination-events", Boolean(process.env.TICKETMASTER_API_KEY || process.env.SEATGEEK_CLIENT_ID), async () => {
+      const result = await fetchDestinationEvents({
+        config: config.brief,
+        startDate,
+        endDate,
+        ticketmasterApiKey: process.env.TICKETMASTER_API_KEY ?? null,
+        seatGeekClientId: process.env.SEATGEEK_CLIENT_ID ?? null,
+        edmtrainClientKey: config.brief.edmtrain.enabled ? process.env.EDMTRAIN_CLIENT_KEY ?? null : null,
+        artistSnapshot,
+        retrievedAt: generatedAt,
+      });
+      return { items: array(result.events), warnings: array(result.warnings).map(String) };
     }),
     optionalSource(sourceHealth, "edmtrain", config.brief.edmtrain.enabled && Boolean(process.env.EDMTRAIN_CLIENT_KEY), async () => ({
       items: await fetchEdmtrainEvents({
@@ -268,16 +301,26 @@ export async function buildHostedProjection({
         warnings,
       };
     }),
-    optionalSource(sourceHealth, "sports-seatgeek", Boolean(process.env.SEATGEEK_CLIENT_ID), async () => ({
-      items: array(await fetchSeatGeekSportsEvents({
-        clientId: process.env.SEATGEEK_CLIENT_ID,
-        startDate,
-        endDate,
-        config: sportsSourceConfig,
-        maxPages: config.sports.maxTicketPages,
-      })).map((event) => normalizeSeatGeekSportsEvent(event, generatedAt)),
-      warnings: [],
-    })),
+    optionalSource(sourceHealth, "nfl", nflEnabled, async () => {
+      const warnings: string[] = [];
+      let games = await fetchRamsHomeGames({ startDate, endDate, timezone: config.brief.timezone, warnings });
+      let standings = new Map();
+      try {
+        standings = await fetchNflStandings({ season: nflSeasonsForWindow(startDate, endDate)[0] });
+        games = applyNflStandings(games, standings);
+      } catch {
+        warnings.push("NFL standings were unavailable.");
+      }
+      return { items: enrichSportsGames(games, standings, sportsSourceConfig, { now: generatedAt }), warnings };
+    }),
+    optionalSource(sourceHealth, "sports-seatgeek", Boolean(process.env.SEATGEEK_CLIENT_ID), async () => {
+      const request = { clientId: process.env.SEATGEEK_CLIENT_ID, startDate, endDate, config: sportsSourceConfig, maxPages: config.sports.maxTicketPages };
+      const raw = [
+        ...array(await fetchSeatGeekSportsEvents(request)),
+        ...(nflEnabled ? array(await fetchSeatGeekSportsEvents({ ...request, league: "nfl" })) : []),
+      ];
+      return { items: raw.map((event) => normalizeSeatGeekSportsEvent(event, generatedAt)), warnings: [] };
+    }),
     optionalSource(sourceHealth, "sports-ticketmaster", Boolean(process.env.TICKETMASTER_API_KEY), async () => ({
       items: array(await fetchTicketmasterSportsEvents({
         apiKey: process.env.TICKETMASTER_API_KEY,
@@ -315,34 +358,49 @@ export async function buildHostedProjection({
     }),
   ]);
 
+  const movieEngagements = applyEngagements(tmdb.items, config.movies.engagements, {
+    priorityTheaters: config.movies.priorityTheaters,
+    now: generatedAt,
+  });
+  sourceHealth.push(engagementSourceHealth(movieEngagements) as SourceHealth);
+
   const deduplication: Record<string, unknown> = {};
   const canonicalConcerts = deduplicateCandidates(
-    [...seatGeek.items, ...ticketmaster.items, ...framework.items, ...insomniac.items],
+    [...seatGeek.items, ...ticketmaster.items, ...framework.items, ...insomniac.items, ...destination.items],
     deduplication,
   );
-  const rankedSnapshot = addPromoterEvidence(
+  const discoveredSnapshot = addPromoterEvidence(
     artistSnapshot,
     [...framework.items, ...insomniac.items],
     frameworkArtists,
   );
-  const concertContext = applyHostedPersonalContext(array(canonicalConcerts).map(record), feedbackRecords, generatedAt);
+  // Genre tags for artists the profile has never heard, so their fit can be
+  // judged against the profile's own scenes. Last.fm only on the hosted path:
+  // the keyless fallback is rate-limited to one request a second.
+  const artistTags = await optionalSource(sourceHealth, "artist-tags", Boolean(process.env.LASTFM_API_KEY), async () => {
+    const names = array(discoveredSnapshot.artists).map(record)
+      .filter((artist) => artist.origin === "promoter").map((artist) => String(artist.name));
+    const result = await resolveArtistTags(names, { lastFmApiKey: process.env.LASTFM_API_KEY, now: generatedAt, maxLookups: 180 });
+    const tagged = [...result.tags.values()].filter((tags) => array(tags).length).length;
+    return { items: Array.from({ length: tagged }), warnings: array(result.warnings).map(String), value: result };
+  });
+  const rankedSnapshot = applyArtistTags(discoveredSnapshot, record(artistTags.value).tags ?? new Map(), artistTagKey);
+  // Feedback never changes what is published: scores here are canonical, and
+  // the site lays each profile's feedback over them at read time.
+  const concertContext = array(canonicalConcerts).map(record);
   const edmtrainEnrichment = enrichEventsWithEdmtrain(concertContext, edmtrain.items, rankedSnapshot);
   updateEdmtrainHealth(sourceHealth, edmtrain.items.length, edmtrainEnrichment);
   const rankedAll = rankCandidates(edmtrainEnrichment.events, rankedSnapshot, config.brief, generatedAt);
-  const musicLearning = applyHostedFeedbackAdjustments(array(rankedAll).map(record), feedbackRecords, generatedAt);
-  const ranked = musicLearning.candidates
-    .filter((candidate) => !record(record(candidate).ranking).excluded && array(record(candidate).matchedArtists).length > 0)
-    .slice(0, 120);
+  const ranked = selectPublishedConcerts(array(rankedAll).map(record));
   const sportsRaw = joinSportsTickets(
-    mlb.items,
+    [...mlb.items, ...nfl.items],
     [...sportsSeatGeek.items, ...sportsTicketmaster.items],
     sportsSourceConfig,
     generatedAt,
   );
-  const sportsContext = applyHostedPersonalContext(array(sportsRaw).map(record), feedbackRecords, generatedAt)
+  const sportsContext = array(sportsRaw).map(record)
     .map((game) => ({ ...game, ranking: scoreSportsGame(game, sportsSourceConfig, generatedAt) }));
-  const sportsLearning = applyHostedFeedbackAdjustments(sportsContext, feedbackRecords, generatedAt);
-  const sports = sportsLearning.candidates;
+  const sports = sportsContext;
 
   const deterministicMusic = ranked.map((candidate) => toDisplayEvent(candidate, null));
   const deterministicSports = array(sports).map((game) => toDisplaySportsGame(game, null));
@@ -351,6 +409,7 @@ export async function buildHostedProjection({
   const initialOverview = buildOverviewBuckets(deterministicMusic, deterministicSports, {
     now: generatedAt,
     currentDays: 14,
+    currentMinScore: config.brief.minimumUtility,
     planAheadMinScore: config.brief.overviewPlanAheadMinScore,
     horizonDays: config.brief.upcomingHorizonDays,
   });
@@ -397,6 +456,7 @@ export async function buildHostedProjection({
   const overview = buildOverviewBuckets(events, sportsDisplay, {
     now: generatedAt,
     currentDays: 14,
+    currentMinScore: config.brief.minimumUtility,
     planAheadMinScore: config.brief.overviewPlanAheadMinScore,
     horizonDays: config.brief.upcomingHorizonDays,
   });
@@ -438,17 +498,17 @@ export async function buildHostedProjection({
     },
     events,
     sports: sportsDisplay,
-    movies: tmdb.items,
+    movies: movieEngagements.movies,
     overview: overview.current,
     overviewPlanAhead: overview.planAhead,
     overviewAdvisory,
     tasteProfile: buildHostedTasteProfile(rankedSnapshot, publicFeedbackSummary(feedbackRecords)),
-    feedbackLearning: {
-      applied: musicLearning.audit.appliedCandidateCount + sportsLearning.audit.appliedCandidateCount > 0,
-      policyVersion: 3,
-      music: musicLearning.audit,
-      sports: sportsLearning.audit,
+    rankingConfig: {
+      currentMinScore: config.brief.minimumUtility,
+      planAheadMinScore: config.brief.overviewPlanAheadMinScore,
+      currentDays: 14,
     },
+    feedbackLearning: { applied: false, mode: "read-time-overlay", policyVersion: FEEDBACK_POLICY.version },
     eventEnhancement: {
       mode: musicAdvisory.mode,
       model: musicAdvisory.model,
@@ -471,7 +531,7 @@ export async function buildHostedProjection({
   });
   projection.recentHistory = buildRecentHistory(projection, previousProjection, generatedAt);
 
-  const blockers = validateProjection(projection, sourceHealth);
+  const blockers = validateProjection(projection, sourceHealth, previousProjection);
   return { projection, artistSnapshot: rankedSnapshot, sourceHealth, publicationBlockers: blockers };
 }
 
@@ -493,7 +553,7 @@ async function optionalSource(
     return { items: [], warnings: [] };
   }
   try {
-    const result = await callback();
+    const result = await withDeadline(callback(), Number(process.env.TASTE_SOURCE_DEADLINE_MS) || 60_000, source);
     health.push({
       source,
       status: result.warnings.length ? "partial" : "active",
@@ -512,33 +572,6 @@ async function optionalSource(
     });
     return { items: [], warnings: [`${source} unavailable.`] };
   }
-}
-
-function addPromoterEvidence(snapshot: Record<string, unknown>, promoterEvents: unknown[], rosterArtists: unknown[]) {
-  const artists = array(snapshot.artists).map((artist) => ({ ...record(artist) }));
-  const names = new Set(artists.map((artist) => normalizeArtistName(artist.name)));
-  const maximumSeed = Math.max(1, ...artists.map((artist) => Number(artist.seedStrength ?? 0)));
-  const add = (name: unknown, promoter: string, sourceUrl: unknown, type: string) => {
-    const normalized = normalizeArtistName(name);
-    if (!normalized || names.has(normalized)) return;
-    names.add(normalized);
-    artists.push({
-      spotifyArtistId: null,
-      name: String(name).trim(),
-      seedStrength: maximumSeed * 0.32,
-      evidence: [],
-      origin: "promoter",
-      discoveryEvidence: [{ type, promoter, sourceUrl: sourceUrl ?? null }],
-    });
-  };
-  for (const artist of rosterArtists.map(record)) add(artist.name, "Framework", artist.sourceUrl, "framework-roster");
-  for (const event of promoterEvents.map(record)) {
-    const promoter = event.source === "insomniac" ? "Insomniac" : "Framework";
-    for (const performer of array(event.performers).map(record)) {
-      add(performer.name, promoter, event.sourceUrl, "promoter-event");
-    }
-  }
-  return { ...snapshot, artists, artistCount: artists.length };
 }
 
 async function attachFeedbackSnapshots(items: Array<Record<string, unknown>>, vertical: "music" | "sports") {
@@ -590,7 +623,8 @@ function buildRecentHistory(
       historyId,
       canonicalEventId: id,
       feedbackSnapshotId: feedback.feedbackSnapshotId ?? null,
-      vertical: feedback.vertical ?? entry.item.vertical ?? (entry.item.source === "mlb" ? "sports" : "music"),
+      feedbackKeys: entry.item.feedbackKeys ?? existing?.feedbackKeys ?? null,
+      vertical: feedback.vertical ?? entry.item.vertical ?? (["mlb", "espn"].includes(String(entry.item.source)) ? "sports" : "music"),
       title,
       dateLocal: date,
       locationLabel: String(record(entry.item.venue).name ?? ""),
@@ -608,25 +642,33 @@ function buildRecentHistory(
     .slice(0, 100);
 }
 
-function validateProjection(projection: Record<string, unknown>, health: SourceHealth[]): string[] {
+function validateProjection(projection: Record<string, unknown>, health: SourceHealth[], previous: Record<string, unknown> | null = null): string[] {
   const blockers: string[] = [];
   if (projection.schemaVersion !== 5) blockers.push("Projection schema version is invalid.");
   if (!Number.isFinite(Date.parse(String(projection.generatedAt ?? "")))) blockers.push("Projection timestamp is invalid.");
   for (const key of ["events", "sports", "movies", "overview", "overviewPlanAhead", "sourceHealth"]) {
     if (!Array.isArray(projection[key])) blockers.push(`Projection ${key} is invalid.`);
   }
-  const candidateSources = ["seatgeek", "ticketmaster", "framework", "insomniac", "mlb", "tmdb"];
+  const candidateSources = ["seatgeek", "ticketmaster", "framework", "insomniac", "mlb", "nfl", "tmdb"];
   if (!health.some((item) => candidateSources.includes(item.source) && ["active", "partial"].includes(item.status))) {
     blockers.push("Every hosted candidate source was unavailable; the previous projection was preserved.");
   }
-  if (new TextEncoder().encode(JSON.stringify(projection)).byteLength > 3_000_000) {
-    blockers.push("Projection exceeds the D1 publication size limit.");
+  // A run that finds nothing where the last one found plenty is far more
+  // likely a source failure than an empty city. Keep the previous projection.
+  const count = (value: Record<string, unknown> | null) => array(value?.events).length + array(value?.sports).length + array(value?.movies).length;
+  if (previous && count(previous) >= 10 && count(projection) === 0) {
+    blockers.push("Candidate count collapsed to zero; the previous projection was preserved.");
+  }
+  const ids = [...array(projection.events), ...array(projection.sports)].map((item) => String(record(item).id ?? ""));
+  if (new Set(ids).size !== ids.length) blockers.push("Projection contains duplicate candidate ids.");
+  if (new TextEncoder().encode(JSON.stringify(projection)).byteLength > 1_900_000) {
+    blockers.push("Projection exceeds the publication size limit.");
   }
   return blockers;
 }
 
 function publicFeedbackSummary(records: Array<Record<string, unknown>>) {
-  const statuses = ["attended-worth-it", "attended-not-worth-it", "wanted-to-attend", "lost-interest", "did-not-attend-logistical"];
+  const statuses = ["attended-worth-it", "attended-not-worth-it", "wanted-to-attend", "lost-interest", "did-not-attend-logistical", "interested"];
   const statusCounts = Object.fromEntries(statuses.map((status) => [status, 0]));
   for (const entry of records) {
     const status = String(entry.status ?? "");
